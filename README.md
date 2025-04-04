@@ -18,15 +18,6 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
     *   Import data from a previously exported JSON file (replaces existing data).
 *   **Responsive Design:** Basic styling adjustments for use on mobile and desktop devices.
 
-## Screenshots
-
-*(Optional: Add screenshots of the different views here)*
-
-`[Screenshot placeholder: Daily Tracker View]`
-`[Screenshot placeholder: Current Week View]`
-`[Screenshot placeholder: History View]`
-`[Screenshot placeholder: Menu]`
-
 ## Technology Stack
 
 *   HTML5
