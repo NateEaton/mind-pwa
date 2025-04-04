@@ -1,0 +1,241 @@
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+:root {
+    --primary-color: #4CAF50;
+    --secondary-color: #8BC34A;
+    --limit-color: #FF9800;
+    --bg-color: #f4f4f4;
+    --text-color: #333;
+    --card-bg: #ffffff;
+    --border-color: #ddd;
+    --met-goal-color: #d4edda; /* Light green */
+    --missed-goal-color: #f8d7da; /* Light red */
+    --near-limit-color: #fff3cd; /* Light yellow */
+}
+
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header h1 {
+    margin: 0;
+    margin-bottom: 0.5rem;
+}
+
+nav button {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    margin: 0 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+nav button:hover, nav button.active {
+    background-color: #689F38; /* Darker green */
+}
+
+main {
+    padding: 1rem;
+    max-width: 800px;
+    margin: 1rem auto;
+}
+
+.view {
+    display: none; /* Hidden by default */
+    background-color: var(--card-bg);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.view.active-view {
+    display: block; /* Show active view */
+}
+
+h2, h3 {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--secondary-color);
+    padding-bottom: 0.3rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+h2:first-child, h3:first-child {
+    margin-top: 0;
+}
+
+.food-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.food-group-item:last-child {
+    border-bottom: none;
+}
+
+.food-group-item .info {
+    flex-grow: 1;
+    margin-right: 1rem;
+}
+
+.food-group-item .name {
+    font-weight: bold;
+    display: block;
+}
+
+.food-group-item .target {
+    font-size: 0.9em;
+    color: #555;
+}
+
+.food-group-item .controls {
+    display: flex;
+    align-items: center;
+}
+
+.food-group-item .controls button {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    width: 30px;
+    height: 30px;
+    font-size: 1.2rem;
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1; /* Center symbol vertically */
+    margin: 0 0.3rem;
+}
+.food-group-item .controls button.decrement-btn {
+    background-color: #ffc107; /* Amber */
+}
+
+.food-group-item .controls input[type="number"] {
+    width: 50px;
+    text-align: center;
+    padding: 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    /* Hide spinner buttons */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.food-group-item .controls input[type="number"]::-webkit-inner-spin-button,
+.food-group-item .controls input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.food-group-item .current-week-total {
+    font-size: 0.8em;
+    color: #666;
+    margin-left: 0.5rem;
+    font-style: italic;
+}
+
+
+/* History & Summary Styling */
+.history-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+}
+.history-nav button, .history-nav input {
+    padding: 0.5rem;
+    margin: 0.2rem;
+}
+.history-nav span {
+    font-weight: bold;
+    text-align: center;
+    flex-grow: 1; /* Allow label to take space */
+}
+
+#history-content ul, #current-week-summary-content ul {
+    list-style: none;
+    padding: 0;
+}
+
+#history-content li, #current-week-summary-content li {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.8rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+}
+
+#history-content .food-name, #current-week-summary-content .food-name {
+    font-weight: bold;
+}
+
+#history-content .servings, #current-week-summary-content .servings {
+    text-align: right;
+}
+
+/* Goal Status Highlighting */
+.goal-met {
+    background-color: var(--met-goal-color);
+    border-left: 5px solid var(--primary-color);
+}
+.goal-missed {
+    background-color: var(--missed-goal-color);
+    border-left: 5px solid #dc3545; /* Red */
+}
+.limit-ok {
+     background-color: var(--met-goal-color);
+     border-left: 5px solid var(--primary-color);
+}
+.limit-near {
+    background-color: var(--near-limit-color);
+    border-left: 5px solid var(--limit-color);
+}
+.limit-exceeded {
+    background-color: var(--missed-goal-color);
+    border-left: 5px solid #dc3545; /* Red */
+}
+
+
+footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding: 1rem;
+    font-size: 0.9em;
+    color: #777;
+}

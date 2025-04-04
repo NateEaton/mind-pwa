@@ -1,0 +1,106 @@
+<!--
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+ 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4CAF50"/>
+    <title>MIND Diet Tracker</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"> <!-- For older compatibility -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png"> <!-- Basic iOS support -->
+</head>
+<body>
+    <header>
+        <h1>MIND Diet Tracker</h1>
+        <nav>
+            <button data-view="tracker">Daily Tracker</button>
+            <button data-view="current-week">Current Week</button>
+            <button data-view="history">History</button>
+        </nav>
+    </header>
+
+    <main id="app-container">
+
+        <!-- Daily Tracker View -->
+        <section id="tracker-view" class="view active-view">
+            <h2>Today's Servings (<span id="current-date"></span>)</h2>
+            <div id="daily-goals">
+                <h3>Daily Goals</h3>
+                <!-- Daily goal items will be inserted here -->
+            </div>
+            <div id="weekly-goals">
+                <h3>Weekly Goals</h3>
+                <!-- ALL weekly goal items will be inserted here -->
+            </div>
+        </section>
+
+        <!-- Current Week Summary View -->
+        <section id="current-week-view" class="view">
+            <h2>Current Week Summary (<span id="current-week-start-date"></span>)</h2>
+            <div id="current-week-summary-content">
+                <!-- Summary content will be generated here -->
+            </div>
+        </section>
+
+        <!-- History View -->
+        <section id="history-view" class="view">
+            <h2>Weekly History</h2>
+            <div class="history-nav">
+                <button id="prev-week-btn" disabled>&lt; Prev Week</button>
+                <span id="history-week-label">Select a week</span>
+                <button id="next-week-btn" disabled>Next Week &gt;</button>
+                <input type="date" id="history-date-picker" title="Go to week containing this date">
+
+            </div>
+            <div id="history-content">
+                <p>Loading history...</p>
+                <!-- History details will be generated here -->
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>MIND Diet Tracker PWA</p>
+    </footer>
+
+    <!-- Templates (Hidden) -->
+    <template id="food-group-item-template">
+        <div class="food-group-item" data-id="">
+            <div class="info">
+                <span class="name">Food Group Name</span>
+                <span class="target">Target: X servings/period</span>
+            </div>
+            <div class="controls">
+                <button class="decrement-btn" aria-label="Decrement count">-</button>
+                <input type="number" class="count-input" value="0" min="0" step="1" aria-label="Current count">
+                <button class="increment-btn" aria-label="Increment count">+</button>
+                <span class="current-week-total" style="display: none;">(Wk: <span class="wk-val">0</span>)</span>
+            </div>
+        </div>
+    </template>
+
+    <script type="module" src="app.js"></script>
+    
+</body>
+</html>
