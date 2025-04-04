@@ -59,25 +59,6 @@ Once deployed, simply navigate to the URL where you hosted the application in a 
 
 ## License
 
-Choosing a license depends on your specific goals. Based on your requirement: "fine with people using and adapting the code as long as they keep the attribution and don't use it for commercial purposes."
-
-A suitable standard license is the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**.
-
-*   **Attribution (BY):** Users must give appropriate credit.
-*   **NonCommercial (NC):** Users may not use the material for commercial purposes.
-*   **ShareAlike (SA):** If users remix, transform, or build upon the material, they must distribute their contributions under the same license as the original.
-
-This license is well-understood and commonly used for creative works and sometimes code where non-commercial use is a key restriction.
-
-**To use it:**
-
-1.  Create a file named `LICENSE` (or `LICENSE.md`) in the root of your project.
-2.  Paste the **full license text** for CC BY-NC-SA 4.0 into that file. You can find the full text here: [https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode)
-3.  In your `README.md`, add a License section like this:
-
-```markdown
-## License
-
 This project is licensed under the GNU General Public License v3.0.
 
 The core principles of the GPLv3 ensure that users have the freedom to run, study, share, and modify the software. If you distribute modified versions of this software, you must also license your modifications under GPLv3 and provide the source code. This ensures the software remains free for all its users.
