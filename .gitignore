@@ -1,1 +1,3 @@
-Todo.txt
+*.txt
+.DS_Store
+*.json
