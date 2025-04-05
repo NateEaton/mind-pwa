@@ -44,9 +44,8 @@ header {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* From block 1 */
     position: relative;                     /* From block 2 (for menu button) */
     display: flex;                          /* From block 2 */
-    /* flex-direction: column; */                /* From block 2 */
-    justify-content: space-between;
-    /* align-items: center; */                   /* From block 2 (centers h1 and nav) */
+    flex-direction: column;                 /* From block 2 */
+    align-items: center;                    /* From block 2 (centers h1 and nav) */
     /* text-align: center; removed as flexbox handles alignment */
     /* padding-bottom: 1rem; removed as padding: 1rem covers it */
 }
