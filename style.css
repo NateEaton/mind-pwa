@@ -44,8 +44,9 @@ header {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* From block 1 */
     position: relative;                     /* From block 2 (for menu button) */
     display: flex;                          /* From block 2 */
-    flex-direction: column;                 /* From block 2 */
-    align-items: center;                    /* From block 2 (centers h1 and nav) */
+    /* flex-direction: column; */                /* From block 2 */
+    justify-content: space-between;
+    /* align-items: center; */                   /* From block 2 (centers h1 and nav) */
     /* text-align: center; removed as flexbox handles alignment */
     /* padding-bottom: 1rem; removed as padding: 1rem covers it */
 }
@@ -260,7 +261,7 @@ header nav {
 #menu-toggle-btn {
     position: absolute;
     top: 1rem; /* Adjust vertical position */
-    right: 1rem; /* Adjust horizontal position */
+    left: 1rem; /* Adjust horizontal position */
     background: none;
     border: none;
     color: white; /* Color for the hamburger icon */
@@ -276,7 +277,7 @@ header nav {
     display: none; /* Hidden by default */
     position: absolute;
     top: 60px; /* Position below header - Adjust based on final header height */
-    right: 10px; /* Align with the button's side */
+    left: 10px; /* Align with the button's side */
     background-color: var(--card-bg); /* Use card background color */
     border: 1px solid var(--border-color); /* Use border color */
     border-radius: 5px;
@@ -369,12 +370,12 @@ header nav {
 @media (max-width: 600px) {
      #menu-toggle-btn {
         top: 0.5rem;
-        right: 0.5rem;
+        left: 0.5rem;
         font-size: 1.8rem; /* Slightly smaller */
      }
      .main-menu {
          top: 55px; /* Adjust based on smaller header */
-         right: 5px;
+         left: 5px;
          min-width: 160px;
      }
      /* Make toast slightly smaller on mobile */
