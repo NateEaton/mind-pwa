@@ -38,16 +38,23 @@ body {
 }
 
 header {
-    background-color: var(--primary-color);
-    color: white;
-    padding: 1rem;
-    text-align: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background-color: var(--primary-color); /* From block 1 */
+    color: white;                           /* From block 1 */
+    padding: 1rem;                          /* From block 1 (sets all sides) */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* From block 1 */
+    position: relative;                     /* From block 2 (for menu button) */
+    display: flex;                          /* From block 2 */
+    flex-direction: column;                 /* From block 2 */
+    align-items: center;                    /* From block 2 (centers h1 and nav) */
+    /* text-align: center; removed as flexbox handles alignment */
+    /* padding-bottom: 1rem; removed as padding: 1rem covers it */
 }
 
 header h1 {
-    margin: 0;
-    margin-bottom: 0.5rem;
+    margin: 0 0 0.5rem 0; /* Top, Right, Bottom, Left - Explicitly set bottom margin */
+    font-size: 2rem;
+    width: 100%; /* Useful for centering text if parent align-items doesn't suffice */
+    text-align: center; /* Keep for explicit centering, though align-items might handle it */
 }
 
 nav button {
@@ -244,24 +251,6 @@ footer {
 /* === Menu & Toast Styles Added === */
 /* ================================== */
 
-/* --- Header Adjustments for Menu Button --- */
-header {
-    /* Add relative positioning if not already present,
-       to allow absolute positioning of the child button */
-    position: relative;
-    /* Ensure header content aligns reasonably with button */
-    /* The flex rules below are suggestions if needed, adjust as necessary */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-bottom: 1rem; /* Add padding if button overlaps nav */
-}
-
-header h1 {
-    margin-bottom: 0.5rem;
-    text-align: center; /* Ensure heading is centered */
-    width: 100%; /* Take full width */
-}
 
 header nav {
     margin-top: 0.5rem;
