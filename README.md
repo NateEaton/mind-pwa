@@ -32,7 +32,7 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 
 ## Installation / Deployment (Self-Hosting)
 
-This application is designed to be hosted as a static website.
+This application is designed to be hosted as a static website. You can run this version deployed on Vercel using link under About or follow the directions below. 
 
 1.  **Prerequisites:** You need a web server capable of serving static files (e.g., Apache, Nginx, Caddy, Synology Web Station, Netlify, Vercel, GitHub Pages).
 2.  **Get the Code:** Clone this repository or download the source code files.
