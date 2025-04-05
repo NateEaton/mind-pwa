@@ -14,6 +14,11 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
     *   Installable to your device's home screen (requires HTTPS connection).
     *   Offline access to cached application files via Service Worker.
 *   **Responsive Design:** Basic styling adjustments for use on mobile and desktop devices.
+*   **Data Management:**
+    *   Export all current tracking data and history to a JSON file.
+    *   Import data from a previously exported JSON file (replaces existing data).
+
+
 
 ## Technology Stack
 
@@ -41,6 +46,7 @@ Once deployed, simply navigate to the URL where you hosted the application in a 
 
 ## Future Enhancements (Potential Ideas)
 
+*   Pop-up description of foods and serving sizes for each food group. 
 *   Data export/import to sync between devices; possibly more automated sync in later updates.
 *   UI/UX refinements and potentially more visual charts/graphs.
 *   Ability to customize food groups and target servings via a settings interface.
