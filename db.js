@@ -126,6 +126,39 @@ async function getAllWeekHistory() {
   });
 }
 
+// For purge before import
+async function clearHistoryStore() {
+  await ensureDB(); // Make sure the DB connection is ready
+  return new Promise((resolve, reject) => {
+    // Check if db is actually available after ensureDB (paranoia check)
+    if (!db) {
+        return reject(new Error("Database connection not available for clear operation."));
+    }
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.clear(); // The command to clear all data in the object store
+
+    request.onsuccess = () => {
+      console.log("Object store '" + STORE_NAME + "' cleared successfully.");
+      resolve(); // Signal success
+    };
+
+    request.onerror = (event) => {
+      console.error("Error clearing object store '" + STORE_NAME + "':", event.target.error);
+      reject("Error clearing history store: " + event.target.error); // Signal failure
+    };
+
+    transaction.oncomplete = () => {
+        console.log("Clear transaction completed for store '" + STORE_NAME + "'.");
+    };
+    transaction.onerror = (event) => {
+        // This catches errors on the transaction level, though request.onerror is usually sufficient
+        console.error("Error during clear transaction:", event.target.error);
+        reject("Transaction error during clear: " + event.target.error);
+    };
+  });
+}
+
 // Ensure the database is initialized before any operations
 async function ensureDB() {
   if (!db) {
@@ -147,5 +180,6 @@ export {
   saveWeekHistory,
   getWeekHistory,
   getAllWeekHistory,
+  clearHistoryStore,
   getMonday
 };

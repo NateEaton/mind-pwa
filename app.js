@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { initDB, db, saveWeekHistory, getWeekHistory, getAllWeekHistory, getMonday } from './db.js';
+import { initDB, db, saveWeekHistory, getWeekHistory, getAllWeekHistory, clearHistoryStore, getMonday } from './db.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Configuration ---
@@ -72,6 +72,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextWeekBtn = document.getElementById('next-week-btn');
     const historyDatePicker = document.getElementById('history-date-picker');
 
+    // ***** ADD NEW DOM ELEMENT REFERENCES *****
+    const menuToggleBtn = document.getElementById('menu-toggle-btn');
+    const mainMenu = document.getElementById('main-menu');
+    const exportBtn = document.getElementById('export-btn');
+    const importBtnTrigger = document.getElementById('import-btn-trigger'); // Button that triggers file input
+    const importFileInput = document.getElementById('import-file-input');  // Hidden file input
+    const settingsBtn = document.getElementById('settings-btn');
+    // Toast Elements
+    const toastContainer = document.getElementById('toast-container'); // Optional if needed for complex logic
+    const toastMessage = document.getElementById('toast-message');
+    let toastTimeout = null; // To manage the toast hide timer
+    // ****************************************
+
     async function initializeApp() {
         console.log("Initializing app...");
     
@@ -96,6 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("App initialization complete.");
         } catch (error) {
             console.error("Error during app initialization:", error);
+            // ***** SHOW INITIALIZATION ERRORS VIA TOAST *****
+            showToast(`Initialization Error: ${error.message}`, 'error', 5000); // Show longer
         }
     }
     
@@ -137,6 +152,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         console.log("Loaded state:", state);
+
+        // Initialize other state parts if needed (ensure history is loaded later)
+        state.history = []; // History loaded async via loadHistoryData
+        state.currentHistoryIndex = -1;
+
     }
 
     function saveState() {
@@ -245,6 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Week archived successfully to IndexedDB");
         } catch (error) {
             console.error("Failed to archive week:", error);
+            showToast(`Failed to archive week ${weekStartDate}: ${error.message}`, 'error');
             // Consider alerting the user or implementing retry logic
         }
     }
@@ -411,8 +432,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }, {});
 
          // Display in the same order as foodGroups config for consistency
-         foodGroups.forEach(group => {
-             const groupId = group.id;
+
+         // Get the list of food group IDs that exist in the history data's targets or totals
+         const foodGroupsToDisplay = foodGroups.filter(group => historyTargets[group.id] || (weekData.totals && typeof weekData.totals[group.id] !== 'undefined'));
+
+        foodGroupsToDisplay.forEach(group => {
+
+            const groupId = group.id;
              const total = weekData.totals[groupId] || 0;
              const targetInfo = targets[groupId]; // Get target info (from history or current)
 
@@ -444,7 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
              if (statusClass) li.classList.add(statusClass);
 
              li.innerHTML = `
-                <span class="food-name">${group.name}</span>
+                <span class="food-name">${targetInfo.name || group.name}</span> {/* Use stored name if available */}                
                 <span class="servings">
                     Total: ${total} / Target ${targetInfo.type === 'limit' ? '≤' : '≥'} ${effectiveWeeklyTarget} per week
                 </span>
@@ -482,6 +508,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         historyDatePicker.addEventListener('change', handleHistoryDatePick);
+
+        // ***** ADD NEW MENU/IMPORT/EXPORT EVENT LISTENERS *****
+        menuToggleBtn.addEventListener('click', toggleMenu);
+        exportBtn.addEventListener('click', handleExport);
+        importBtnTrigger.addEventListener('click', triggerImport); // Listen on the trigger button
+        importFileInput.addEventListener('change', handleImportFileSelect); // Listen on the actual file input
+        settingsBtn.addEventListener('click', handleSettings);
+
+        // Optional: Close menu when clicking outside
+        document.addEventListener('click', handleOutsideMenuClick);
+        // *******************************************************
+
     }
 
      function handleCounterClick(event) {
@@ -613,6 +651,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (viewId === 'current-week') { // <<< Note: viewId is 'current-week'
             renderCurrentWeekSummary(); // This should now run correctly
         }
+
+        // Close menu when switching views
+        closeMenu();
+
     }
 
     // --- History Data Loading ---
@@ -631,12 +673,231 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error("Failed to load history data:", error);
+            showToast(`Failed to load history: ${error.message}`, 'error');
             historyContent.innerHTML = "<p>Error loading history data.</p>";
              prevWeekBtn.disabled = true;
              nextWeekBtn.disabled = true;
         }
     }
 
+    // ***** ADD NEW FUNCTIONS for Menu, Toasts, Export, Import, Settings *****
+
+    // --- Toast Notification Function ---
+    function showToast(message, type = 'success', duration = 3000) {
+        if (toastTimeout) { clearTimeout(toastTimeout); } // Clear previous toast timeout
+
+        toastMessage.textContent = message;
+        toastMessage.className = 'toast'; // Reset classes
+        toastMessage.classList.add(`toast-${type}`); // toast-success or toast-error
+        toastMessage.classList.add('toast-show'); // Make visible
+
+        toastTimeout = setTimeout(() => {
+            toastMessage.classList.remove('toast-show');
+            toastTimeout = null;
+        }, duration);
+    }
+
+    // --- Menu Handling ---
+    function toggleMenu() {
+        mainMenu.classList.toggle('menu-open');
+    }
+
+    function closeMenu() {
+        mainMenu.classList.remove('menu-open');
+    }
+
+    function handleOutsideMenuClick(event) {
+        // Close menu if click is outside the menu and not on the toggle button itself
+        if (!mainMenu.contains(event.target) && !menuToggleBtn.contains(event.target) && mainMenu.classList.contains('menu-open')) {
+            closeMenu();
+        }
+    }
+
+    // --- Export Functionality ---
+    async function handleExport() {
+        closeMenu(); // Close menu first
+        try {
+            console.log("Exporting data...");
+            // 1. Get current state from localStorage
+            const currentStateJson = localStorage.getItem('mindTrackerState');
+            const currentState = currentStateJson ? JSON.parse(currentStateJson) : {};
+
+            // 2. Get history from IndexedDB
+            const historyData = await getAllWeekHistory(); // Use correctly imported name
+
+            // 3. Combine data into a single export object
+            const dataToExport = {
+                appInfo: { // Optional info about the export
+                    appName: "MIND Diet Tracker PWA",
+                    exportDate: new Date().toISOString(),
+                    version: 1 // Version of the export format
+                },
+                currentState: currentState,
+                history: historyData || [] // Ensure history is an array
+            };
+
+            // Check if there's actually any data
+            if (Object.keys(dataToExport.currentState).length === 0 && dataToExport.history.length === 0) {
+                showToast("No data available to export.", "error"); // Use error style for info
+                return;
+            }
+
+            // 4. Create JSON file and trigger download
+            const jsonString = JSON.stringify(dataToExport, null, 2); // Pretty print JSON
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const timestamp = new Date().toISOString().split('T')[0];
+            link.download = `mind-diet-tracker-data-${timestamp}.json`; // Filename
+            document.body.appendChild(link); // Required for Firefox compatibility
+            link.click();
+            document.body.removeChild(link); // Clean up the link element
+            URL.revokeObjectURL(url); // Release the object URL
+
+            console.log("Data exported successfully.");
+            showToast("Data exported successfully!", "success");
+            setActiveView('tracker'); // Return to tracker view after export
+
+        } catch (error) {
+            console.error("Error exporting data:", error);
+            showToast(`Export failed: ${error.message}`, "error");
+        }
+    }
+
+    // --- Import Functionality ---
+    // Function to trigger the hidden file input
+    function triggerImport() {
+        closeMenu();
+        importFileInput.click(); // Open file selection dialog
+    }
+
+    // Function to handle the file selection and processing
+    async function handleImportFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            console.log("No file selected for import.");
+            return; // Exit if no file was chosen
+        }
+
+        // Validate file type
+        if (!file.type || file.type !== "application/json") {
+            showToast("Invalid file type. Please select a '.json' file.", "error");
+            importFileInput.value = ''; // Clear the input
+            return;
+        }
+
+        const reader = new FileReader();
+
+        // Define what happens when the file is successfully read
+        reader.onload = async (e) => {
+            const fileContent = e.target.result;
+            try {
+                const importedData = JSON.parse(fileContent);
+
+                // Basic validation of the imported structure
+                if (typeof importedData !== 'object' || importedData === null || !importedData.currentState || !Array.isArray(importedData.history)) {
+                     throw new Error("Invalid file structure. Required: 'currentState' object and 'history' array.");
+                }
+
+                // --- Confirmation Dialog ---
+                const confirmationMessage = `WARNING:\n\nThis will REPLACE ALL current tracking data (daily counts, weekly counts, and all saved history) with the data from the file "${file.name}".\n\nThis action cannot be undone.\n\nDo you want to proceed with the import?`;
+                if (!confirm(confirmationMessage)) {
+                    console.log("Import cancelled by user.");
+                    importFileInput.value = ''; // Clear input
+                    return; // User clicked Cancel
+                }
+
+                console.log("Starting import process...");
+
+                // --- 1. Clear Existing Data ---
+                console.log("Clearing existing data...");
+                await clearHistoryStore(); // Clear IndexedDB history store
+                localStorage.removeItem('mindTrackerState'); // Clear current state from localStorage
+                // Reset in-memory state as well
+                state.dailyCounts = {};
+                state.weeklyCounts = {};
+                state.history = [];
+                state.currentHistoryIndex = -1;
+                console.log("Existing data cleared.");
+
+                // --- 2. Restore Data ---
+                console.log("Restoring data...");
+                // Restore current state directly to localStorage
+                if (importedData.currentState) {
+                    // Basic check on restored state structure if needed
+                    localStorage.setItem('mindTrackerState', JSON.stringify(importedData.currentState));
+                    console.log("Current state restored to localStorage.");
+                } else {
+                     console.warn("No 'currentState' found in imported file.");
+                }
+
+                // Restore history records one by one to IndexedDB
+                let importCount = 0;
+                if (importedData.history && importedData.history.length > 0) {
+                    for (const weekData of importedData.history) {
+                        try {
+                            // Add minimal validation for each history record
+                            if (weekData && typeof weekData.weekStartDate === 'string' && typeof weekData.totals === 'object') {
+                                await saveWeekHistory(weekData);
+                                importCount++;
+                            } else {
+                                console.warn("Skipping invalid/incomplete history record during import:", weekData);
+                            }
+                        } catch (saveError) {
+                            console.error(`Error saving history week ${weekData.weekStartDate || 'unknown'} during import:`, saveError);
+                            // Decide if you want to stop the whole import on a single record error
+                            // throw new Error(`Failed to save history record: ${saveError.message}`); // Option to stop
+                        }
+                    }
+                    console.log(`${importCount} history records restored to IndexedDB.`);
+                } else {
+                     console.log("No history records found in imported file or history array is empty.");
+                }
+
+                // --- 3. Reload State & UI from restored data ---
+                console.log("Reloading application state and UI from imported data...");
+                loadState(); // Reload the global 'state' object from the new localStorage
+                await loadHistoryData(); // Reload the state.history array from the new IndexedDB data
+                renderUI(); // Re-render UI with the newly loaded state
+                setActiveView('tracker'); // Switch view to tracker
+
+                console.log("Import process completed.");
+                showToast(`Import successful! ${importCount} history records imported.`, "success", 4000); // Show longer success message
+
+            } catch (error) {
+                console.error("Error importing data:", error);
+                showToast(`Import failed: ${error.message}`, "error", 5000); // Show longer error message
+                // Attempt to reload previous state (might be empty if clear succeeded but restore failed)
+                loadState();
+                await loadHistoryData();
+                renderUI();
+            } finally {
+                // ALWAYS clear the file input after attempting import, regardless of success/failure
+                importFileInput.value = '';
+            }
+        };
+
+        // Define what happens if there's an error reading the file
+        reader.onerror = (e) => {
+            console.error("Error reading file:", e);
+            showToast("Error reading the selected file.", "error");
+            importFileInput.value = ''; // Clear the input
+        };
+
+        // Start reading the file as text
+        reader.readAsText(file);
+    }
+
+
+    // --- Settings Placeholder ---
+    function handleSettings() {
+        closeMenu();
+        // Implement settings logic later
+        showToast("Settings view not yet implemented.", "success"); // Use 'success' style for info
+        // Could potentially navigate to a settings view if one existed:
+        // setActiveView('settings');
+    }
 
     // --- Start the App ---
     initializeApp();
