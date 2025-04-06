@@ -270,6 +270,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Haptic Feedback Helper ---
+    function triggerHapticFeedback(duration = 50) { // Default to 50ms
+        if ('vibrate' in navigator) {
+            try {
+                navigator.vibrate(duration);
+            } catch (e) {
+                console.error("Vibration failed:", e);
+            }
+        }
+    }
+
     // --- Rendering ---
     function renderUI() {
         // Debugging log to confirm renderUI is being called
@@ -522,26 +533,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
     }
 
-     function handleCounterClick(event) {
+    function handleCounterClick(event) {
         const button = event.target.closest('button');
-        if (!button) return; // Exit if click wasn't on or inside a button
-
+        if (!button) return;
+    
         const item = button.closest('.food-group-item');
-        if (!item) return; // Exit if button wasn't inside a food group item
-
+        if (!item) return;
+    
         const groupId = item.dataset.id;
         const input = item.querySelector('.count-input');
         const isDaily = input.dataset.frequency === 'day';
         let currentValue = parseInt(input.value, 10) || 0;
-
+        let valueChanged = false; // Flag to track if value actually changed
+    
         if (button.classList.contains('increment-btn')) {
             currentValue++;
+            valueChanged = true; // Value increased
         } else if (button.classList.contains('decrement-btn')) {
-            currentValue = Math.max(0, currentValue - 1); // Prevent negative values
+            const oldValue = currentValue;
+            currentValue = Math.max(0, currentValue - 1);
+            if (currentValue < oldValue) { // Only flag if value actually decreased
+                valueChanged = true;
+            }
         } else {
-            return; // Ignore if it wasn't an increment/decrement button
+            return; // Not an increment/decrement button
         }
-
+    
+        // --- Trigger haptic feedback IF the value changed ---
+        if (valueChanged) {
+            triggerHapticFeedback(30); // Use a shorter vibration (e.g., 30ms) for quick clicks
+        }
+        // ---------------------------------------------------
+    
+        // Update state and UI (this function likely already exists)
         updateCount(groupId, currentValue, isDaily, item);
     }
 
