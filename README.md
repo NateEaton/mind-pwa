@@ -47,7 +47,8 @@ Once deployed, simply navigate to the URL where you hosted the application in a 
 ## Future Enhancements (Potential Ideas)
 
 *   Pop-up description of foods and serving sizes for each food group. 
-*   Data export/import to sync between devices; possibly more automated sync in later updates.
+*   Settings including the ability to set starting day of week (currently Monday).
+*   A more automated sync between devices/clients.
 *   UI/UX refinements and potentially more visual charts/graphs.
 *   Ability to customize food groups and target servings via a settings interface.
 
