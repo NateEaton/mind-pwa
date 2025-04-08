@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State Variables ---
     let state = {
         currentDayDate: null, // YYYY-MM-DD
-        currentWeekStartDate: null, // YYYY-MM-DD (Monday)
+        currentWeekStartDate: null, // YYYY-MM-DD (Sunday)
         dailyCounts: {}, // { food_id: count }
         weeklyCounts: {}, // { food_id: count }
         history: [], // Array of past week objects { weekStartDate, totals: {...} }
@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentWeekStart = getWeekStartDate(new Date()); // *** USE RENAMED FUNCTION (relies on default 'Sunday') ***
 
         state.currentDayDate = savedState.currentDayDate || today;
-        state.currentWeekStartDate = savedState.currentWeekStartDate || currentMonday;
+        state.currentWeekStartDate = savedState.currentWeekStartDate || currentWeekStart;
 
         // Initialize counts if not present
         state.dailyCounts = savedState.dailyCounts || {};
@@ -209,8 +209,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let stateChanged = false;
         let weekResetOccurred = false;
 
-        // Check for Week Reset FIRST (Sunday night to Monday morning)
-        if (state.currentWeekStartDate !== currentMondayStr) {
+        // Check for Week Reset FIRST (Saturday night to Sunday morning)
+        if (state.currentWeekStartDate !== currentWeekStartStr) {
             console.log(`Week reset triggered: Stored week ${state.currentWeekStartDate}, Current week ${currentWeekStartStr}`);
             // Archive the COMPLETED week (using the old state.currentWeekStartDate)
              await archiveWeek(state.currentWeekStartDate, state.weeklyCounts);
@@ -821,7 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <p>This app helps you track your adherence to the MIND Diet principles.</p>
             <p>Track daily and weekly servings, view summaries, and check your history.</p>
             <p>Data is stored locally in your browser.</p>
-            <p>Version: <span id="modal-app-version">(unknown)</span></p> {/* Placeholder for version */}
+            <p>Version: <span id="modal-app-version">(unknown)</span></p> 
         `;
         openModal(aboutTitle, aboutContent);
 
