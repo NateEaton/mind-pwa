@@ -16,32 +16,47 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { initDB, db, saveWeekHistory, getWeekHistory, getAllWeekHistory, clearHistoryStore, getMonday } from './db.js';
+import { initDB, db, saveWeekHistory, getWeekHistory, getAllWeekHistory, getWeekStartDate, clearHistoryStore } from './db.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Configuration ---
-    const foodGroups = [
-        // Daily Positive
-        { id: 'whole_grains', name: 'Whole Grains', frequency: 'day', target: 3, unit: 'servings', type: 'positive' },
-        { id: 'other_veg', name: 'Other Vegetables', frequency: 'day', target: 1, unit: 'serving', type: 'positive' },
-        { id: 'olive_oil', name: 'Olive Oil', frequency: 'day', target: 1, unit: 'Tbsp (main oil)', type: 'positive' }, // Represent as 1 'use' per day
+     const foodGroups = [
+         // Daily Positive
+        { id: 'whole_grains', name: 'Whole Grains', frequency: 'day', target: 3, unit: 'servings', type: 'positive',
+          description: 'Serving examples: 1 slice whole-grain bread, ½ cup cooked whole grains (oats, quinoa, brown rice), ½ cup whole-grain cereal, 3 cups popped popcorn.' },
+        { id: 'other_veg', name: 'Other Vegetables', frequency: 'day', target: 1, unit: 'serving', type: 'positive',
+          description: 'Serving examples: ½ cup cooked or 1 cup raw non-starchy vegetables (broccoli, peppers, carrots, tomatoes, zucchini, onions, etc.). Excludes potatoes.' },
+        { id: 'olive_oil', name: 'Olive Oil', frequency: 'day', target: 1, unit: 'Tbsp (main oil)', type: 'positive',
+          description: 'Use extra virgin olive oil (EVOO) as your principal oil for cooking, dressings, etc. Aim for at least 1 Tbsp use daily.' },
 
-        // Weekly Positive
-        { id: 'leafy_greens', name: 'Green Leafy Vegetables', frequency: 'week', target: 6, unit: 'servings', type: 'positive' },
-        { id: 'nuts', name: 'Nuts', frequency: 'week', target: 5, unit: 'servings', type: 'positive' },
-        { id: 'beans', name: 'Beans', frequency: 'week', target: 4, unit: 'servings', type: 'positive' }, // MIND often lists 3+, let's use 4
-        { id: 'berries', name: 'Berries', frequency: 'week', target: 2, unit: 'servings', type: 'positive' },
-        { id: 'poultry', name: 'Poultry', frequency: 'week', target: 2, unit: 'servings', type: 'positive' },
-        { id: 'fish', name: 'Fish', frequency: 'week', target: 1, unit: 'serving', type: 'positive' },
-        { id: 'wine', name: 'Wine (optional)', frequency: 'day', target: 1, unit: 'glass (max)', type: 'limit', isOptional: true }, // Technically daily limit, but track weekly total too? Track daily, sum weekly. Target 0-7 per week effectively.
+         // Weekly Positive
+        { id: 'leafy_greens', name: 'Green Leafy Vegetables', frequency: 'week', target: 6, unit: 'servings', type: 'positive',
+          description: 'Serving examples: 1 cup raw or ½ cup cooked leafy greens (spinach, kale, collards, romaine, arugula, etc.).' },
+        { id: 'nuts', name: 'Nuts', frequency: 'week', target: 5, unit: 'servings', type: 'positive',
+          description: 'Serving examples: ¼ cup nuts or 2 Tbsp nut butter (almonds, walnuts, pecans preferred; avoid heavily salted/sugared nuts).' },
+        { id: 'beans', name: 'Beans', frequency: 'week', target: 4, unit: 'servings', type: 'positive',
+          description: 'Serving examples: ½ cup cooked beans, lentils, or legumes (kidney, black, pinto beans, chickpeas, soybeans, etc.).' },
+        { id: 'berries', name: 'Berries', frequency: 'week', target: 2, unit: 'servings', type: 'positive',
+          description: 'Serving examples: ½ cup fresh or frozen berries (blueberries strongly recommended, strawberries, raspberries, blackberries).' },
+        { id: 'poultry', name: 'Poultry', frequency: 'week', target: 2, unit: 'servings', type: 'positive',
+          description: 'Serving examples: 3-4 oz cooked chicken or turkey (prefer skinless, not fried).' },
+        { id: 'fish', name: 'Fish', frequency: 'week', target: 1, unit: 'serving', type: 'positive',
+          description: 'Serving examples: 3-4 oz cooked fish (prefer oily fish like salmon, mackerel, sardines; avoid fried fish).' },
+        { id: 'wine', name: 'Wine (optional)', frequency: 'day', target: 1, unit: 'glass (max)', type: 'limit', isOptional: true,
+          description: 'Optional: Limit to no more than one standard glass (approx. 5 oz) per day. Red wine is often specified.' },
 
-        // Weekly Limit
-        { id: 'red_meat', name: 'Red Meats', frequency: 'week', target: 3, unit: 'servings (max)', type: 'limit' }, // MIND uses <4, so max is 3
-        { id: 'butter_margarine', name: 'Butter/Margarine', frequency: 'day', target: 1, unit: 'Tbsp (max)', type: 'limit' }, // Track daily, sum weekly. Max ~7 weekly.
-        { id: 'cheese', name: 'Cheese', frequency: 'week', target: 1, unit: 'serving (max)', type: 'limit' },
-        { id: 'pastries_sweets', name: 'Pastries & Sweets', frequency: 'week', target: 4, unit: 'servings (max)', type: 'limit' }, // MIND uses <5, so max is 4
-        { id: 'fried_fast_food', name: 'Fried/Fast Food', frequency: 'week', target: 1, unit: 'serving (max)', type: 'limit' },
-    ];
+         // Weekly Limit
+        { id: 'red_meat', name: 'Red Meats', frequency: 'week', target: 3, unit: 'servings (max)', type: 'limit',
+          description: 'Limit to less than 4 servings/week (target ≤3). Serving ~3-4 oz cooked. Includes beef, pork, lamb, and processed meats.' },
+        { id: 'butter_margarine', name: 'Butter/Margarine', frequency: 'day', target: 1, unit: 'Tbsp (max)', type: 'limit',
+          description: 'Limit butter to less than 1 Tbsp per day. Avoid stick margarine entirely.' },
+        { id: 'cheese', name: 'Cheese', frequency: 'week', target: 1, unit: 'serving (max)', type: 'limit',
+          description: 'Limit full-fat cheese to less than 1 serving/week (target ≤1). Serving ~1-1.5 oz.' },
+        { id: 'pastries_sweets', name: 'Pastries & Sweets', frequency: 'week', target: 4, unit: 'servings (max)', type: 'limit',
+          description: 'Limit pastries and sweets to less than 5 servings/week (target ≤4). Includes cakes, cookies, candies, ice cream, sugary drinks etc.' },
+        { id: 'fried_fast_food', name: 'Fried/Fast Food', frequency: 'week', target: 1, unit: 'serving (max)', type: 'limit',
+          description: 'Limit fried food (especially commercial) and fast food to less than 1 serving/week (target ≤1).' },
+     ];
 
     // --- State Variables ---
     let state = {
@@ -78,6 +93,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportBtn = document.getElementById('export-btn');
     const importBtnTrigger = document.getElementById('import-btn-trigger'); // Button that triggers file input
     const importFileInput = document.getElementById('import-file-input');  // Hidden file input
+    const aboutBtn = document.getElementById('about-btn');
+    const genericModal = document.getElementById('generic-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body'); // Use the div for content
+    const modalCloseBtn = document.getElementById('modal-close-btn');
     const settingsBtn = document.getElementById('settings-btn');
     // Toast Elements
     const toastContainer = document.getElementById('toast-container'); // Optional if needed for complex logic
@@ -136,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const initDay = String(initDate.getDate()).padStart(2, '0');
         const today = `${initYear}-${initMonth}-${initDay}`; // Create default date string from local components
 
-        const currentMonday = getMonday(new Date()); // Use helper from db.js
+        const currentWeekStart = getWeekStartDate(new Date()); // *** USE RENAMED FUNCTION (relies on default 'Sunday') ***
 
         state.currentDayDate = savedState.currentDayDate || today;
         state.currentWeekStartDate = savedState.currentWeekStartDate || currentMonday;
@@ -184,22 +204,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const todayStr = `${year}-${month}-${day}`; // Construct YYYY-MM-DD from local components
         console.log("Calculated todayStr (local):", todayStr); // Add this log for verification        
 
-        const currentMondayStr = getMonday(today); // Use helper from db.js
+        const currentWeekStartStr = getWeekStartDate(today); // *** USE RENAMED FUNCTION (relies on default 'Sunday') ***
 
         let stateChanged = false;
         let weekResetOccurred = false;
 
         // Check for Week Reset FIRST (Sunday night to Monday morning)
         if (state.currentWeekStartDate !== currentMondayStr) {
-            console.log(`Week reset triggered: Stored week ${state.currentWeekStartDate}, Current week ${currentMondayStr}`);
-             // Archive the COMPLETED week (using the old state.currentWeekStartDate)
+            console.log(`Week reset triggered: Stored week ${state.currentWeekStartDate}, Current week ${currentWeekStartStr}`);
+            // Archive the COMPLETED week (using the old state.currentWeekStartDate)
              await archiveWeek(state.currentWeekStartDate, state.weeklyCounts);
 
              // Reset weekly counts for the NEW week
             Object.keys(state.weeklyCounts).forEach(key => {
                 state.weeklyCounts[key] = 0;
             });
-             state.currentWeekStartDate = currentMondayStr; // Update to the new week start
+             state.currentWeekStartDate = currentWeekStartStr; // Update to the new week start
              stateChanged = true;
              weekResetOccurred = true; // Flag that week reset happened
 
@@ -254,7 +274,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Deep clone totals to prevent modification issues
         const totalsToSave = JSON.parse(JSON.stringify(weeklyTotals));
         const weekData = {
-            weekStartDate: weekStartDate,
+            weekStartDate: weekStartDate, // Key for the record
+            weekStartDaySetting: state.weekSetting || 'Sunday', // Store the setting used (default if not set)
             totals: totalsToSave,
              // Optional: Store targets at the time of archiving if they might change
             targets: foodGroups.reduce((acc, group) => {
@@ -305,6 +326,14 @@ document.addEventListener('DOMContentLoaded', () => {
         foodGroups.forEach(group => {
             const item = foodGroupTemplate.content.cloneNode(true).querySelector('.food-group-item');
             item.dataset.id = group.id;
+            
+            // ***** ADD DATASET TO INFO BUTTON *****
+            const infoBtn = item.querySelector('.info-btn');
+            if (infoBtn) { // Check if button exists in template
+                infoBtn.dataset.groupId = group.id; // Store the ID for lookup
+            }
+            // *************************************
+                        
             item.querySelector('.name').textContent = group.name;
 
             // --- Target Description Logic (Unchanged) ---
@@ -430,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
          // Update Navigation
          const weekStartDate = new Date(weekData.weekStartDate + 'T00:00:00'); // Add time part for accurate display
-         historyWeekLabel.textContent = `Week of ${weekStartDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`;
+         historyWeekLabel.textContent = `Week of ${weekStartDate.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}`; // Show start weekday
          prevWeekBtn.disabled = state.currentHistoryIndex === 0;
          nextWeekBtn.disabled = state.currentHistoryIndex >= state.history.length - 1;
          // Set date picker to a date within the displayed week (e.g., the start date)
@@ -522,6 +551,16 @@ document.addEventListener('DOMContentLoaded', () => {
             container.addEventListener('input', handleCounterInputChange); // For live updates as user types (optional)
         });
 
+        // *** ADD LISTENER for INFO BUTTON clicks (via delegation) ***
+        [dailyGoalsContainer, weeklyGoalsContainer].forEach(container => {
+            container.addEventListener('click', handleInfoClick);
+        });
+        // *** ADD LISTENERS for MODAL ***
+        modalCloseBtn.addEventListener('click', closeModal);
+        genericModal.addEventListener('click', (event) => { // Click on background/overlay
+            if (event.target === genericModal) closeModal();
+        });        
+
         // History Navigation
         prevWeekBtn.addEventListener('click', () => {
             if (state.currentHistoryIndex > 0) {
@@ -541,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
         importBtnTrigger.addEventListener('click', triggerImport); // Listen on the trigger button
         importFileInput.addEventListener('change', handleImportFileSelect); // Listen on the actual file input
         settingsBtn.addEventListener('click', handleSettings);
+        aboutBtn.addEventListener('click', handleAboutClick); // *** ADD LISTENER for About Button ***
 
         // Optional: Close menu when clicking outside
         document.addEventListener('click', handleOutsideMenuClick);
@@ -632,8 +672,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedDateStr = historyDatePicker.value;
         if (!selectedDateStr) return;
 
-        const selectedDate = new Date(selectedDateStr + "T00:00:00"); // Ensure consistent time for comparison
-        const targetWeekStart = getMonday(selectedDate); // Find the Monday of the week containing the selected date
+        const selectedDate = new Date(selectedDateStr + "T00:00:00"); // Use local time
+        const targetWeekStart = getWeekStartDate(selectedDate); // *** USE RENAMED FUNCTION (relies on default 'Sunday') ***
 
         // Find the index in our history array that matches this week start date
         const foundIndex = state.history.findIndex(week => week.weekStartDate === targetWeekStart);
@@ -691,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderCurrentWeekSummary(); // This should now run correctly
         }
 
-        // Close menu when switching views
+        // Close menu and modal when switching views
         closeMenu();
 
     }
@@ -751,6 +791,66 @@ document.addEventListener('DOMContentLoaded', () => {
             closeMenu();
         }
     }
+
+    // ***** ADD NEW MODAL, ABOUT, INFO FUNCTIONS *****
+
+    // Handles clicks within the goal containers to check for info button clicks
+    function handleInfoClick(event) {
+        const infoButton = event.target.closest('.info-btn'); // Find the clicked info button
+        if (!infoButton) return; // Click wasn't on an info button
+
+        const groupId = infoButton.dataset.groupId;
+        if (!groupId) return;
+
+        const group = foodGroups.find(g => g.id === groupId);
+        if (!group || !group.description) {
+            showToast("Details not available.", "error");
+            return;
+        }
+        // Prepare content with line breaks
+        const descriptionHtml = group.description.replace(/\n/g, '<br>');
+        openModal(group.name, descriptionHtml); // Use the generic modal opener
+    }
+
+    // Handles click on the "About" menu item
+    function handleAboutClick() {
+        closeMenu();
+        const aboutTitle = "About MIND Diet Tracker";
+        // Define the about content (can include simple HTML)
+        const aboutContent = `
+            <p>This app helps you track your adherence to the MIND Diet principles.</p>
+            <p>Track daily and weekly servings, view summaries, and check your history.</p>
+            <p>Data is stored locally in your browser.</p>
+            <p>Version: <span id="modal-app-version">(unknown)</span></p> {/* Placeholder for version */}
+        `;
+        openModal(aboutTitle, aboutContent);
+
+        // Fetch and display version inside the modal (similar to footer)
+        const modalVersionEl = document.getElementById('modal-app-version');
+        if(modalVersionEl) {
+             const footerVersionEl = document.getElementById('app-version'); // Get version from footer span
+             modalVersionEl.textContent = footerVersionEl ? footerVersionEl.textContent : '(unknown)';
+        }
+    }
+
+    // Generic function to open the modal
+    function openModal(title, htmlContent) {
+        modalTitle.textContent = title;
+        modalBody.innerHTML = htmlContent; // Use innerHTML to allow <br>, etc.
+        genericModal.classList.add('modal-open');
+        modalCloseBtn.focus(); // Focus close button for accessibility
+    }
+
+    // Generic function to close the modal
+    function closeModal() {
+        genericModal.classList.remove('modal-open');
+        // Optional: Clear content after closing animation finishes
+        // setTimeout(() => {
+        //     modalTitle.textContent = '';
+        //     modalBody.innerHTML = '';
+        // }, 300); // Match CSS transition duration if needed
+    }
+
 
     // --- Export Functionality ---
     async function handleExport() {

@@ -383,3 +383,119 @@ header nav {
          font-size: 0.9em;
      }
 }
+
+/* === Styles for Info Button and Generic Modal === */
+
+/* --- Info Button Styling --- */
+.food-group-item .info {
+    /* Ensure info div can contain positioned button */
+    /* Use flex to align icon and text */
+    display: flex;
+    align-items: center; /* Vertically align icon/text */
+    /* flex-grow: 1; */ /* Already present? */
+    /* margin-right: 1rem; */ /* Already present? */
+}
+
+.info-btn {
+    background: none;
+    border: 1px solid var(--secondary-color); /* Subtle border */
+    color: var(--secondary-color); /* Match theme */
+    border-radius: 50%; /* Make it round */
+    width: 22px; /* Small size */
+    height: 22px;
+    font-size: 0.9em; /* Adjust icon size */
+    font-weight: bold;
+    line-height: 20px; /* Center icon vertically */
+    text-align: center;
+    padding: 0;
+    margin-right: 0.6rem; /* Space between icon and name */
+    cursor: pointer;
+    flex-shrink: 0; /* Prevent button from shrinking */
+    transition: background-color 0.2s;
+}
+.info-btn:hover {
+    background-color: #efefef; /* Light hover effect */
+}
+
+/* Adjust name style if needed due to flex */
+.food-group-item .name {
+    font-weight: bold;
+}
+
+
+/* --- Generic Modal Styles --- */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1500; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.55); /* Semi-transparent overlay */
+}
+
+/* Class added by JS to show modal */
+.modal.modal-open {
+    display: flex; /* Use flex to center content box */
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: auto; /* Helps centering */
+    padding: 20px 25px 25px 25px; /* T R B L */
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 90%; /* Responsive width */
+    max-width: 550px; /* Max width */
+    position: relative; /* For positioning close button */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    line-height: 1.6; /* Improve readability */
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    color: #aaa;
+    background: none;
+    border: none;
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+}
+
+.modal-close-btn:hover,
+.modal-close-btn:focus {
+    color: #333; /* Darker on hover */
+    text-decoration: none;
+}
+
+#modal-title { /* Style for the H3 */
+    margin-top: 0;
+    margin-bottom: 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary-color);
+    font-size: 1.4em;
+}
+
+#modal-body { /* Style for the content div */
+    font-size: 0.95em;
+    color: var(--text-color);
+    max-height: 60vh; /* Limit height and allow scroll within modal */
+    overflow-y: auto; /* Add scroll if content overflows */
+}
+
+#modal-body p { /* Example styling if using <p> tags in content */
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+}
+#modal-body p:last-child {
+    margin-bottom: 0;
+}

@@ -16,6 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+
 const DB_NAME = 'MindDietHistoryDB';
 const STORE_NAME = 'weeklyHistory';
 const DB_VERSION = 1;
@@ -23,20 +24,33 @@ const DB_VERSION = 1;
 let db;
 
 // --- Helper Functions ---
-function getMonday(d) {
+// *** RENAMED function and UPDATED default logic to Sunday start ***
+// startDay: 'Sunday' or 'Monday' - parameter added for future use, defaults to Sunday
+function getWeekStartDate(d, startDay = 'Sunday') { // Default to Sunday
   d = new Date(d);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday (0)
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0, 0, 0, 0); // Set to midnight
-  // Replace use of toISOString()
-  // return monday.toISOString().split('T')[0]; // Return YYYY-MM-DD
-  // Format using local components
-  const year = monday.getFullYear();
-  const month = String(monday.getMonth() + 1).padStart(2, '0');
-  const dayOfMonth = String(monday.getDate()).padStart(2, '0');
+  const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  let diff;
+
+  if (startDay === 'Sunday') {
+      // If Sunday is the start day, the difference is just the current date's day number
+      diff = d.getDate() - day;
+  } else { // Default to Monday logic if not Sunday (for future use or if called explicitly)
+      // Original Monday logic:
+      // Adjust when day is Sunday (0) to go back to the previous Monday (-6 days)
+      // Otherwise, go back (day - 1) days to get to Monday
+      diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  }
+
+  const weekStart = new Date(d.setDate(diff));
+  weekStart.setHours(0, 0, 0, 0); // Set to midnight
+
+  // Format using local components (Corrected previously)
+  const year = weekStart.getFullYear();
+  const month = String(weekStart.getMonth() + 1).padStart(2, '0');
+  const dayOfMonth = String(weekStart.getDate()).padStart(2, '0');
   return `${year}-${month}-${dayOfMonth}`; // Return local YYYY-MM-DD
 }
+
 
 function initDB() {
   return new Promise((resolve, reject) => {
@@ -73,6 +87,10 @@ function initDB() {
 async function saveWeekHistory(weekData) {
   await ensureDB();
   return new Promise((resolve, reject) => {
+    // Check if db is actually available after ensureDB (paranoia check)
+    if (!db) {
+        return reject(new Error("Database connection not available for save operation."));
+    }
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.put(weekData);
@@ -85,12 +103,23 @@ async function saveWeekHistory(weekData) {
       console.error("Error saving week data:", event.target.error);
       reject("Error saving week data: " + event.target.error);
     };
+     transaction.oncomplete = () => {
+        console.log("Save transaction completed for store '" + STORE_NAME + "'.");
+    };
+    transaction.onerror = (event) => {
+        console.error("Error during save transaction:", event.target.error);
+        reject("Transaction error during save: " + event.target.error);
+    };
   });
 }
 
 async function getWeekHistory(weekStartDate) {
   await ensureDB();
   return new Promise((resolve, reject) => {
+    // Check if db is actually available after ensureDB (paranoia check)
+    if (!db) {
+        return reject(new Error("Database connection not available for get operation."));
+    }
     const transaction = db.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.get(weekStartDate);
@@ -108,6 +137,10 @@ async function getWeekHistory(weekStartDate) {
 async function getAllWeekHistory() {
   await ensureDB();
   return new Promise((resolve, reject) => {
+    // Check if db is actually available after ensureDB (paranoia check)
+    if (!db) {
+        return reject(new Error("Database connection not available for getAll operation."));
+    }
     const transaction = db.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.getAll(); // Get all records
@@ -126,7 +159,7 @@ async function getAllWeekHistory() {
   });
 }
 
-// For purge before import
+// *** ADDED clearHistoryStore function (Required for Import) ***
 async function clearHistoryStore() {
   await ensureDB(); // Make sure the DB connection is ready
   return new Promise((resolve, reject) => {
@@ -159,27 +192,40 @@ async function clearHistoryStore() {
   });
 }
 
+
 // Ensure the database is initialized before any operations
 async function ensureDB() {
   if (!db) {
-    db = await initDB();
-    if (!db) throw new Error("DB object not available even after delay");
+    console.log("ensureDB: DB not initialized, calling initDB...");
+    try {
+        db = await initDB();
+        if (!db) throw new Error("initDB resolved but DB object still null");
+        console.log("ensureDB: DB initialization seems successful.");
+    } catch (error) {
+         console.error("ensureDB: Failed to initialize DB:", error);
+         // Re-throw the error so calling functions know it failed
+         throw new Error(`Database initialization failed in ensureDB: ${error.message || error}`);
+    }
   }
+   // Add a final check even if db was thought to be initialized previously
+   if (!db) {
+       throw new Error("DB object not available even after ensureDB logic.");
+   }
 }
 
-// Make getMonday available outside the module if needed elsewhere
-window.getMonday = getMonday;
-window.saveWeekHistory = saveWeekHistory;
+// Make getWeekStartDate available outside the module if needed elsewhere (less common now)
+// window.getWeekStartDate = getWeekStartDate; // *** UPDATED/COMMENTED OUT GLOBAL EXPOSURE ***
+window.saveWeekHistory = saveWeekHistory; // Still exposed for potential debugging? Prefer module imports.
 window.getWeekHistory = getWeekHistory;
 window.getAllWeekHistory = getAllWeekHistory;
 
 // Export functions for use in app.js
 export {
   initDB,
-  db,
+  db, // Export the db instance itself if needed elsewhere
   saveWeekHistory,
   getWeekHistory,
   getAllWeekHistory,
-  clearHistoryStore,
-  getMonday
+  getWeekStartDate, // *** UPDATED EXPORT NAME ***
+  clearHistoryStore // Ensure this is exported
 };
