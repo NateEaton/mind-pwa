@@ -98,6 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
     
+            await displayAppVersion();
+
             registerServiceWorker();
             loadState();
             await checkDateAndResetCounters(); // Crucial step before rendering
@@ -434,6 +436,19 @@ document.addEventListener('DOMContentLoaded', () => {
          // Set date picker to a date within the displayed week (e.g., the start date)
          historyDatePicker.value = weekData.weekStartDate;
 
+        // Use stored targets if available, else current foodGroups config as fallback
+        const historyTargets = weekData.targets || foodGroups.reduce((acc, group) => {
+            // This fallback runs only if weekData.targets is null or undefined
+            console.log(`History Warning: Using current config fallback for targets in week ${weekData.weekStartDate}`);
+            acc[group.id] = {
+                target: group.target,
+                frequency: group.frequency,
+                type: group.type,
+                unit: group.unit,
+                name: group.name // Important to include name here too
+            };
+            return acc;
+        }, {});
 
          const ul = document.createElement('ul');
          // Use the targets stored *with* the history data if available, otherwise use current config
@@ -481,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
              if (statusClass) li.classList.add(statusClass);
 
              li.innerHTML = `
-                <span class="food-name">${targetInfo.name || group.name}</span> {/* Use stored name if available */}                
+                <span class="food-name">${targetInfo.name || group.name}</span>               
                 <span class="servings">
                     Total: ${total} / Target ${targetInfo.type === 'limit' ? '≤' : '≥'} ${effectiveWeeklyTarget} per week
                 </span>
@@ -921,6 +936,21 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast("Settings view not yet implemented.", "success"); // Use 'success' style for info
         // Could potentially navigate to a settings view if one existed:
         // setActiveView('settings');
+    }
+
+    async function displayAppVersion() {
+        const versionEl = document.getElementById('app-version');
+        if (!versionEl) return;
+        try {
+            const response = await fetch('version.json?t=' + Date.now()); // Cache buster
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const versionData = await response.json();
+            versionEl.textContent = `(v${versionData.commitHash})`;
+            console.log('App Version Info:', versionData);
+        } catch (error) {
+            console.error('Failed to load version info:', error);
+            versionEl.textContent = '(v?.?.?)';
+        }
     }
 
     // --- Start the App ---
