@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
           description: 'Serving examples: 3-4 oz cooked chicken or turkey (prefer skinless, not fried).' },
         { id: 'fish', name: 'Fish', frequency: 'week', target: 1, unit: 'serving', type: 'positive',
           description: 'Serving examples: 3-4 oz cooked fish (prefer oily fish like salmon, mackerel, sardines; avoid fried fish).' },
-        { id: 'wine', name: 'Wine (optional)', frequency: 'day', target: 1, unit: 'glass (max)', type: 'limit', isOptional: true,
+        { id: 'wine', name: 'Wine', frequency: 'day', target: 1, unit: 'glass (max)', type: 'limit', isOptional: true,
           description: 'Optional: Limit to no more than one standard glass (approx. 5 oz) per day. Red wine is often specified.' },
 
          // Weekly Limit
@@ -344,9 +344,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const unitText = group.unit || 'servings';
 
             if (group.type === 'positive') {
-                targetDesc = `Target: ≥ ${targetVal} ${unitText}/${freqText}`;
+                targetDesc = `≥ ${targetVal} ${unitText}/${freqText}`;
             } else { // limit
-                targetDesc = `Limit: ≤ ${targetVal} ${unitText}/${freqText}`;
+                targetDesc = `≤ ${targetVal} ${unitText}/${freqText}`;
                 if (group.isOptional) targetDesc += " (optional)";
             }
             item.querySelector('.target').textContent = targetDesc;
