@@ -737,3 +737,11 @@ header nav {
      color: #333;
      margin-right: 0.5rem;
 }
+
+/* --- Styling for Dates in Subheadings --- */
+.heading-date {
+    font-size: 0.85em;      /* Make date slightly smaller */
+    font-weight: normal;    /* Make date non-bold */
+    color: var(--primary-color);           /* Match h2,h3 color */
+    margin-left: 0.75em;    /* Space after heading text */
+}

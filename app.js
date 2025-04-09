@@ -82,7 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const dailyGoalsContainer = document.getElementById('daily-goals');
     const weeklyGoalsContainer = document.getElementById('weekly-goals');
     const foodGroupTemplate = document.getElementById('food-group-item-template');
-    const currentDateEl = document.getElementById('current-date');
     const currentWeekStartDateEl = document.getElementById('current-week-start-date');
     const currentWeekSummaryContent = document.getElementById('current-week-summary-content');
     const historyContent = document.getElementById('history-content');
@@ -115,6 +114,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const editTotalsCancelBtn = document.getElementById('edit-totals-cancel-btn');
     const editTotalsSaveBtn = document.getElementById('edit-totals-save-btn');
     
+    // *** NEW Date Span Elements ***
+    const dailyGoalsDateEl = document.getElementById('daily-goals-date');
+    const weeklyGoalsDateEl = document.getElementById('weekly-goals-date');
+
     // Toast Elements
     const toastContainer = document.getElementById('toast-container'); // Optional if needed for complex logic
     const toastMessage = document.getElementById('toast-message');
@@ -325,8 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
    // Renders the main tracker view items
     function renderTrackerItems() {
-        dailyGoalsContainer.innerHTML = '<h3>Daily Goals</h3>';
-        weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals</h3>';
+        // dailyGoalsContainer.innerHTML = '<h3>Daily Goals <span id="daily-goals-date" class="heading-date"></span></h3>';
+        // weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals <span id="weekly-goals-date" class="heading-date"></span></h3>';
 
         foodGroups.forEach(group => {
             const item = foodGroupTemplate.content.cloneNode(true).querySelector('.food-group-item');
@@ -370,21 +373,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Rendering ---
     function renderUI() {
-        // Debugging log to confirm renderUI is being called
-        console.log('renderUI: Using date from state:', state.currentDayDate);
-        
-        // Update current date display - REVISED to ensure it uses the local date format
-        //currentDateEl.textContent = new Date(state.currentDayDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        // Construct the date object ensuring it's treated as local time midnight
-        const displayDate = new Date(state.currentDayDate + 'T00:00:00');
-        currentDateEl.textContent = displayDate.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+        try {
+            // Debugging log to confirm renderUI is being called
+            console.log('renderUI: Rendering dates from state. CurrentDay:', state.currentDayDate, 'WeekStart:', state.currentWeekStartDate);
+            
+            // Update current date display - REVISED to ensure it uses the local date format
+            //currentDateEl.textContent = new Date(state.currentDayDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            // Construct the date object ensuring it's treated as local time midnight
+            const displayDate = new Date(state.currentDayDate + 'T00:00:00');
+            
+            // *** POPULATE new date spans ***
+            if (dailyGoalsDateEl) {
+                dailyGoalsDateEl.textContent = `${displayDate.toLocaleDateString(undefined, { weekday: 'long' })}, ${displayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+            }
+            if (weeklyGoalsDateEl) {
+                const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
+                weeklyGoalsDateEl.textContent = `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, { weekday: 'long' })}, ${weekStartDateDisplay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+            }
+        } catch (e) {
+            console.error("Error formatting display date:", e);
+            if (dailyGoalsDateEl) dailyGoalsDateEl.textContent = "(Error)";
+            if (weeklyGoalsDateEl) weeklyGoalsDateEl.textContent = "(Error)";            
+        }
+        
+        const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
         currentWeekStartDateEl.textContent = new Date(state.currentWeekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }); // Add time to avoid timezone issues
 
         // --- Updated Clearing Logic ---
         // Clear existing items, using the new single weekly container
-        dailyGoalsContainer.innerHTML = '<h3>Daily Goals</h3>';
-        weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals</h3>'; // Clear the merged weekly container
+        // dailyGoalsContainer.innerHTML = '<h3>Daily Goals <span id="daily-goals-date" class="heading-date"></span></h3>';
+        // weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals <span id="weekly-goals-date" class="heading-date"></span></h3>'; 
 
         // Render food group items
         foodGroups.forEach(group => {
