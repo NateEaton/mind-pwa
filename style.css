@@ -379,19 +379,23 @@ header nav {
          font-size: 0.9em;
     }
 
-    /* Food group item mobile layout */
     .food-group-item {
-        flex-direction: column; /* Stack elements vertically on very small screens */
+        flex-direction: row;      /* Override stacking */
+        flex-wrap: nowrap;        /* Prevent wrapping */
+        align-items: flex-start;  /* Keep vertical alignment tidy */
     }
-    
+
     .food-group-item .info {
-        width: 100%;
-        margin-bottom: 0.7rem;
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-right: 0.5rem;
+        margin-bottom: 0;         /* Remove stacking spacing */
     }
-    
+
     .food-group-item .controls {
+        margin-left: 0;           /* No need for indent */
+        flex-shrink: 0;
         align-self: flex-start;
-        margin-left: 28px; /* Align with text (info-btn width + margin) */
     }
     
     /* Slightly smaller controls on very small screens */
@@ -405,10 +409,10 @@ header nav {
         font-size: 1.1rem;
     }
     
-    /* Narrower modal on mobile */
     .modal-content {
-        width: 75%; /* More narrow on mobile */
-        padding: 15px 20px 20px 20px;
+        width: 90%;
+        max-width: 360px;
+        margin: auto;
     }
     
     #modal-title {
