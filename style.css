@@ -396,7 +396,7 @@ header nav {
     
     /* Slightly smaller controls on very small screens */
     .food-group-item .controls input[type="number"] {
-        width: 35px;
+        width: 30px;
     }
     
     .food-group-item .controls button {
@@ -449,7 +449,7 @@ header nav {
     
     /* Optimize controls size */
     .food-group-item .controls input[type="number"] {
-        width: 35px; /* Slightly narrower input */
+        width: 30px; /* Slightly narrower input */
     }
     
     .food-group-item .controls button {
