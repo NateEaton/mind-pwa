@@ -665,19 +665,39 @@ header nav {
     display: flex;
     align-items: center;
 }
-.edit-item-controls button { /* Basic styling for +/- buttons */
+.edit-item-controls button { /* Base style for BOTH buttons */
     width: 28px;
     height: 28px;
-    border: 1px solid var(--border-color);
-    background-color: #f0f0f0;
+    border: 1px solid var(--border-color); /* Keep border or remove if desired */
+    /* background-color: #f0f0f0; */ /* REMOVE this default grey background */
     border-radius: 50%;
     cursor: pointer;
     font-size: 1.1rem;
-    line-height: 1;
+    font-weight: bold; /* Make symbols bolder */
+    line-height: 1; /* Adjust if vertical centering is off */
     margin: 0 0.5rem;
+    color: white; /* ADD text color white */
+    transition: background-color 0.2s; /* Add transition */
 }
-.edit-item-controls button:hover {
-    background-color: #e0e0e0;
+
+/* ADD specific styles for each button type */
+.edit-item-controls button.edit-increment-btn {
+     background-color: var(--secondary-color); /* Green */
+     border-color: var(--secondary-color); /* Match border */
+}
+.edit-item-controls button.edit-decrement-btn {
+     background-color: #ffc107; /* Amber/Yellow */
+     border-color: #ffc107; /* Match border */
+}
+
+/* ADD hover styles matching main tracker */
+.edit-item-controls button.edit-increment-btn:hover {
+     background-color: #689F38; /* Darker Green */
+     border-color: #689F38;
+}
+.edit-item-controls button.edit-decrement-btn:hover {
+     background-color: #e0a800; /* Darker Amber */
+     border-color: #e0a800;
 }
 .edit-current-total {
     min-width: 30px; /* Ensure space for number */
@@ -688,7 +708,12 @@ header nav {
 
 /* Modal Actions Container */
 .modal-actions {
-    text-align: right;
+    /* text-align: right; */ /* REMOVE this */
+    display: flex;          /* ADD: Use flexbox */
+    justify-content: flex-end; /* ADD: Align items (buttons) to the end (right) */
+    align-items: center;    /* ADD: Vertically align items in the center (optional but good) */
+
+    /* Keep existing styles */
     margin-top: 1.5rem;
     padding-top: 1rem;
     border-top: 1px solid var(--border-color);
