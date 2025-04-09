@@ -397,29 +397,29 @@ header nav {
         flex-shrink: 0;
         align-self: flex-start;
     }
-    
+
     /* Slightly smaller controls on very small screens */
     .food-group-item .controls input[type="number"] {
         width: 30px;
     }
-    
+
     .food-group-item .controls button {
         width: 28px;
         height: 28px;
         font-size: 1.1rem;
     }
-    
+
     .modal-content {
         width: 90%;
         max-width: 360px;
         margin: auto;
     }
-    
+
     #modal-title {
         font-size: 1.3em;
         padding-bottom: 0.4rem;
     }
-    
+
     #modal-body {
         font-size: 0.9em;
         max-height: 70vh;
@@ -450,35 +450,35 @@ header nav {
     .food-group-item {
         flex-direction: row; /* Keep horizontal on medium screens */
     }
-    
+
     /* Optimize controls size */
     .food-group-item .controls input[type="number"] {
         width: 30px; /* Slightly narrower input */
     }
-    
+
     .food-group-item .controls button {
         width: 30px; /* Slightly smaller buttons */
         height: 30px;
     }
-    
+
     /* Ensure text doesn't push controls too far */
     .food-group-item .info {
         max-width: 65%; /* Limit how much space info can take */
         margin-right: 0.5rem; /* Reduce right margin */
     }
-    
+
     /* Narrower modal on medium screens */
     .modal-content {
         width: 75%;
         padding: 15px 20px 20px 20px;
     }
-    
+
     /* Keep these modal adjustments */
     #modal-title {
         font-size: 1.3em;
         padding-bottom: 0.4rem;
     }
-    
+
     #modal-body {
         font-size: 0.9em;
         max-height: 70vh;
