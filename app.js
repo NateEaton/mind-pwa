@@ -816,21 +816,58 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleAboutClick() {
         closeMenu();
         const aboutTitle = "About MIND Diet Tracker";
-        // Define the about content (can include simple HTML)
+        
+        // Create the base about content
         const aboutContent = `
             <p>This app helps you track your adherence to the MIND Diet principles.</p>
             <p>Track daily and weekly servings, view summaries, and check your history.</p>
             <p>Data is stored locally in your browser.</p>
-            <p>Version: <span id="modal-app-version">(unknown)</span></p> 
+            <p>Version: <span id="modal-app-version">(unknown)</span></p>
+            
+            <!-- Development information section -->
+            <div id="dev-info" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; font-family: monospace; font-size: 12px;">
+                <h4 style="margin: 5px 0;">Development Information</h4>
+                <div>Viewport: <span id="dev-viewport-size"></span></div>
+                <div>Screen: <span id="dev-screen-size"></span></div>
+                <div>Device Pixel Ratio: <span id="dev-pixel-ratio"></span></div>
+                <div>User Agent: <span id="dev-user-agent"></span></div>
+            </div>
         `;
+        
         openModal(aboutTitle, aboutContent);
 
         // Fetch and display version inside the modal (similar to footer)
         const modalVersionEl = document.getElementById('modal-app-version');
         if(modalVersionEl) {
-             const footerVersionEl = document.getElementById('app-version'); // Get version from footer span
-             modalVersionEl.textContent = footerVersionEl ? footerVersionEl.textContent : '(unknown)';
+            const footerVersionEl = document.getElementById('app-version'); // Get version from footer span
+            modalVersionEl.textContent = footerVersionEl ? footerVersionEl.textContent : '(unknown)';
         }
+        
+        // Update the development information
+        updateDevInfo();
+        
+        // Add window resize listener to update dev info when window size changes
+        window.addEventListener('resize', updateDevInfo);
+    }
+
+    // Function to update development information
+    function updateDevInfo() {
+        // Get viewport dimensions
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        document.getElementById('dev-viewport-size').textContent = `${viewportWidth}px × ${viewportHeight}px`;
+        
+        // Get screen dimensions
+        const screenWidth = window.screen.width;
+        const screenHeight = window.screen.height;
+        document.getElementById('dev-screen-size').textContent = `${screenWidth}px × ${screenHeight}px`;
+        
+        // Get device pixel ratio
+        const pixelRatio = window.devicePixelRatio || 1;
+        document.getElementById('dev-pixel-ratio').textContent = pixelRatio;
+        
+        // Get user agent
+        document.getElementById('dev-user-agent').textContent = navigator.userAgent;
     }
 
     // Generic function to open the modal
