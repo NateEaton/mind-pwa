@@ -1,8 +1,6 @@
 # MIND Diet Tracker PWA
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-<!-- Add Vercel badge if you have one: [![Vercel Status](...)](...) -->
-[**Live Demo**](https://mind-pwa-fawn.vercel.app/){target="_blank"} deployed via Vercel.
 
 A simple Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history, all stored locally in your browser.
 
@@ -41,7 +39,7 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 This application is designed to be hosted as a static website. You can run the version deployed on Vercel using the link above or follow the directions below.
 
 1.  **Prerequisites:** You need a web server capable of serving static files (e.g., Apache, Nginx, Caddy, Synology Web Station, Netlify, Vercel, GitHub Pages) and Node.js if using the Git hook for versioning.
-2.  **Get the Code:** Clone this repository or download the source code files. If cloning, you may need to set up the `pre-commit` hook manually (see Option 2 in [this discussion](<link-or-reference-to-versioning-discussion>)).
+2.  **Get the Code:** Clone this repository or download the source code files. If cloning, you may need to set up the `pre-commit` hook manually (copy file _pre-commit_ into repodir/.git/hooks).
 3.  **(If using Git hook):** Run `npm run generate-version` (or `node update-version.js`) once initially if `version.json` doesn't exist.
 4.  **Deploy Files:** Place all the files and folders (`index.html`, `app.js`, `db.js`, `style.css`, `sw.js`, `manifest.json`, `version.json`, `icons/` folder, etc.) into a web-accessible directory on your server.
 5.  **Configure Server (if needed):** Ensure your web server is configured to correctly serve files with standard MIME types.

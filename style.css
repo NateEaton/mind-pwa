@@ -410,8 +410,8 @@ header nav {
     }
 
     .modal-content {
-        width: 90%;
-        max-width: 360px;
+        width: 75%;
+        max-width: 340px;
         margin: auto;
     }
 
@@ -423,6 +423,7 @@ header nav {
     #modal-body {
         font-size: 0.9em;
         max-height: 70vh;
+        max-width: 360vw;
     }
 }
 

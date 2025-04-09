@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'fish', name: 'Fish', frequency: 'week', target: 1, unit: 'serving', type: 'positive',
           description: 'Serving examples: 3-4 oz cooked fish (prefer oily fish like salmon, mackerel, sardines; avoid fried fish).' },
         { id: 'wine', name: 'Wine', frequency: 'day', target: 1, unit: 'glass (max)', type: 'limit', isOptional: true,
-          description: 'Optional: Limit to no more than one standard glass (approx. 5 oz) per day. Red wine is often specified.' },
+          description: 'Optional: Limit to no more than one standard glass (approx. 5 oz) per day. Preferrably red wine.' },
 
          // Weekly Limit
         { id: 'red_meat', name: 'Red Meats', frequency: 'week', target: 3, unit: 'servings (max)', type: 'limit',
