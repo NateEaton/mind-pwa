@@ -1,0 +1,19 @@
+#!/bin/sh
+# pre-commit hook to update version.json
+
+echo "Running pre-commit hook to update version..."
+
+# Run the node script (make sure Node is in your PATH)
+node ./update-version.js
+
+# Check if the script failed
+if [ $? -ne 0 ]; then
+   echo "pre-commit hook failed: Could not update version.json" >&2
+   exit 1
+fi
+
+# Add the updated version.json to the index for this commit
+git add version.json
+
+echo "Added updated version.json to commit."
+exit 0 # Allow the commit
