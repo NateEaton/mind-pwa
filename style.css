@@ -106,9 +106,10 @@ h2:first-child, h3:first-child {
 .food-group-item {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start; /* Changed from center to align with top of content */
+    align-items: flex-start; /* Changed from center to align with top */
     padding: 0.8rem 0;
     border-bottom: 1px solid var(--border-color);
+    flex-wrap: nowrap; /* Add this to prevent wrapping by default */
 }
 
 .food-group-item:last-child {
@@ -118,11 +119,15 @@ h2:first-child, h3:first-child {
 .food-group-item .target {
     font-size: 0.9em;
     color: #555;
+    white-space: nowrap; /* Add this */
+    overflow: hidden; /* Add this */
+    text-overflow: ellipsis; /* Add this */
 }
 
 .food-group-item .controls {
     display: flex;
     align-items: center;
+    flex-shrink: 0; /* Add this to prevent controls from shrinking */
 }
 
 .food-group-item .controls button {
@@ -142,16 +147,16 @@ h2:first-child, h3:first-child {
 }
 
 .food-group-item .controls input[type="number"] {
-    width: 30px;
+    width: 30px; /* Reduced from 50px */
     text-align: center;
     padding: 0.4rem;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     font-size: 1rem;
-    /* Hide spinner buttons */
     -moz-appearance: textfield;
     appearance: textfield;
 }
+
 .food-group-item .controls input[type="number"]::-webkit-inner-spin-button,
 .food-group-item .controls input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -355,8 +360,9 @@ header nav {
     background-color: #d9534f; /* A common bootstrap danger red */
 }
 
-/* --- Responsive adjustments for Menu Button --- */
-@media (max-width: 600px) {
+/* Very small screens */
+@media (max-width: 480px) {
+    /* Copy menu button and toast styles from your existing media query */
     #menu-toggle-btn {
         top: 0.5rem;
         left: 0.5rem;
@@ -367,30 +373,30 @@ header nav {
          left: 5px;
          min-width: 160px;
     }
-     /* Make toast slightly smaller on mobile */
-     #toast-message.toast {
+    /* Make toast slightly smaller on mobile */
+    #toast-message.toast {
          padding: 10px 20px;
          font-size: 0.9em;
     }
 
     /* Food group item mobile layout */
     .food-group-item {
-        flex-direction: column; /* Stack elements vertically on mobile */
+        flex-direction: column; /* Stack elements vertically on very small screens */
     }
     
     .food-group-item .info {
-        margin-bottom: 0.8rem; /* Add space before controls */
-        width: 100%; /* Full width on mobile */
+        width: 100%;
+        margin-bottom: 0.7rem;
     }
     
-    /* Controls container layout */
     .food-group-item .controls {
-        align-self: flex-start; /* Align with left side */
-        margin-left: 28px; /* Align with text (infoBtn width + margin) */
+        align-self: flex-start;
+        margin-left: 28px; /* Align with text (info-btn width + margin) */
     }
-        
+    
+    /* Slightly smaller controls on very small screens */
     .food-group-item .controls input[type="number"] {
-        width: 35px; /* Even smaller on mobile */
+        width: 35px;
     }
     
     .food-group-item .controls button {
@@ -398,14 +404,72 @@ header nav {
         height: 28px;
         font-size: 1.1rem;
     }
-
+    
     /* Narrower modal on mobile */
     .modal-content {
         width: 75%; /* More narrow on mobile */
         padding: 15px 20px 20px 20px;
     }
+    
+    #modal-title {
+        font-size: 1.3em;
+        padding-bottom: 0.4rem;
+    }
+    
+    #modal-body {
+        font-size: 0.9em;
+        max-height: 70vh;
+    }
+}
 
-    /* Modal adjustments */
+/* --- Responsive adjustments for Menu Button --- */
+@media (min-width: 481px) and (max-width: 600px) {
+    /* Keep all your existing code */
+    #menu-toggle-btn {
+        top: 0.5rem;
+        left: 0.5rem;
+        font-size: 1.8rem; /* Slightly smaller */
+    }
+    .main-menu {
+         top: 55px; /* Adjust based on smaller header */
+         left: 5px;
+         min-width: 160px;
+    }
+    /* Make toast slightly smaller on mobile */
+    #toast-message.toast {
+         padding: 10px 20px;
+         font-size: 0.9em;
+    }
+
+    /* Change these styles for medium screens */
+    /* Keep horizontal layout but optimize space */
+    .food-group-item {
+        flex-direction: row; /* Keep horizontal on medium screens */
+    }
+    
+    /* Optimize controls size */
+    .food-group-item .controls input[type="number"] {
+        width: 35px; /* Slightly narrower input */
+    }
+    
+    .food-group-item .controls button {
+        width: 30px; /* Slightly smaller buttons */
+        height: 30px;
+    }
+    
+    /* Ensure text doesn't push controls too far */
+    .food-group-item .info {
+        max-width: 65%; /* Limit how much space info can take */
+        margin-right: 0.5rem; /* Reduce right margin */
+    }
+    
+    /* Narrower modal on medium screens */
+    .modal-content {
+        width: 75%;
+        padding: 15px 20px 20px 20px;
+    }
+    
+    /* Keep these modal adjustments */
     #modal-title {
         font-size: 1.3em;
         padding-bottom: 0.4rem;
@@ -419,12 +483,11 @@ header nav {
 
 /* === Styles for Info Button and Generic Modal === */
 
-/* --- Info Button Styling --- */
 .food-group-item .info {
-    /* Ensure info div can contain positioned button */
-    /* Use flex to align icon and text */
-    display: flex;
+    display: flex; /* Changed from block to flex */
     margin-right: 1rem;
+    flex: 1; /* Add this to allow it to grow but not push controls off */
+    min-width: 0; /* Add this to allow content to shrink if needed */
 }
 
 .food-group-item .name-container {
@@ -448,8 +511,8 @@ header nav {
     margin-right: 0.6rem;
     cursor: pointer;
     flex-shrink: 0;
-    align-self: flex-start; /* Align to top */
-    margin-top: 0.2rem; /* Fine-tune vertical alignment with text */
+    align-self: flex-start; /* Add this to align to top */
+    margin-top: 0.2rem; /* Add this for vertical alignment */
     transition: background-color 0.2s;
 }
 
@@ -457,18 +520,23 @@ header nav {
     background-color: #efefef; /* Light hover effect */
 }
 
-/* Text container for name and target */
+/* Add this new class if you can update your HTML */
 .text-container {
     display: flex;
     flex-direction: column;
+    min-width: 0; /* Allow text to shrink rather than force wrapping */
+    flex: 1;
 }
 
 /* Food group name styling */
 .food-group-item .name {
     font-weight: bold;
-    margin-bottom: 0.25rem; /* Space between name and target */
+    display: block;
+    margin-bottom: 0.25rem; /* Add this for spacing between name and target */
+    white-space: nowrap; /* Add this */
+    overflow: hidden; /* Add this */
+    text-overflow: ellipsis; /* Add this */
 }
-
 
 /* --- Generic Modal Styles --- */
 .modal {
@@ -497,8 +565,8 @@ header nav {
     padding: 20px 25px 25px 25px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    width: 85%;
-    max-width: 480px;
+    width: 85%; /* Changed from 90% */
+    max-width: 480px; /* Changed from 550px */
     position: relative;
     box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     line-height: 1.6;
