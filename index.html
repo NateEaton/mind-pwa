@@ -121,9 +121,11 @@
     <template id="food-group-item-template">
         <div class="food-group-item" data-id="">
             <div class="info">
-                <button class="info-btn" aria-label="Show info">ⓘ</button>
-                <span class="name">Food Group Name</span>
-                <span class="target">Target: X servings/period</span>
+                <div class="name-container">
+                    <button class="info-btn">i</button>
+                    <span class="name">Food Group Name</span>
+                </div>
+                <span class="target">Target: X servings per week</span>
             </div>
             <div class="controls">
                 <button class="decrement-btn" aria-label="Decrement count">-</button>
