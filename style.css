@@ -106,18 +106,13 @@ h2:first-child, h3:first-child {
 .food-group-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start; /* Changed from center to align with top of content */
     padding: 0.8rem 0;
     border-bottom: 1px solid var(--border-color);
 }
 
 .food-group-item:last-child {
     border-bottom: none;
-}
-
-.food-group-item .info {
-    flex-grow: 1;
-    margin-right: 1rem;
 }
 
 .food-group-item .target {
@@ -378,35 +373,47 @@ header nav {
          font-size: 0.9em;
     }
 
-     .food-group-item {
-        flex-wrap: wrap; /* Allow wrapping on small screens */
+    /* Food group item mobile layout */
+    .food-group-item {
+        flex-direction: column; /* Stack elements vertically on mobile */
     }
     
     .food-group-item .info {
+        margin-bottom: 0.8rem; /* Add space before controls */
         width: 100%; /* Full width on mobile */
-        margin-bottom: 0.5rem; /* Add space before controls */
     }
     
+    /* Controls container layout */
+    .food-group-item .controls {
+        align-self: flex-start; /* Align with left side */
+        margin-left: 28px; /* Align with text (infoBtn width + margin) */
+    }
+        
     .food-group-item .controls input[type="number"] {
         width: 35px; /* Even smaller on mobile */
     }
     
     .food-group-item .controls button {
-        width: 28px; /* Slightly smaller buttons */
+        width: 28px;
         height: 28px;
-    }   
-    
-    .modal-content {
-        width: 85%; /* Slightly narrower on mobile */
-        padding: 15px 20px 20px 20px; /* Smaller padding on mobile */
+        font-size: 1.1rem;
     }
-    
+
+    /* Narrower modal on mobile */
+    .modal-content {
+        width: 75%; /* More narrow on mobile */
+        padding: 15px 20px 20px 20px;
+    }
+
+    /* Modal adjustments */
     #modal-title {
-        font-size: 1.3em; /* Slightly smaller title */
+        font-size: 1.3em;
+        padding-bottom: 0.4rem;
     }
     
     #modal-body {
-        font-size: 0.9em; /* Slightly smaller text */
+        font-size: 0.9em;
+        max-height: 70vh;
     }
 }
 
@@ -417,7 +424,6 @@ header nav {
     /* Ensure info div can contain positioned button */
     /* Use flex to align icon and text */
     display: flex;
-    flex-direction: column; /* Stack children vertically */
     margin-right: 1rem;
 }
 
@@ -429,19 +435,21 @@ header nav {
 
 .info-btn {
     background: none;
-    border: 1px solid var(--secondary-color); /* Subtle border */
-    color: var(--secondary-color); /* Match theme */
-    border-radius: 50%; /* Make it round */
-    width: 22px; /* Small size */
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    border-radius: 50%;
+    width: 22px;
     height: 22px;
-    font-size: 0.9em; /* Adjust icon size */
+    font-size: 0.9em;
     font-weight: bold;
-    line-height: 20px; /* Center icon vertically */
+    line-height: 20px;
     text-align: center;
     padding: 0;
-    margin-right: 0.6rem; /* Space between icon and name */
+    margin-right: 0.6rem;
     cursor: pointer;
-    flex-shrink: 0; /* Prevent button from shrinking */
+    flex-shrink: 0;
+    align-self: flex-start; /* Align to top */
+    margin-top: 0.2rem; /* Fine-tune vertical alignment with text */
     transition: background-color 0.2s;
 }
 
@@ -449,9 +457,16 @@ header nav {
     background-color: #efefef; /* Light hover effect */
 }
 
-/* Adjust name style if needed due to flex */
+/* Text container for name and target */
+.text-container {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Food group name styling */
 .food-group-item .name {
     font-weight: bold;
+    margin-bottom: 0.25rem; /* Space between name and target */
 }
 
 
@@ -475,17 +490,18 @@ header nav {
     justify-content: center;
 }
 
+/* Fix for modal width and spacing */
 .modal-content {
     background-color: var(--card-bg);
-    margin: auto; /* Helps centering */
-    padding: 20px 25px 25px 25px; /* T R B L */
+    margin: auto;
+    padding: 20px 25px 25px 25px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    width: 90%; /* Responsive width */
-    max-width: 500px; /* Max width */
-    position: relative; /* For positioning close button */
+    width: 85%;
+    max-width: 480px;
+    position: relative;
     box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    line-height: 1.6; /* Improve readability */
+    line-height: 1.6;
 }
 
 .modal-close-btn {
