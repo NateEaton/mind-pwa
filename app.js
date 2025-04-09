@@ -323,6 +323,51 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+   // Renders the main tracker view items
+    function renderTrackerItems() {
+        dailyGoalsContainer.innerHTML = '<h3>Daily Goals</h3>';
+        weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals</h3>';
+
+        foodGroups.forEach(group => {
+            const item = foodGroupTemplate.content.cloneNode(true).querySelector('.food-group-item');
+            item.dataset.id = group.id;
+            item.querySelector('.name').textContent = group.name;
+
+            const infoBtn = item.querySelector('.info-btn');
+            if (infoBtn) infoBtn.dataset.groupId = group.id;
+
+            let targetDesc = "";
+            const targetVal = group.target;
+            const freqText = group.frequency === 'day' ? 'day' : 'week';
+            const unitText = group.unit || 'servings';
+
+            if (group.type === 'positive') { targetDesc = `Target: ≥ ${targetVal} ${unitText}/${freqText}`; }
+            else { targetDesc = `Limit: ≤ ${targetVal} ${unitText}/${freqText}`; if (group.isOptional) targetDesc += " (optional)"; }
+            item.querySelector('.target').textContent = targetDesc;
+
+            const countInput = item.querySelector('.count-input');
+            const weeklyTotalSpan = item.querySelector('.current-week-total');
+            const weeklyTotalValue = item.querySelector('.wk-val');
+
+            // Input always reflects the CURRENT day's count for daily items
+            if (group.frequency === 'day') {
+                countInput.value = state.dailyCounts[group.id] || 0;
+                countInput.dataset.frequency = 'day';
+                weeklyTotalSpan.style.display = 'inline';
+                weeklyTotalValue.textContent = state.weeklyCounts[group.id] || 0; // Show current WEEK total
+            } else {
+                // Weekly items directly show/edit the weekly total
+                countInput.value = state.weeklyCounts[group.id] || 0;
+                countInput.dataset.frequency = 'week';
+                weeklyTotalSpan.style.display = 'none';
+            }
+            countInput.dataset.groupid = group.id;
+
+            if (group.frequency === 'day') { dailyGoalsContainer.appendChild(item); }
+            else if (group.frequency === 'week') { weeklyGoalsContainer.appendChild(item); }
+        });
+    }
+
     // --- Rendering ---
     function renderUI() {
         // Debugging log to confirm renderUI is being called
