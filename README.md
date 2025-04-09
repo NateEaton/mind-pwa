@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 <!-- Add Vercel badge if you have one: [![Vercel Status](...)](...) -->
-[**Live Demo**](https://mind-pwa.vercel.app/) deployed via Vercel.
+[**Live Demo**](https://mind-pwa-fawn.vercel.app/) deployed via Vercel.
 
 A simple Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history, all stored locally in your browser.
 
