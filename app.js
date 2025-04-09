@@ -932,6 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <p>This app helps you track your adherence to the MIND Diet principles.</p>
             <p>Track daily and weekly servings, view summaries, and check your history.</p>
             <p>Data is stored locally in your browser.</p>
+            <p>More info and the source code on <a href="https://github.com/NateEaton/mind-pwa" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
             <p>Version: <span id="modal-app-version">(unknown)</span></p>
             
             <!-- Development information section -->
