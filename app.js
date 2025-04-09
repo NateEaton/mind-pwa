@@ -1190,9 +1190,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!button) return; // Exit if click wasn't on a button
 
         const groupId = button.dataset.groupId;
-        if (!groupId) return; // Exit if button has no groupId
+        if (!groupId) {
+            console.error("Edit button clicked, but no groupId found in dataset.", button);
+            return;
+        }
 
-        let currentValue = editedTotals[group.id] || 0; // Get current value from temp state
+        let currentValue = editedTotals[groupId] || 0; // Get current value from temp state
 
         if (button.classList.contains('edit-increment-btn')) {
             currentValue++;
@@ -1201,13 +1204,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Update the temporary state object
-        editedTotals[group.id] = currentValue;
+        editedTotals[groupId] = currentValue;
 
         // Update the displayed number in the modal UI for this item
         const itemElement = button.closest('.edit-totals-item');
         if (itemElement) {
             const totalSpan = itemElement.querySelector('.edit-current-total');
-            if (totalSpan) totalSpan.textContent = currentValue;
+            if (totalSpan) {
+                totalSpan.textContent = currentValue;
+            } else {
+                console.error("Could not find totalSpan element within item:", itemElement);
+            }
+        } else {
+            console.error("Could not find parent itemElement for button:", button);
+    
         }
     }
 
