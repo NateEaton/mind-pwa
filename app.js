@@ -1299,8 +1299,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.weeklyCounts = finalTotals;
                 saveState(); // Persist changes to localStorage
                 // Re-render relevant UI parts
-                renderCurrentWeekSummary();
-                renderTrackerItems(); // To update weekly subtotals on tracker view
+                renderUI();
+                //renderCurrentWeekSummary();
+                //renderTrackerItems(); // To update weekly subtotals on tracker view
                 showToast("Current week totals updated.", "success");
             } else if (editingSource === 'history') {
                 // Update the totals within the referenced history object
