@@ -1162,6 +1162,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderEditTotalsList(); // Populate the list in the modal
         if (editTotalsModal) editTotalsModal.classList.add('modal-open');
 
+        //if (editTotalsList) {
+        //    // Use a minimal setTimeout to ensure the browser has rendered
+        //    // the modal and calculated its layout before scrolling.
+        //    setTimeout(() => {
+        //        editTotalsList.scrollTop = 0; // Set scroll position to the top
+        //    }, 0); // 0ms delay pushes execution after current rendering cycle
+        //}
+
         // if (editTotalsSaveBtn) editTotalsSaveBtn.focus(); // Focus save button
     }
 
