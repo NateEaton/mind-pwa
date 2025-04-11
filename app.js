@@ -117,6 +117,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // *** NEW Date Span Elements ***
     const dailyGoalsDateEl = document.getElementById('daily-goals-date');
     const weeklyGoalsDateEl = document.getElementById('weekly-goals-date');
+    const dailyGoalsList = document.getElementById('daily-goals-list');
+    const weeklyGoalsList = document.getElementById('weekly-goals-list');
 
     // Toast Elements
     const toastContainer = document.getElementById('toast-container'); // Optional if needed for complex logic
@@ -326,13 +328,49 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-   // Renders the main tracker view items
-    function renderTrackerItems() {
-        // dailyGoalsContainer.innerHTML = '<h3>Daily Goals <span id="daily-goals-date" class="heading-date"></span></h3>';
-        // weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals <span id="weekly-goals-date" class="heading-date"></span></h3>';
+    // --- Rendering ---
+    function renderUI() {
 
+        try {
+            // Debugging log to confirm renderUI is being called
+            console.log('renderUI: Rendering dates from state. CurrentDay:', state.currentDayDate, 'WeekStart:', state.currentWeekStartDate);
+            
+            // Update current date display - REVISED to ensure it uses the local date format
+            //currentDateEl.textContent = new Date(state.currentDayDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            // Construct the date object ensuring it's treated as local time midnight
+            const displayDate = new Date(state.currentDayDate + 'T00:00:00');
+            
+            // *** POPULATE new date spans ***
+            if (dailyGoalsDateEl) {
+                dailyGoalsDateEl.textContent = `${displayDate.toLocaleDateString(undefined, { weekday: 'long' })}, ${displayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+            }
+            if (weeklyGoalsDateEl) {
+                const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
+                weeklyGoalsDateEl.textContent = `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, { weekday: 'long' })}, ${weekStartDateDisplay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+            }
+        } catch (e) {
+            console.error("Error formatting display date:", e);
+            if (dailyGoalsDateEl) dailyGoalsDateEl.textContent = "(Error)";
+            if (weeklyGoalsDateEl) weeklyGoalsDateEl.textContent = "(Error)";            
+        }
+        
+        const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
+        currentWeekStartDateEl.textContent = new Date(state.currentWeekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }); // Add time to avoid timezone issues
+
+        // Render Current Week Summary immediately (Unchanged call)
+        renderTrackerItems();
+        renderCurrentWeekSummary();
+    }
+
+    // Renders the main tracker view items
+    function renderTrackerItems() {
+        console.log("renderTrackerItems called"); // Add log
+        // Clear the specific list containers
+        if (dailyGoalsList) dailyGoalsList.innerHTML = '';
+        if (weeklyGoalsList) weeklyGoalsList.innerHTML = '';
+        
         foodGroups.forEach(group => {
-            const item = foodGroupTemplate.content.cloneNode(true).querySelector('.food-group-item');
+            const item = foodGroupTemplate.content.cloneNode(true).querySelector('.food-group-item');            
             item.dataset.id = group.id;
             item.querySelector('.name').textContent = group.name;
 
@@ -366,110 +404,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             countInput.dataset.groupid = group.id;
 
-            if (group.frequency === 'day') { dailyGoalsContainer.appendChild(item); }
-            else if (group.frequency === 'week') { weeklyGoalsContainer.appendChild(item); }
+            if (group.frequency === 'day') { dailyGoalsList.appendChild(item); }
+            else if (group.frequency === 'week') { weeklyGoalsList.appendChild(item); }
         });
-    }
-
-    // --- Rendering ---
-    function renderUI() {
-
-        try {
-            // Debugging log to confirm renderUI is being called
-            console.log('renderUI: Rendering dates from state. CurrentDay:', state.currentDayDate, 'WeekStart:', state.currentWeekStartDate);
-            
-            // Update current date display - REVISED to ensure it uses the local date format
-            //currentDateEl.textContent = new Date(state.currentDayDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            // Construct the date object ensuring it's treated as local time midnight
-            const displayDate = new Date(state.currentDayDate + 'T00:00:00');
-            
-            // *** POPULATE new date spans ***
-            if (dailyGoalsDateEl) {
-                dailyGoalsDateEl.textContent = `${displayDate.toLocaleDateString(undefined, { weekday: 'long' })}, ${displayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-            }
-            if (weeklyGoalsDateEl) {
-                const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
-                weeklyGoalsDateEl.textContent = `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, { weekday: 'long' })}, ${weekStartDateDisplay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-            }
-        } catch (e) {
-            console.error("Error formatting display date:", e);
-            if (dailyGoalsDateEl) dailyGoalsDateEl.textContent = "(Error)";
-            if (weeklyGoalsDateEl) weeklyGoalsDateEl.textContent = "(Error)";            
-        }
-        
-        const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
-        currentWeekStartDateEl.textContent = new Date(state.currentWeekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }); // Add time to avoid timezone issues
-
-        // --- Updated Clearing Logic ---
-        // Clear existing items, using the new single weekly container
-        // dailyGoalsContainer.innerHTML = '<h3>Daily Goals <span id="daily-goals-date" class="heading-date"></span></h3>';
-        // weeklyGoalsContainer.innerHTML = '<h3>Weekly Goals <span id="weekly-goals-date" class="heading-date"></span></h3>'; 
-
-        // Render food group items
-        foodGroups.forEach(group => {
-            const item = foodGroupTemplate.content.cloneNode(true).querySelector('.food-group-item');
-            item.dataset.id = group.id;
-            
-            // ***** ADD DATASET TO INFO BUTTON *****
-            const infoBtn = item.querySelector('.info-btn');
-            if (infoBtn) { // Check if button exists in template
-                infoBtn.dataset.groupId = group.id; // Store the ID for lookup
-            }
-            // *************************************
-                        
-            item.querySelector('.name').textContent = group.name;
-
-            // --- Target Description Logic (Unchanged) ---
-            let targetDesc = "";
-            const targetVal = group.target;
-            // Use 'day' frequency for Wine/Butter explicitly for description if needed, or rely on config
-            const freqText = group.frequency === 'day' ? 'day' : 'week';
-            const unitText = group.unit || 'servings';
-
-            if (group.type === 'positive') {
-                targetDesc = `≥ ${targetVal} ${unitText}/${freqText}`;
-            } else { // limit
-                targetDesc = `≤ ${targetVal} ${unitText}/${freqText}`;
-                if (group.isOptional) targetDesc += " (optional)";
-            }
-            item.querySelector('.target').textContent = targetDesc;
-
-            // --- Input Value and Weekly Total Display Logic (Unchanged logic, but runs for items in both containers) ---
-            const countInput = item.querySelector('.count-input');
-            const weeklyTotalSpan = item.querySelector('.current-week-total');
-            const weeklyTotalValue = item.querySelector('.wk-val');
-
-            // Set current count and weekly total display BASED ON THE GROUP'S CONFIGURED FREQUENCY
-            if (group.frequency === 'day') {
-                // This applies to Whole Grains, Other Veg, Olive Oil, AND Wine, Butter/Margarine
-                countInput.value = state.dailyCounts[group.id] || 0;
-                countInput.dataset.frequency = 'day'; // CRITICAL: Mark input as daily
-                weeklyTotalSpan.style.display = 'inline'; // Show weekly total for daily items
-                weeklyTotalValue.textContent = state.weeklyCounts[group.id] || 0;
-            } else { // group.frequency === 'week'
-                // This applies to Leafy Greens, Nuts, Beans, etc., AND Red Meat, Cheese, Sweets, etc.
-                countInput.value = state.weeklyCounts[group.id] || 0;
-                countInput.dataset.frequency = 'week'; // CRITICAL: Mark input as weekly
-                weeklyTotalSpan.style.display = 'none'; // Hide redundant weekly sub-total for weekly items
-            }
-
-            countInput.dataset.groupid = group.id; // Link input to group id
-
-            // --- NEW Simplified Appending Logic ---
-            // Append to the correct section based purely on frequency configuration
-            if (group.frequency === 'day') {
-                // All items configured for daily input go here (Positives AND Limits like Wine/Butter)
-                dailyGoalsContainer.appendChild(item);
-            } else if (group.frequency === 'week') {
-                // All items configured for weekly input go here (Positives AND Limits)
-                weeklyGoalsContainer.appendChild(item); // Append to the single weekly container
-            }
-            // Optional: Add an else for debugging if a group has an unexpected frequency
-            // else { console.warn(`Food group '${group.name}' has unexpected frequency '${group.frequency}' and was not rendered.`); }
-        });
-
-        // Render Current Week Summary immediately (Unchanged call)
-        renderCurrentWeekSummary();
     }
 
      function renderCurrentWeekSummary() {
@@ -1224,7 +1161,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (editTotalsTitle) editTotalsTitle.textContent = title;
         renderEditTotalsList(); // Populate the list in the modal
         if (editTotalsModal) editTotalsModal.classList.add('modal-open');
-        if (editTotalsSaveBtn) editTotalsSaveBtn.focus(); // Focus save button
+
+        // if (editTotalsSaveBtn) editTotalsSaveBtn.focus(); // Focus save button
     }
 
     function renderEditTotalsList() {

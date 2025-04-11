@@ -2,6 +2,7 @@
 .DS_Store
 manifest.json
 export*.json
+mind-diet-tracker*.json
 *.diff
 *.log
 *.tmp
