@@ -342,11 +342,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // *** POPULATE new date spans ***
             if (dailyGoalsDateEl) {
-                dailyGoalsDateEl.textContent = `${displayDate.toLocaleDateString(undefined, { weekday: 'long' })}, ${displayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+                dailyGoalsDateEl.textContent = `${displayDate.toLocaleDateString(undefined, { weekday: 'short' })}, ${displayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
             }
             if (weeklyGoalsDateEl) {
                 const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
-                weeklyGoalsDateEl.textContent = `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, { weekday: 'long' })}, ${weekStartDateDisplay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+                weeklyGoalsDateEl.textContent = `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, { weekday: 'short' })}, ${weekStartDateDisplay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
             }
         } catch (e) {
             console.error("Error formatting display date:", e);
@@ -355,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const weekStartDateDisplay = new Date(state.currentWeekStartDate + 'T00:00:00');
-        currentWeekStartDateEl.textContent = new Date(state.currentWeekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }); // Add time to avoid timezone issues
+        currentWeekStartDateEl.textContent = `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, { weekday: 'short' })}, ${weekStartDateDisplay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
         // Render Current Week Summary immediately (Unchanged call)
         renderTrackerItems();
