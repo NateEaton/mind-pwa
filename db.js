@@ -150,6 +150,10 @@ async function getAllWeekHistory() {
       const sortedResults = event.target.result.sort((a, b) => {
         return new Date(b.weekStartDate) - new Date(a.weekStartDate);
       });
+
+      // Add debug logging to check sorting
+      console.log("Sorted history weeks:", sortedResults.map(w => w.weekStartDate));
+
       resolve(sortedResults);
     };
     request.onerror = (event) => {

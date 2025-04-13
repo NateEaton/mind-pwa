@@ -473,6 +473,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
         }
 
+        // Debug log history array before rendering
+        console.log("History data to render:", state.history.map(h => h.weekStartDate));
+        console.log("Current history index:", state.currentHistoryIndex, "Requested index:", weekIndex);
+
          // If weekIndex is -1, default to the most recent week (index 0)
         if (weekIndex === -1 || weekIndex >= state.history.length) {
              state.currentHistoryIndex = 0;
@@ -495,8 +499,8 @@ document.addEventListener('DOMContentLoaded', () => {
          // Update Navigation
          const weekStartDate = new Date(weekData.weekStartDate + 'T00:00:00'); // Add time part for accurate display
          historyWeekLabel.textContent = `Week of ${weekStartDate.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}`; // Show start weekday
-         prevWeekBtn.disabled = state.currentHistoryIndex === 0;
-         nextWeekBtn.disabled = state.currentHistoryIndex >= state.history.length - 1;
+         prevWeekBtn.disabled = state.currentHistoryIndex >= state.history.length - 1;
+         nextWeekBtn.disabled = state.currentHistoryIndex <= 0;
          // Set date picker to a date within the displayed week (e.g., the start date)
          historyDatePicker.value = weekData.weekStartDate;
 
@@ -598,15 +602,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // History Navigation
         prevWeekBtn.addEventListener('click', () => {
-            if (state.currentHistoryIndex > 0) {
-                renderHistory(state.currentHistoryIndex - 1);
-            }
-        });
-        nextWeekBtn.addEventListener('click', () => {
-             if (state.currentHistoryIndex < state.history.length - 1) {
+            // FIXED: "Previous" should go to older weeks (higher index)
+            if (state.currentHistoryIndex < state.history.length - 1) {
+                console.log(`Moving from history index ${state.currentHistoryIndex} to ${state.currentHistoryIndex + 1}`);
                 renderHistory(state.currentHistoryIndex + 1);
             }
         });
+        
+        nextWeekBtn.addEventListener('click', () => {
+            // FIXED: "Next" should go to newer weeks (lower index)
+            if (state.currentHistoryIndex > 0) {
+                console.log(`Moving from history index ${state.currentHistoryIndex} to ${state.currentHistoryIndex - 1}`);
+                renderHistory(state.currentHistoryIndex - 1);
+            }
+        });
+        
         historyDatePicker.addEventListener('change', handleHistoryDatePick);
 
         // ***** ADD NEW MENU/IMPORT/EXPORT EVENT LISTENERS *****
@@ -839,6 +849,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Custom confirmation dialog function that returns a Promise
+    function showConfirmDialog(options) {
+        return new Promise((resolve) => {
+            const { title, message, confirmText = "OK", cancelText = "Cancel", details = null, actionDesc = null } = options;
+            
+            // Create the dialog elements
+            const overlay = document.createElement('div');
+            overlay.className = 'custom-dialog-overlay';
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'custom-dialog';
+            
+            // Build the dialog content
+            dialog.innerHTML = `
+                <div class="custom-dialog-header">${title}</div>
+                <div class="custom-dialog-body">
+                    ${details ? `
+                        <div class="dialog-import-details">
+                            ${details}
+                        </div>
+                    ` : ''}
+                    ${actionDesc ? `
+                        <div class="dialog-action-description">
+                            ${actionDesc}
+                        </div>
+                    ` : ''}
+                    <div class="custom-dialog-message">${message}</div>
+                </div>
+                <div class="custom-dialog-footer">
+                    <button class="btn-cancel">${cancelText}</button>
+                    <button class="btn-confirm">${confirmText}</button>
+                </div>
+            `;
+            
+            // Add to DOM
+            document.body.appendChild(overlay);
+            overlay.appendChild(dialog);
+            
+            // Center in viewport
+            dialog.style.display = 'flex';
+            
+            // Focus the confirm button
+            const confirmButton = dialog.querySelector('.btn-confirm');
+            confirmButton.focus();
+            
+            // Handle button clicks
+            dialog.querySelector('.btn-cancel').addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(false);
+            });
+            
+            dialog.querySelector('.btn-confirm').addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(true);
+            });
+            
+            // Handle escape key
+            document.addEventListener('keydown', function escHandler(e) {
+                if (e.key === 'Escape') {
+                    document.removeEventListener('keydown', escHandler);
+                    document.body.removeChild(overlay);
+                    resolve(false);
+                }
+            });
+        });
+    }
+
+
     // ***** ADD NEW MODAL, ABOUT, INFO FUNCTIONS *****
 
     // Handles clicks within the goal containers to check for info button clicks
@@ -996,7 +1074,34 @@ document.addEventListener('DOMContentLoaded', () => {
         importFileInput.click(); // Open file selection dialog
     }
 
-    // Function to handle the file selection and processing
+    // Add this helper function to determine the relationship between dates
+    function getDateRelationship(importDate, todayDate) {
+        // Convert string dates to Date objects if they aren't already
+        const importDateObj = importDate instanceof Date ? importDate : new Date(importDate + 'T00:00:00');
+        const todayDateObj = todayDate instanceof Date ? todayDate : new Date(todayDate + 'T00:00:00');
+        
+        // Get week start dates to compare weeks
+        const importWeekStart = getWeekStartDate(importDateObj);
+        const todayWeekStart = getWeekStartDate(todayDateObj);
+        
+        if (importDateObj.toISOString().split('T')[0] === todayDateObj.toISOString().split('T')[0]) {
+            return 'SAME_DAY';
+        } else if (importWeekStart === todayWeekStart) {
+            return 'SAME_WEEK';
+        } else {
+            // Check if import is from a past week or future week
+            return importDateObj < todayDateObj ? 'PAST_WEEK' : 'FUTURE_WEEK';
+        }
+    }
+
+    // Validates that a week start date is actually a Sunday
+    function validateWeekStartDate(dateStr) {
+        const date = new Date(dateStr + 'T00:00:00');
+        // Sunday is 0 in JavaScript getDay()
+        return date.getDay() === 0;
+    }
+
+    // Modified import function with improved date handling
     async function handleImportFileSelect(event) {
         const file = event.target.files[0];
         if (!file) {
@@ -1021,48 +1126,200 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Basic validation of the imported structure
                 if (typeof importedData !== 'object' || importedData === null || !importedData.currentState || !Array.isArray(importedData.history)) {
-                     throw new Error("Invalid file structure. Required: 'currentState' object and 'history' array.");
+                    throw new Error("Invalid file structure. Required: 'currentState' object and 'history' array.");
                 }
+                
+                // Additional export info validation
+                if (!importedData.appInfo || !importedData.appInfo.exportDate) {
+                    console.warn("Import file missing appInfo or exportDate");
+                }
+                
+                // Format the export date for display
+                const exportDate = importedData.appInfo && importedData.appInfo.exportDate 
+                    ? new Date(importedData.appInfo.exportDate).toLocaleString() 
+                    : "unknown date";
 
-                // --- Confirmation Dialog ---
-                const confirmationMessage = `WARNING:\n\nThis will REPLACE ALL current tracking data (daily counts, weekly counts, and all saved history) with the data from the file "${file.name}".\n\nThis action cannot be undone.\n\nDo you want to proceed with the import?`;
-                if (!confirm(confirmationMessage)) {
+                // --- Get current date information for comparison ---
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const currentWeekStartStr = getWeekStartDate(today);
+                
+                // Get our existing state for potential preservation
+                const existingState = JSON.parse(localStorage.getItem('mindTrackerState')) || {};
+                
+                // Determine relationship between imported date and today
+                const importedDate = importedData.currentState.currentDayDate;
+                const dateRelationship = getDateRelationship(importedDate, todayStr);
+                
+                console.log(`Import date relationship: ${dateRelationship}`, {
+                    importedDate,
+                    todayDate: todayStr,
+                    importedWeekStart: importedData.currentState.currentWeekStartDate,
+                    currentWeekStart: currentWeekStartStr
+                });
+                
+                // Data integrity check: Validate week start dates
+                if (!validateWeekStartDate(importedData.currentState.currentWeekStartDate)) {
+                    console.warn(`Imported currentWeekStartDate is not a Sunday: ${importedData.currentState.currentWeekStartDate}`);
+                    // We can continue, but might need to fix this
+                }
+                
+                // Prepare confirmation message with smart description of what will happen
+                let actionDescription;
+                switch (dateRelationship) {
+                    case 'SAME_DAY':
+                        actionDescription = "REPLACE ALL tracking data (daily counts, weekly counts, and history)";
+                        break;
+                    case 'SAME_WEEK':
+                        actionDescription = "UPDATE current week totals (keeping this week's progress but resetting today's counts) and REPLACE history";
+                        break;
+                    case 'PAST_WEEK':
+                        actionDescription = "ADD the imported data as history while PRESERVING your current tracking progress";
+                        break;
+                    case 'FUTURE_WEEK':
+                        actionDescription = "Warning: Import data appears to be from a FUTURE date. This will REPLACE ALL tracking data.";
+                        break;
+                    default:
+                        actionDescription = "REPLACE ALL tracking data";
+                }
+                
+                // Format file details for the dialog
+                const fileDetails = `
+                    <p><strong>File:</strong> ${file.name}</p>
+                    <p><strong>Exported:</strong> ${exportDate}</p>
+                    <p><strong>Import type:</strong> ${dateRelationship.replace('_', ' ').toLowerCase()}</p>
+                `;
+
+                // Show the custom dialog
+                const confirmed = await showConfirmDialog({
+                    title: 'Import Confirmation',
+                    details: fileDetails,
+                    actionDesc: actionDescription,
+                    message: 'This action cannot be undone. Do you want to proceed with the import?',
+                    confirmText: 'Import',
+                    cancelText: 'Cancel'
+                });
+
+                if (!confirmed) {
                     console.log("Import cancelled by user.");
                     importFileInput.value = ''; // Clear input
                     return; // User clicked Cancel
                 }
-
                 console.log("Starting import process...");
 
-                // --- 1. Clear Existing Data ---
-                console.log("Clearing existing data...");
-                await clearHistoryStore(); // Clear IndexedDB history store
-                localStorage.removeItem('mindTrackerState'); // Clear current state from localStorage
-                // Reset in-memory state as well
+                // --- Process based on date relationship ---
+                let currentStateToUse = {};
+                
+                switch (dateRelationship) {
+                    case 'SAME_DAY':
+                        // --- Clear all existing data ---
+                        console.log("SAME_DAY: Clearing all existing data");
+                        await clearHistoryStore();
+                        localStorage.removeItem('mindTrackerState');
+                        
+                        // Use imported current state as-is
+                        currentStateToUse = JSON.parse(JSON.stringify(importedData.currentState));
+                        break;
+                        
+                    case 'SAME_WEEK':
+                        // --- Clear history but update current week ---
+                        console.log("SAME_WEEK: Updating current week data");
+                        await clearHistoryStore();
+                        
+                        // Copy imported state but update date and reset daily counts
+                        currentStateToUse = JSON.parse(JSON.stringify(importedData.currentState));
+                        currentStateToUse.currentDayDate = todayStr;
+                        
+                        // Reset daily counts
+                        for (const key in currentStateToUse.dailyCounts) {
+                            currentStateToUse.dailyCounts[key] = 0;
+                        }
+                        break;
+                        
+                    case 'PAST_WEEK':
+                    case 'FUTURE_WEEK':
+                        // For both past and future weeks, we need special handling
+                        if (dateRelationship === 'PAST_WEEK') {
+                            console.log("PAST_WEEK: Preserving current tracking and adding history");
+                            
+                            // PRESERVE the current state data
+                            currentStateToUse = existingState;
+                            
+                            // Check if the imported current state's week should be archived
+                            if (importedData.currentState.weeklyCounts && 
+                                Object.values(importedData.currentState.weeklyCounts).some(val => val > 0)) {
+                                
+                                console.log("PAST_WEEK: Archiving imported current week as history");
+                                // Archive the imported current week as history
+                                const weekToArchive = {
+                                    weekStartDate: importedData.currentState.currentWeekStartDate,
+                                    weekStartDaySetting: importedData.currentState.weekSetting || 'Sunday',
+                                    totals: {...importedData.currentState.weeklyCounts},
+                                    targets: foodGroups.reduce((acc, group) => {
+                                        acc[group.id] = { 
+                                            target: group.target, 
+                                            frequency: group.frequency, 
+                                            type: group.type, 
+                                            unit: group.unit 
+                                        };
+                                        return acc;
+                                    }, {})
+                                };
+                                
+                                try {
+                                    await saveWeekHistory(weekToArchive);
+                                    console.log(`Archived imported week ${weekToArchive.weekStartDate}`);
+                                } catch (error) {
+                                    console.error("Failed to archive imported week:", error);
+                                }
+                            }
+                        } else {
+                            // FUTURE_WEEK (rare edge case)
+                            console.log("FUTURE_WEEK: Replacing all data");
+                            await clearHistoryStore();
+                            currentStateToUse = JSON.parse(JSON.stringify(importedData.currentState));
+                        }
+                        break;
+                }
+                
+                // Save the determined state to localStorage
+                if (Object.keys(currentStateToUse).length > 0) {
+                    localStorage.setItem('mindTrackerState', JSON.stringify(currentStateToUse));
+                }
+                
+                // Reset in-memory state (to be reloaded shortly)
                 state.dailyCounts = {};
                 state.weeklyCounts = {};
                 state.history = [];
                 state.currentHistoryIndex = -1;
-                console.log("Existing data cleared.");
 
-                // --- 2. Restore Data ---
-                console.log("Restoring data...");
-                // Restore current state directly to localStorage
-                if (importedData.currentState) {
-                    // Basic check on restored state structure if needed
-                    localStorage.setItem('mindTrackerState', JSON.stringify(importedData.currentState));
-                    console.log("Current state restored to localStorage.");
-                } else {
-                     console.warn("No 'currentState' found in imported file.");
-                }
-
-                // Restore history records one by one to IndexedDB
+                // Restore history records one by one to IndexedDB (if we haven't preserved current state)
                 let importCount = 0;
                 if (importedData.history && importedData.history.length > 0) {
+                    // In PAST_WEEK mode, we add to existing history rather than clearing first
+                    if (dateRelationship !== 'PAST_WEEK') {
+                        await clearHistoryStore();
+                    }
+                    
                     for (const weekData of importedData.history) {
                         try {
                             // Add minimal validation for each history record
                             if (weekData && typeof weekData.weekStartDate === 'string' && typeof weekData.totals === 'object') {
+                                // Data integrity check - validate week start date
+                                if (!validateWeekStartDate(weekData.weekStartDate)) {
+                                    console.warn(`History record has non-Sunday weekStartDate: ${weekData.weekStartDate}`);
+                                    // Consider fixing or skipping - for now, we'll import it anyway
+                                }
+                                
+                                // Check if we already have this week in history
+                                // This is especially important for PAST_WEEK mode where we're adding to existing history
+                                // We could add a more sophisticated "merge" function if needed
+                                const existingWeek = state.history.find(w => w.weekStartDate === weekData.weekStartDate);
+                                if (existingWeek) {
+                                    console.log(`Skipping duplicate history week ${weekData.weekStartDate} (already exists)`);
+                                    continue;
+                                }
+                                
                                 await saveWeekHistory(weekData);
                                 importCount++;
                             } else {
@@ -1070,49 +1327,65 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         } catch (saveError) {
                             console.error(`Error saving history week ${weekData.weekStartDate || 'unknown'} during import:`, saveError);
-                            // Decide if you want to stop the whole import on a single record error
-                            // throw new Error(`Failed to save history record: ${saveError.message}`); // Option to stop
                         }
                     }
-                    console.log(`${importCount} history records restored to IndexedDB.`);
+                    console.log(`${importCount} history records imported to IndexedDB.`);
                 } else {
-                     console.log("No history records found in imported file or history array is empty.");
+                    console.log("No history records found in imported file or history array is empty.");
                 }
 
                 // --- 3. Reload State & UI from restored data ---
                 console.log("Reloading application state and UI from imported data...");
                 loadState(); // Reload the global 'state' object from the new localStorage
                 await loadHistoryData(); // Reload the state.history array from the new IndexedDB data
+                await checkDateAndResetCounters(); // Make sure date logic is fully applied
                 renderUI(); // Re-render UI with the newly loaded state
                 setActiveView('tracker'); // Switch view to tracker
 
                 console.log("Import process completed.");
-                showToast(`Import successful! ${importCount} history records imported.`, "success", 4000); // Show longer success message
+                
+                // Show a success message tailored to the import scenario
+                let successMessage;
+                switch (dateRelationship) {
+                    case 'SAME_DAY':
+                        successMessage = `Import complete. All data replaced.`;
+                        break;
+                    case 'SAME_WEEK':
+                        successMessage = `Import complete. Week totals updated for current week.`;
+                        break;
+                    case 'PAST_WEEK':
+                        successMessage = `Import complete. ${importCount} weeks added to history.`;
+                        break;
+                    case 'FUTURE_WEEK':
+                        successMessage = `Import complete. Future-dated data imported.`;
+                        break;
+                    default:
+                        successMessage = `Import successful!`;
+                }
+                
+                showToast(successMessage, "success", 4000);
 
             } catch (error) {
                 console.error("Error importing data:", error);
-                showToast(`Import failed: ${error.message}`, "error", 5000); // Show longer error message
-                // Attempt to reload previous state (might be empty if clear succeeded but restore failed)
+                showToast(`Import failed: ${error.message}`, "error", 5000);
+                // Attempt to reload previous state
                 loadState();
                 await loadHistoryData();
                 renderUI();
             } finally {
-                // ALWAYS clear the file input after attempting import, regardless of success/failure
+                // ALWAYS clear the file input after attempting import
                 importFileInput.value = '';
             }
         };
 
-        // Define what happens if there's an error reading the file
         reader.onerror = (e) => {
             console.error("Error reading file:", e);
             showToast("Error reading the selected file.", "error");
-            importFileInput.value = ''; // Clear the input
+            importFileInput.value = '';
         };
 
-        // Start reading the file as text
         reader.readAsText(file);
     }
-
 
     // --- Settings Placeholder ---
     function handleSettings() {
