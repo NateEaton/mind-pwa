@@ -1,0 +1,1121 @@
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import dataService from "./dataService.js";
+import stateManager from "./stateManager.js";
+import uiRenderer from "./uiRenderer.js";
+import appUtils from "./appUtils.js";
+
+// --- Application Configuration ---
+const foodGroups = [
+  // Daily Positive
+  {
+    id: "whole_grains",
+    name: "Whole Grains",
+    frequency: "day",
+    target: 3,
+    unit: "servings",
+    type: "positive",
+    description:
+      "Serving examples: 1 slice whole-grain bread, ½ cup cooked whole grains (oats, quinoa, brown rice), ½ cup whole-grain cereal, 3 cups popped popcorn.",
+  },
+  {
+    id: "other_veg",
+    name: "Other Vegetables",
+    frequency: "day",
+    target: 1,
+    unit: "serving",
+    type: "positive",
+    description:
+      "Serving examples: ½ cup cooked or 1 cup raw non-starchy vegetables (broccoli, peppers, carrots, tomatoes, zucchini, onions, etc.). Excludes potatoes.",
+  },
+  {
+    id: "olive_oil",
+    name: "Olive Oil",
+    frequency: "day",
+    target: 1,
+    unit: "Tbsp (main oil)",
+    type: "positive",
+    description:
+      "Use extra virgin olive oil (EVOO) as your principal oil for cooking, dressings, etc. Aim for at least 1 Tbsp use daily.",
+  },
+
+  // Weekly Positive
+  {
+    id: "leafy_greens",
+    name: "Green Leafy Vegetables",
+    frequency: "week",
+    target: 6,
+    unit: "servings",
+    type: "positive",
+    description:
+      "Serving examples: 1 cup raw or ½ cup cooked leafy greens (spinach, kale, collards, romaine, arugula, etc.).",
+  },
+  {
+    id: "nuts",
+    name: "Nuts",
+    frequency: "week",
+    target: 5,
+    unit: "servings",
+    type: "positive",
+    description:
+      "Serving examples: ¼ cup nuts or 2 Tbsp nut butter (almonds, walnuts, pecans preferred; avoid heavily salted/sugared nuts).",
+  },
+  {
+    id: "beans",
+    name: "Beans",
+    frequency: "week",
+    target: 4,
+    unit: "servings",
+    type: "positive",
+    description:
+      "Serving examples: ½ cup cooked beans, lentils, or legumes (kidney, black, pinto beans, chickpeas, soybeans, etc.).",
+  },
+  {
+    id: "berries",
+    name: "Berries",
+    frequency: "week",
+    target: 2,
+    unit: "servings",
+    type: "positive",
+    description:
+      "Serving examples: ½ cup fresh or frozen berries (blueberries strongly recommended, strawberries, raspberries, blackberries).",
+  },
+  {
+    id: "poultry",
+    name: "Poultry",
+    frequency: "week",
+    target: 2,
+    unit: "servings",
+    type: "positive",
+    description:
+      "Serving examples: 3-4 oz cooked chicken or turkey (prefer skinless, not fried).",
+  },
+  {
+    id: "fish",
+    name: "Fish",
+    frequency: "week",
+    target: 1,
+    unit: "serving",
+    type: "positive",
+    description:
+      "Serving examples: 3-4 oz cooked fish (prefer oily fish like salmon, mackerel, sardines; avoid fried fish).",
+  },
+  {
+    id: "wine",
+    name: "Wine",
+    frequency: "day",
+    target: 1,
+    unit: "glass (max)",
+    type: "limit",
+    isOptional: true,
+    description:
+      "Optional: Limit to no more than one standard glass (approx. 5 oz) per day. Preferrably red wine.",
+  },
+
+  // Weekly Limit
+  {
+    id: "red_meat",
+    name: "Red Meats",
+    frequency: "week",
+    target: 3,
+    unit: "servings (max)",
+    type: "limit",
+    description:
+      "Limit to less than 4 servings/week (target ≤3). Serving ~3-4 oz cooked. Includes beef, pork, lamb, and processed meats.",
+  },
+  {
+    id: "butter_margarine",
+    name: "Butter/Margarine",
+    frequency: "day",
+    target: 1,
+    unit: "Tbsp (max)",
+    type: "limit",
+    description:
+      "Limit butter to less than 1 Tbsp per day. Avoid stick margarine entirely.",
+  },
+  {
+    id: "cheese",
+    name: "Cheese",
+    frequency: "week",
+    target: 1,
+    unit: "serving (max)",
+    type: "limit",
+    description:
+      "Limit full-fat cheese to less than 1 serving/week (target ≤1). Serving ~1-1.5 oz.",
+  },
+  {
+    id: "pastries_sweets",
+    name: "Pastries & Sweets",
+    frequency: "week",
+    target: 4,
+    unit: "servings (max)",
+    type: "limit",
+    description:
+      "Limit pastries and sweets to less than 5 servings/week (target ≤4). Includes cakes, cookies, candies, ice cream, sugary drinks etc.",
+  },
+  {
+    id: "fried_fast_food",
+    name: "Fried/Fast Food",
+    frequency: "week",
+    target: 1,
+    unit: "serving (max)",
+    type: "limit",
+    description:
+      "Limit fried food (especially commercial) and fast food to less than 1 serving/week (target ≤1).",
+  },
+];
+
+// State for Edit Totals Modal (in global scope since it needs to be accessed by multiple functions)
+let editingWeekDataRef = null; // Reference to the data being edited
+let editingSource = null; // 'current' or 'history'
+let editedTotals = {}; // Temporary object holding edits within the modal
+
+// DOM Elements - these would eventually be moved to a dedicated module
+const domElements = {
+  // Menu elements
+  menuToggleBtn: document.getElementById("menu-toggle-btn"),
+  mainMenu: document.getElementById("main-menu"),
+  exportBtn: document.getElementById("export-btn"),
+  importBtnTrigger: document.getElementById("import-btn-trigger"),
+  importFileInput: document.getElementById("import-file-input"),
+  aboutBtn: document.getElementById("about-btn"),
+  settingsBtn: document.getElementById("settings-btn"),
+
+  // Edit totals modal elements
+  editCurrentWeekBtn: document.getElementById("edit-current-week-btn"),
+  editHistoryWeekBtn: document.getElementById("edit-history-week-btn"),
+  editTotalsModal: document.getElementById("edit-totals-modal"),
+  editTotalsTitle: document.getElementById("edit-totals-title"),
+  editTotalsList: document.getElementById("edit-totals-list"),
+  editTotalsItemTemplate: document.getElementById("edit-totals-item-template"),
+  editTotalsCloseBtn: document.getElementById("edit-totals-close-btn"),
+  editTotalsCancelBtn: document.getElementById("edit-totals-cancel-btn"),
+  editTotalsSaveBtn: document.getElementById("edit-totals-save-btn"),
+
+  // Footer elements
+  appVersionElement: document.getElementById("app-version"),
+};
+
+/**
+ * Initialize the application
+ */
+async function initializeApp() {
+  console.log("Initializing app...");
+
+  try {
+    // Initialize data service first
+    await dataService.initialize();
+    console.log("Data service initialized");
+
+    // Register service worker
+    appUtils.registerServiceWorker();
+
+    // Display app version in footer
+    await appUtils.loadAppVersion(domElements.appVersionElement);
+
+    // Initialize UI renderer
+    uiRenderer.initialize();
+    console.log("UI renderer initialized");
+
+    // Initialize state manager with food groups configuration
+    await stateManager.initialize(foodGroups);
+    console.log("State manager initialized");
+
+    // Check if current date requires counters reset
+    await stateManager.checkDateAndReset();
+
+    // Setup event listeners
+    setupEventListeners();
+
+    // Set initial active view
+    uiRenderer.setActiveView("tracker");
+
+    // Check if test mode is active and add banner if needed
+    if (dataService.isTestModeEnabled()) {
+      const testDate = dataService.getCurrentDate();
+      appUtils.addTestModeBanner(
+        `TEST MODE: Using date ${testDate.toLocaleDateString()}`
+      );
+    }
+
+    console.log("App initialization complete");
+  } catch (error) {
+    console.error("Error during app initialization:", error);
+    uiRenderer.showToast(
+      `Initialization Error: ${error.message}`,
+      "error",
+      5000
+    );
+  }
+}
+
+/**
+ * Setup all event listeners for the application
+ */
+function setupEventListeners() {
+  // Navigation buttons (using event delegation)
+  document.querySelector("nav").addEventListener("click", handleNavigation);
+
+  // Menu related
+  domElements.menuToggleBtn.addEventListener("click", toggleMenu);
+  document.addEventListener("click", handleOutsideMenuClick);
+
+  // Menu items
+  domElements.exportBtn.addEventListener("click", handleExport);
+  domElements.importBtnTrigger.addEventListener("click", triggerImport);
+  domElements.importFileInput.addEventListener(
+    "change",
+    handleImportFileSelect
+  );
+  domElements.settingsBtn.addEventListener("click", handleSettings);
+  domElements.aboutBtn.addEventListener("click", handleAboutClick);
+
+  // Daily tracker view (using event delegation)
+  const dailyGoalsContainer = document.getElementById("daily-goals");
+  const weeklyGoalsContainer = document.getElementById("weekly-goals");
+
+  [dailyGoalsContainer, weeklyGoalsContainer].forEach((container) => {
+    container.addEventListener("click", handleCounterClick);
+    container.addEventListener("change", handleCounterInputChange);
+    container.addEventListener("input", handleCounterInputChange);
+    container.addEventListener("click", handleInfoClick);
+  });
+
+  // History navigation
+  const prevWeekBtn = document.getElementById("prev-week-btn");
+  const nextWeekBtn = document.getElementById("next-week-btn");
+  const historyDatePicker = document.getElementById("history-date-picker");
+
+  prevWeekBtn.addEventListener("click", handlePrevWeek);
+  nextWeekBtn.addEventListener("click", handleNextWeek);
+  historyDatePicker.addEventListener("change", handleHistoryDatePick);
+
+  // Modal listeners
+  document
+    .getElementById("modal-close-btn")
+    .addEventListener("click", () => uiRenderer.closeModal());
+  document
+    .getElementById("generic-modal")
+    .addEventListener("click", (event) => {
+      if (event.target === document.getElementById("generic-modal"))
+        uiRenderer.closeModal();
+    });
+
+  // Edit totals modal
+  if (domElements.editCurrentWeekBtn) {
+    domElements.editCurrentWeekBtn.addEventListener("click", () =>
+      openEditTotalsModal("current")
+    );
+  }
+
+  if (domElements.editHistoryWeekBtn) {
+    domElements.editHistoryWeekBtn.addEventListener("click", () =>
+      openEditTotalsModal("history")
+    );
+  }
+
+  if (domElements.editTotalsCloseBtn) {
+    domElements.editTotalsCloseBtn.addEventListener(
+      "click",
+      closeEditTotalsModal
+    );
+  }
+
+  if (domElements.editTotalsCancelBtn) {
+    domElements.editTotalsCancelBtn.addEventListener(
+      "click",
+      closeEditTotalsModal
+    );
+  }
+
+  if (domElements.editTotalsSaveBtn) {
+    domElements.editTotalsSaveBtn.addEventListener("click", saveEditedTotals);
+  }
+
+  if (domElements.editTotalsList) {
+    domElements.editTotalsList.addEventListener(
+      "click",
+      handleEditTotalsItemClick
+    );
+  }
+}
+
+/**
+ * Handle navigation button clicks
+ * @param {Event} event - The click event
+ */
+function handleNavigation(event) {
+  const button = event.target.closest("button[data-view]");
+  if (!button) return;
+
+  const viewId = button.dataset.view;
+  uiRenderer.setActiveView(viewId);
+}
+
+/**
+ * Toggle the main menu
+ */
+function toggleMenu() {
+  domElements.mainMenu.classList.toggle("menu-open");
+}
+
+/**
+ * Handle clicks outside the menu to close it
+ * @param {Event} event - The click event
+ */
+function handleOutsideMenuClick(event) {
+  if (
+    !domElements.mainMenu.contains(event.target) &&
+    !domElements.menuToggleBtn.contains(event.target) &&
+    domElements.mainMenu.classList.contains("menu-open")
+  ) {
+    closeMenu();
+  }
+}
+
+/**
+ * Close the main menu
+ */
+function closeMenu() {
+  domElements.mainMenu.classList.remove("menu-open");
+}
+
+/**
+ * Handle counter button clicks in the tracker view
+ * @param {Event} event - The click event
+ */
+function handleCounterClick(event) {
+  const button = event.target.closest(".increment-btn, .decrement-btn");
+  if (!button) return;
+
+  const item = button.closest(".food-group-item");
+  if (!item) return;
+
+  const groupId = item.dataset.id;
+  const input = item.querySelector(".count-input");
+  const isDaily = input.dataset.frequency === "day";
+  let currentValue = parseInt(input.value, 10) || 0;
+  let valueChanged = false;
+
+  if (button.classList.contains("increment-btn")) {
+    currentValue++;
+    valueChanged = true;
+  } else if (button.classList.contains("decrement-btn")) {
+    const oldValue = currentValue;
+    currentValue = Math.max(0, currentValue - 1);
+    valueChanged = currentValue < oldValue;
+  }
+
+  if (valueChanged) {
+    // Trigger haptic feedback
+    appUtils.triggerHapticFeedback(30);
+
+    // Update the state
+    if (isDaily) {
+      stateManager.updateDailyCount(groupId, currentValue);
+    } else {
+      stateManager.updateWeeklyCount(groupId, currentValue);
+    }
+  }
+}
+
+/**
+ * Handle counter input changes in the tracker view
+ * @param {Event} event - The input change event
+ */
+function handleCounterInputChange(event) {
+  const input = event.target;
+  if (!input || !input.classList.contains("count-input")) return;
+
+  const item = input.closest(".food-group-item");
+  if (!item) return;
+
+  const groupId = item.dataset.id;
+  const isDaily = input.dataset.frequency === "day";
+  let newValue = parseInt(input.value, 10);
+
+  // Validate input
+  if (isNaN(newValue) || newValue < 0) {
+    newValue = 0;
+    input.value = newValue;
+  }
+
+  // Update the state
+  if (isDaily) {
+    stateManager.updateDailyCount(groupId, newValue);
+  } else {
+    stateManager.updateWeeklyCount(groupId, newValue);
+  }
+}
+
+/**
+ * Handle info button clicks
+ * @param {Event} event - The click event
+ */
+function handleInfoClick(event) {
+  const infoButton = event.target.closest(".info-btn");
+  if (!infoButton) return;
+
+  const groupId = infoButton.dataset.groupId;
+  if (!groupId) return;
+
+  const group = stateManager.getFoodGroup(groupId);
+  if (!group || !group.description) {
+    uiRenderer.showToast("Details not available.", "error");
+    return;
+  }
+
+  // Prepare content with line breaks
+  const descriptionHtml = group.description.replace(/\n/g, "<br>");
+  uiRenderer.openModal(group.name, descriptionHtml);
+}
+
+/**
+ * Handle previous week button in history view
+ */
+function handlePrevWeek() {
+  const state = stateManager.getState();
+  if (state.currentHistoryIndex < state.history.length - 1) {
+    const newIndex = state.currentHistoryIndex + 1;
+    stateManager.dispatch({
+      type: stateManager.ACTION_TYPES.SET_HISTORY_INDEX,
+      payload: { index: newIndex },
+    });
+  }
+}
+
+/**
+ * Handle next week button in history view
+ */
+function handleNextWeek() {
+  const state = stateManager.getState();
+  if (state.currentHistoryIndex > 0) {
+    const newIndex = state.currentHistoryIndex - 1;
+    stateManager.dispatch({
+      type: stateManager.ACTION_TYPES.SET_HISTORY_INDEX,
+      payload: { index: newIndex },
+    });
+  }
+}
+
+/**
+ * Handle history date picker change
+ */
+function handleHistoryDatePick() {
+  const historyDatePicker = document.getElementById("history-date-picker");
+  const selectedDateStr = historyDatePicker.value;
+  if (!selectedDateStr) return;
+
+  const selectedDate = new Date(selectedDateStr + "T00:00:00");
+  const targetWeekStart = dataService.getWeekStartDate(selectedDate);
+
+  const state = stateManager.getState();
+  const foundIndex = state.history.findIndex(
+    (week) => week.weekStartDate === targetWeekStart
+  );
+
+  if (foundIndex !== -1) {
+    stateManager.dispatch({
+      type: stateManager.ACTION_TYPES.SET_HISTORY_INDEX,
+      payload: { index: foundIndex },
+    });
+  } else {
+    uiRenderer.showToast(
+      `No history found for the week starting ${targetWeekStart}`,
+      "error"
+    );
+  }
+}
+
+/**
+ * Handle About button click
+ */
+function handleAboutClick() {
+  closeMenu();
+  const aboutTitle = "About MIND Diet Tracker";
+
+  let aboutContent = `
+    <p>This app helps you track your adherence to the MIND Diet principles.</p>
+    <p>Track daily and weekly servings, view summaries, and check your history.</p>
+    <p>Data is stored locally in your browser.</p>
+    <p>More info and the source code on <a href="https://github.com/NateEaton/mind-pwa" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
+    <p>Version: <span id="modal-app-version">(unknown)</span></p>
+  `;
+
+  // Add test date controls
+  aboutContent += `
+    <!-- Developer Testing Controls -->
+    <div id="dev-controls" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc;">
+      <h4 style="margin: 5px 0;">Developer Controls</h4>
+      <div style="display: flex; align-items: center; margin-bottom: 10px;">
+        <label for="test-date" style="margin-right: 10px;">Test Date:</label>
+        <input type="date" id="test-date" ${
+          dataService.isTestModeEnabled()
+            ? `value="${
+                dataService.getCurrentDate().toISOString().split("T")[0]
+              }"`
+            : ""
+        }>
+        <button id="apply-test-date" style="margin-left: 5px;">Apply</button>
+        <button id="reset-test-date" style="margin-left: 5px;" ${
+          !dataService.isTestModeEnabled() ? "disabled" : ""
+        }>Reset</button>
+      </div>
+      <div id="test-date-status" style="font-size: 12px; color: ${
+        dataService.isTestModeEnabled() ? "#ff0000" : "#888"
+      };">
+        ${
+          dataService.isTestModeEnabled()
+            ? `TEST MODE ACTIVE: Using date ${dataService
+                .getCurrentDate()
+                .toLocaleDateString()}`
+            : "Test mode inactive (using real system date)"
+        }
+      </div>
+    </div>
+  `;
+
+  // Add development information
+  aboutContent += `
+    <!-- Development information section -->
+    <div id="dev-info" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; font-family: monospace; font-size: 12px;">
+      <h4 style="margin: 5px 0;">Development Information</h4>
+      <div id="dev-info-content">Loading device info...</div>
+    </div>
+  `;
+
+  uiRenderer.openModal(aboutTitle, aboutContent);
+
+  // Update version in the modal
+  const modalVersionEl = document.getElementById("modal-app-version");
+  if (modalVersionEl) {
+    const footerVersionEl = document.getElementById("app-version");
+    modalVersionEl.textContent = footerVersionEl
+      ? footerVersionEl.textContent
+      : "(unknown)";
+  }
+
+  // Update device info
+  const devInfo = appUtils.getDeviceInfo();
+  const devInfoContent = document.getElementById("dev-info-content");
+  if (devInfoContent) {
+    let infoHtml = "";
+    for (const [key, value] of Object.entries(devInfo)) {
+      infoHtml += `<div>${key}: <span>${value}</span></div>`;
+    }
+    devInfoContent.innerHTML = infoHtml;
+  }
+
+  // Add event listeners for test date controls
+  const testDateInput = document.getElementById("test-date");
+  const applyTestDateBtn = document.getElementById("apply-test-date");
+  const resetTestDateBtn = document.getElementById("reset-test-date");
+  const testDateStatus = document.getElementById("test-date-status");
+
+  if (applyTestDateBtn) {
+    applyTestDateBtn.addEventListener("click", async () => {
+      const dateValue = testDateInput.value;
+      if (dateValue) {
+        dataService.enableTestMode(dateValue);
+        testDateStatus.textContent = `TEST MODE ACTIVE: Using date ${dataService
+          .getCurrentDate()
+          .toLocaleDateString()}`;
+        testDateStatus.style.color = "#ff0000";
+        resetTestDateBtn.disabled = false;
+
+        // Check for date changes with new test date
+        await stateManager.checkDateAndReset();
+        uiRenderer.renderEverything();
+
+        // Show banner and toast
+        appUtils.addTestModeBanner(
+          `TEST MODE: Using date ${dataService
+            .getCurrentDate()
+            .toLocaleDateString()}`
+        );
+        uiRenderer.showToast(
+          "Test date applied: " +
+            dataService.getCurrentDate().toLocaleDateString(),
+          "success"
+        );
+      }
+    });
+  }
+
+  if (resetTestDateBtn) {
+    resetTestDateBtn.addEventListener("click", async () => {
+      dataService.disableTestMode();
+      testDateStatus.textContent =
+        "Test mode inactive (using real system date)";
+      testDateStatus.style.color = "#888";
+      resetTestDateBtn.disabled = true;
+
+      // Check for date changes with real date
+      await stateManager.checkDateAndReset();
+      uiRenderer.renderEverything();
+
+      // Remove banner and show toast
+      appUtils.removeTestModeBanner();
+      uiRenderer.showToast(
+        "Test mode disabled. Using real system date.",
+        "success"
+      );
+    });
+  }
+}
+
+/**
+ * Handle export data operation
+ */
+async function handleExport() {
+  closeMenu();
+
+  try {
+    console.log("Exporting data...");
+    const dataToExport = await dataService.exportData();
+
+    if (
+      Object.keys(dataToExport.currentState).length === 0 &&
+      dataToExport.history.length === 0
+    ) {
+      uiRenderer.showToast("No data available to export.", "error");
+      return;
+    }
+
+    // Create JSON file and trigger download
+    const jsonString = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const timestamp = dataService.getTodayDateString();
+    link.download = `mind-diet-tracker-data-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log("Data exported successfully.");
+    uiRenderer.showToast("Data exported successfully!", "success");
+    uiRenderer.setActiveView("tracker");
+  } catch (error) {
+    console.error("Error exporting data:", error);
+    uiRenderer.showToast(`Export failed: ${error.message}`, "error");
+  }
+}
+
+/**
+ * Trigger the import file selection dialog
+ */
+function triggerImport() {
+  closeMenu();
+  domElements.importFileInput.click();
+}
+
+/**
+ * Handle import file selection
+ * @param {Event} event - The file input change event
+ */
+async function handleImportFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) {
+    console.log("No file selected for import.");
+    return;
+  }
+
+  // Validate file type
+  if (!file.type || file.type !== "application/json") {
+    uiRenderer.showToast(
+      "Invalid file type. Please select a '.json' file.",
+      "error"
+    );
+    domElements.importFileInput.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = async (e) => {
+    try {
+      const fileContent = e.target.result;
+      const importedData = JSON.parse(fileContent);
+
+      // Basic validation of the imported structure
+      if (
+        typeof importedData !== "object" ||
+        importedData === null ||
+        !importedData.currentState ||
+        !Array.isArray(importedData.history)
+      ) {
+        throw new Error("Invalid file structure.");
+      }
+
+      // Format export date for display
+      const exportDate =
+        importedData.appInfo && importedData.appInfo.exportDate
+          ? new Date(importedData.appInfo.exportDate).toLocaleString()
+          : "unknown date";
+
+      // Determine relationship between import date and current date
+      const importedDate = importedData.currentState.currentDayDate;
+      const todayStr = dataService.getTodayDateString();
+
+      // Get date relationship (SAME_DAY, SAME_WEEK, PAST_WEEK, FUTURE_WEEK)
+      const dateRelationship = getDateRelationship(importedDate, todayStr);
+
+      // Prepare confirmation message
+      let actionDescription;
+      switch (dateRelationship) {
+        case "SAME_DAY":
+          actionDescription = "REPLACE ALL tracking data";
+          break;
+        case "SAME_WEEK":
+          actionDescription = "UPDATE current week totals and REPLACE history";
+          break;
+        case "PAST_WEEK":
+          actionDescription =
+            "ADD the imported data as history while PRESERVING current tracking";
+          break;
+        case "FUTURE_WEEK":
+          actionDescription =
+            "Warning: Import data appears to be from a FUTURE date";
+          break;
+        default:
+          actionDescription = "REPLACE ALL tracking data";
+      }
+
+      // File details for the dialog
+      const fileDetails = `
+        <p><strong>File:</strong> ${file.name}</p>
+        <p><strong>Exported:</strong> ${exportDate}</p>
+        <p><strong>Import type:</strong> ${dateRelationship
+          .replace("_", " ")
+          .toLowerCase()}</p>
+      `;
+
+      // Show confirmation dialog
+      const confirmed = await appUtils.showConfirmDialog({
+        title: "Import Confirmation",
+        details: fileDetails,
+        actionDesc: actionDescription,
+        message:
+          "This action cannot be undone. Do you want to proceed with the import?",
+        confirmText: "Import",
+        cancelText: "Cancel",
+      });
+
+      if (!confirmed) {
+        console.log("Import cancelled by user.");
+        domElements.importFileInput.value = "";
+        return;
+      }
+
+      // Perform the import based on the data relationship
+      await processImport(importedData, dateRelationship);
+
+      // Reload UI with new data
+      uiRenderer.renderEverything();
+      uiRenderer.setActiveView("tracker");
+
+      // Create success message
+      let successMessage;
+      switch (dateRelationship) {
+        case "SAME_DAY":
+          successMessage = `Import complete. All data replaced.`;
+          break;
+        case "SAME_WEEK":
+          successMessage = `Import complete. Week totals updated for current week.`;
+          break;
+        case "PAST_WEEK":
+          successMessage = `Import complete. ${importedData.history.length} weeks added to history.`;
+          break;
+        case "FUTURE_WEEK":
+          successMessage = `Import complete. Future-dated data imported.`;
+          break;
+        default:
+          successMessage = `Import successful!`;
+      }
+
+      uiRenderer.showToast(successMessage, "success", 4000);
+    } catch (error) {
+      console.error("Error importing data:", error);
+      uiRenderer.showToast(`Import failed: ${error.message}`, "error", 5000);
+    } finally {
+      domElements.importFileInput.value = "";
+    }
+  };
+
+  reader.onerror = (e) => {
+    console.error("Error reading file:", e);
+    uiRenderer.showToast("Error reading the selected file.", "error");
+    domElements.importFileInput.value = "";
+  };
+
+  reader.readAsText(file);
+}
+
+/**
+ * Process the import operation based on date relationship
+ * @param {Object} importedData - The imported data
+ * @param {string} dateRelationship - Relationship to current date (SAME_DAY, SAME_WEEK, etc)
+ */
+async function processImport(importedData, dateRelationship) {
+  // Directly use the data service import function
+  return await dataService.importData(importedData);
+
+  // After import, reload application state
+  await stateManager.initialize(foodGroups);
+}
+
+/**
+ * Determine the relationship between two dates
+ * @param {string} importDate - The import date string (YYYY-MM-DD)
+ * @param {string} todayDate - The current date string (YYYY-MM-DD)
+ * @returns {string} Relationship type (SAME_DAY, SAME_WEEK, PAST_WEEK, FUTURE_WEEK)
+ */
+function getDateRelationship(importDate, todayDate) {
+  // Convert string dates to Date objects
+  const importDateObj = new Date(`${importDate}T00:00:00`);
+  const todayDateObj = new Date(`${todayDate}T00:00:00`);
+
+  // Get week start dates to compare weeks
+  const importWeekStart = dataService.getWeekStartDate(importDateObj);
+  const todayWeekStart = dataService.getWeekStartDate(todayDateObj);
+
+  if (importDate === todayDate) {
+    return "SAME_DAY";
+  } else if (importWeekStart === todayWeekStart) {
+    return "SAME_WEEK";
+  } else {
+    return importDateObj < todayDateObj ? "PAST_WEEK" : "FUTURE_WEEK";
+  }
+}
+
+/**
+ * Handle settings button click
+ */
+function handleSettings() {
+  closeMenu();
+  uiRenderer.showToast("Settings view not yet implemented.", "success");
+}
+
+/**
+ * Open the edit totals modal
+ * @param {string} source - Source of data ('current' or 'history')
+ */
+function openEditTotalsModal(source) {
+  const state = stateManager.getState();
+  let title = "Edit Weekly Totals";
+  let dataToEdit = null;
+
+  if (source === "current") {
+    editingWeekDataRef = state;
+    dataToEdit = state.weeklyCounts;
+    title = `Edit Totals: Current Week (Starts ${state.currentWeekStartDate})`;
+    editingSource = "current";
+  } else if (source === "history") {
+    if (
+      state.currentHistoryIndex === -1 ||
+      !state.history[state.currentHistoryIndex]
+    ) {
+      uiRenderer.showToast("No history week selected to edit.", "error");
+      return;
+    }
+
+    editingWeekDataRef = state.history[state.currentHistoryIndex];
+    dataToEdit = editingWeekDataRef.totals;
+    title = `Edit Totals: Week of ${editingWeekDataRef.weekStartDate}`;
+    editingSource = "history";
+  } else {
+    console.error("Invalid source for edit modal:", source);
+    return;
+  }
+
+  // Deep copy the totals to the temporary editing object
+  editedTotals = JSON.parse(JSON.stringify(dataToEdit || {}));
+
+  // Ensure all food groups have an entry in editedTotals
+  state.foodGroups.forEach((group) => {
+    if (!(group.id in editedTotals)) {
+      editedTotals[group.id] = 0;
+    }
+  });
+
+  // Update the modal title
+  if (domElements.editTotalsTitle) {
+    domElements.editTotalsTitle.textContent = title;
+  }
+
+  // Render the edit totals list
+  renderEditTotalsList();
+
+  // Show the modal
+  if (domElements.editTotalsModal) {
+    domElements.editTotalsModal.classList.add("modal-open");
+  }
+}
+
+/**
+ * Render the edit totals list in the modal
+ */
+function renderEditTotalsList() {
+  if (!domElements.editTotalsList || !domElements.editTotalsItemTemplate)
+    return;
+
+  // Clear previous items
+  domElements.editTotalsList.innerHTML = "";
+
+  // Get food groups from state
+  const state = stateManager.getState();
+
+  // Create an item for each food group
+  state.foodGroups.forEach((group) => {
+    const item = domElements.editTotalsItemTemplate.content
+      .cloneNode(true)
+      .querySelector(".edit-totals-item");
+
+    item.dataset.id = group.id;
+
+    const nameSpan = item.querySelector(".edit-item-name");
+    const totalSpan = item.querySelector(".edit-current-total");
+
+    // Add data to buttons for easier access in handler
+    const decBtn = item.querySelector(".edit-decrement-btn");
+    const incBtn = item.querySelector(".edit-increment-btn");
+
+    if (decBtn) decBtn.dataset.groupId = group.id;
+    if (incBtn) incBtn.dataset.groupId = group.id;
+
+    // Set content
+    if (nameSpan) nameSpan.textContent = group.name;
+    if (totalSpan) totalSpan.textContent = editedTotals[group.id] || 0;
+
+    // Add to list
+    domElements.editTotalsList.appendChild(item);
+  });
+}
+
+/**
+ * Handle clicks in the edit totals modal
+ * @param {Event} event - The click event
+ */
+function handleEditTotalsItemClick(event) {
+  const button = event.target.closest(
+    ".edit-decrement-btn, .edit-increment-btn"
+  );
+  if (!button) return;
+
+  const groupId = button.dataset.groupId;
+  if (!groupId) {
+    console.error("Edit button clicked, but no groupId found in dataset.");
+    return;
+  }
+
+  // Get current value
+  let currentValue = editedTotals[groupId] || 0;
+
+  // Update value based on button type
+  if (button.classList.contains("edit-increment-btn")) {
+    currentValue++;
+  } else if (button.classList.contains("edit-decrement-btn")) {
+    currentValue = Math.max(0, currentValue - 1);
+  }
+
+  // Update temporary state
+  editedTotals[groupId] = currentValue;
+
+  // Update display
+  const itemElement = button.closest(".edit-totals-item");
+  if (itemElement) {
+    const totalSpan = itemElement.querySelector(".edit-current-total");
+    if (totalSpan) {
+      totalSpan.textContent = currentValue;
+    }
+  }
+}
+
+/**
+ * Save changes from edit totals modal
+ */
+async function saveEditedTotals() {
+  if (!editingSource || !editingWeekDataRef) {
+    console.error("Cannot save, editing context is missing.");
+    uiRenderer.showToast("Error saving changes.", "error");
+    closeEditTotalsModal();
+    return;
+  }
+
+  try {
+    // Get a deep copy of edited totals
+    const finalTotals = JSON.parse(JSON.stringify(editedTotals));
+
+    if (editingSource === "current") {
+      // Update state weekly counts
+      for (const [groupId, count] of Object.entries(finalTotals)) {
+        stateManager.updateWeeklyCount(groupId, count);
+      }
+
+      uiRenderer.showToast("Current week totals updated.", "success");
+    } else if (editingSource === "history") {
+      // Update the totals in the history object
+      editingWeekDataRef.totals = finalTotals;
+
+      // Save to database
+      await dataService.saveWeekHistory(editingWeekDataRef);
+
+      // Refresh history data in state
+      const historyData = await dataService.getAllWeekHistory();
+      stateManager.dispatch({
+        type: stateManager.ACTION_TYPES.SET_HISTORY,
+        payload: { history: historyData },
+      });
+
+      uiRenderer.showToast(
+        `Totals updated for week ${editingWeekDataRef.weekStartDate}.`,
+        "success"
+      );
+    }
+
+    closeEditTotalsModal();
+  } catch (error) {
+    console.error(`Error saving edited totals for ${editingSource}:`, error);
+    uiRenderer.showToast(`Failed to save changes: ${error.message}`, "error");
+  }
+}
+
+/**
+ * Close the edit totals modal
+ */
+function closeEditTotalsModal() {
+  if (domElements.editTotalsModal) {
+    domElements.editTotalsModal.classList.remove("modal-open");
+  }
+
+  // Reset temporary editing state
+  editingWeekDataRef = null;
+  editingSource = null;
+  editedTotals = {};
+
+  if (domElements.editTotalsList) {
+    domElements.editTotalsList.innerHTML = "";
+  }
+}
+
+// Initialize the application when the DOM is loaded
+document.addEventListener("DOMContentLoaded", initializeApp);
