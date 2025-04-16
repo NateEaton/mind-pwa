@@ -33,17 +33,20 @@
     --text-muted: #666;
     --card-bg: #ffffff;
     --border-color: #ddd;
-    --met-goal-color: #d4edda; /* Light green */
-    --missed-goal-color: #f8d7da; /* Light red */
-    --near-limit-color: #fff3cd; /* Light yellow */
-    
+    --met-goal-color: #d4edda;
+    /* Light green */
+    --missed-goal-color: #f8d7da;
+    /* Light red */
+    --near-limit-color: #fff3cd;
+    /* Light yellow */
+
     /* Standard spacing */
     --spacing-xs: 0.3rem;
     --spacing-sm: 0.5rem;
     --spacing-md: 0.8rem;
     --spacing-lg: 1rem;
     --spacing-xl: 1.5rem;
-    
+
     /* Font sizes */
     --font-xs: 0.8rem;
     --font-sm: 0.9rem;
@@ -70,10 +73,13 @@ header {
     background-color: var(--primary-color);
     color: white;
     padding: var(--spacing-lg);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    position: sticky; /* Make header sticky */
-    top: 0; /* Stick to top of viewport */
-    z-index: 100; /* Ensure it's above other content */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    /* Make header sticky */
+    top: 0;
+    /* Stick to top of viewport */
+    z-index: 100;
+    /* Ensure it's above other content */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -101,7 +107,8 @@ nav button {
     transition: background-color 0.2s ease;
 }
 
-nav button:hover, nav button.active {
+nav button:hover,
+nav button.active {
     background-color: var(--secondary-dark);
 }
 
@@ -112,42 +119,49 @@ main {
 }
 
 .view {
-    display: none; /* Hidden by default */
+    display: none;
+    /* Hidden by default */
     background-color: var(--card-bg);
     padding: var(--spacing-xl);
     margin-bottom: var(--spacing-lg);
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .view.active-view {
-    display: block; /* Show active view */
+    display: block;
+    /* Show active view */
 }
 
 /* ================================== */
 /* === Typography & Headings === */
 /* ================================== */
 
-h2, h3 {
+h2,
+h3 {
     color: var(--primary-color);
     border-bottom: 2px solid var(--secondary-color);
     padding-bottom: var(--spacing-xs);
     margin-top: var(--spacing-xl);
     margin-bottom: var(--spacing-lg);
-    line-height: 1.3; /* Improve readability for wrapped headings */
+    line-height: 1.3;
+    /* Improve readability for wrapped headings */
 }
 
-h2:first-child, h3:first-child {
+h2:first-child,
+h3:first-child {
     margin-top: 0;
 }
 
 /* Styling for Dates in Subheadings */
 .heading-date {
-    font-size: 1rem; /* Larger from the previous 0.85em/0.9rem */
+    font-size: 1rem;
+    /* Larger from the previous 0.85em/0.9rem */
     font-weight: normal;
     color: var(--primary-color);
     margin-left: var(--spacing-sm);
-    display: inline-block; /* Prevent awkward wrapping */
+    display: inline-block;
+    /* Prevent awkward wrapping */
 }
 
 /* ================================== */
@@ -158,7 +172,8 @@ h2:first-child, h3:first-child {
 .food-group-item {
     display: flex;
     justify-content: space-between;
-    align-items: center; /* Change from flex-start to center for vertical alignment */
+    align-items: center;
+    /* Change from flex-start to center for vertical alignment */
     padding: var(--spacing-md) 0;
     border-bottom: 1px solid var(--border-color);
     flex-wrap: nowrap;
@@ -170,7 +185,8 @@ h2:first-child, h3:first-child {
 
 .food-group-item .info {
     display: flex;
-    margin-right: var(--spacing-lg); /* Increase from var(--spacing-md) for more space */
+    margin-right: var(--spacing-lg);
+    /* Increase from var(--spacing-md) for more space */
     flex: 1;
     min-width: 0;
 }
@@ -191,8 +207,10 @@ h2:first-child, h3:first-child {
     margin-right: var(--spacing-sm);
     cursor: pointer;
     flex-shrink: 0;
-    align-self: center; /* Change from flex-start to center */
-    margin-top: 0; /* Remove the top margin since we're centering */
+    align-self: center;
+    /* Change from flex-start to center */
+    margin-top: 0;
+    /* Remove the top margin since we're centering */
     transition: background-color 0.2s;
 }
 
@@ -211,8 +229,10 @@ h2:first-child, h3:first-child {
 /* Container for name and badge to be on same line */
 .name-row {
     display: flex;
-    align-items: center; /* Ensures vertical centering */
-    justify-content: space-between; /* Pushes badge to right side */
+    align-items: center;
+    /* Ensures vertical centering */
+    justify-content: space-between;
+    /* Pushes badge to right side */
     margin-bottom: var(--spacing-xs);
     width: 100%;
 }
@@ -223,9 +243,11 @@ h2:first-child, h3:first-child {
     white-space: normal;
     overflow: visible;
     line-height: 1.3;
-    margin-right: auto; /* Push badge to the right */
+    margin-right: auto;
+    /* Push badge to the right */
     margin-bottom: 0;
-    flex: 1; /* Allow name to take available space */
+    flex: 1;
+    /* Allow name to take available space */
 }
 
 /* Weekly badge styling - a more visual badge approach */
@@ -241,7 +263,8 @@ h2:first-child, h3:first-child {
     justify-content: center;
     min-width: 16px;
     height: 18px;
-    margin-right: var(--spacing-sm); /* Changed from margin-left to margin-right */
+    margin-right: var(--spacing-sm);
+    /* Changed from margin-left to margin-right */
     align-self: center;
 }
 
@@ -253,9 +276,12 @@ h2:first-child, h3:first-child {
 .food-group-item .target {
     font-size: var(--font-sm);
     color: var(--text-muted);
-    white-space: normal; /* Changed from nowrap - Allow wrapping */
-    overflow: visible; /* Changed from hidden - Show all text */
-    line-height: 1.3; /* Better readability for wrapped text */
+    white-space: normal;
+    /* Changed from nowrap - Allow wrapping */
+    overflow: visible;
+    /* Changed from hidden - Show all text */
+    line-height: 1.3;
+    /* Better readability for wrapped text */
 }
 
 /* Controls section */
@@ -276,7 +302,8 @@ h2:first-child, h3:first-child {
     cursor: pointer;
     line-height: 1;
     margin: 0 var(--spacing-xs);
-    min-width: 30px; /* Ensure minimum touch target size */
+    min-width: 30px;
+    /* Ensure minimum touch target size */
 }
 
 .food-group-item .controls button.decrement-btn {
@@ -320,7 +347,8 @@ h2:first-child, h3:first-child {
     flex-wrap: wrap;
 }
 
-.history-nav button, .history-nav input {
+.history-nav button,
+.history-nav input {
     padding: var(--spacing-sm);
     margin: var(--spacing-xs);
 }
@@ -331,38 +359,204 @@ h2:first-child, h3:first-child {
     flex-grow: 1;
 }
 
-#history-content ul, #current-week-summary-content ul {
+#history-content ul,
+#current-week-summary-content ul {
     list-style: none;
     padding: 0;
 }
 
-/* Improvement #4: Grid layout for summary/history items */
-#history-content li, #current-week-summary-content li {
+/* Slim Card Layout Styles */
+.summary-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    /* Reduced from var(--spacing-sm) */
+    width: 100%;
+    margin-bottom: var(--spacing-md);
+    /* Reduced from var(--spacing-lg) */
+}
+
+.card-header {
+    display: flex;
+    background-color: #f8f8f8;
+    font-weight: bold;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: var(--spacing-xs);
+}
+
+.header-food-group {
+    flex: 2;
+}
+
+.header-servings,
+.header-target {
+    flex: 1;
+    text-align: center;
+}
+
+.food-card {
+    display: flex;
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    padding: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
-    display: grid; /* Change from flex to grid */
-    grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr); /* Create two columns */
-    align-items: center;
-    gap: var(--spacing-md);
-}
-
-#history-content .food-name, #current-week-summary-content .food-name {
-    font-weight: bold;
-    padding-left: var(--spacing-xs);
     overflow: hidden;
-    text-overflow: ellipsis;
+    margin-bottom: 2px;
+    /* Reduced from var(--spacing-xs) */
+    min-height: 48px;
+    /* Reduced from 60px for slimmer cards */
 }
 
-#history-content .servings, #current-week-summary-content .servings {
+.status-indicator {
+    width: 8px;
+    /* Slim indicator bar */
+    background-color: transparent;
+    /* Default: no color */
+}
+
+.card-content {
+    display: flex;
+    flex: 1;
+    padding: 8px var(--spacing-md);
+    /* Reduced top/bottom padding */
+    align-items: center;
+}
+
+.card-food-name {
+    flex: 2;
+    font-weight: 500;
+}
+
+.metric-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.metric-label {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-bottom: 0px;
+    /* Reduced from 2px */
+}
+
+.metric-value {
+    font-weight: bold;
+}
+
+/* Status colors for indicator bars */
+.food-card.goal-met .status-indicator {
+    background-color: var(--primary-color);
+}
+
+.food-card.goal-missed .status-indicator {
+    background-color: var(--error-color);
+}
+
+.food-card.limit-ok .status-indicator {
+    background-color: var(--primary-color);
+}
+
+.food-card.limit-near .status-indicator {
+    background-color: var(--limit-color);
+}
+
+.food-card.limit-exceeded .status-indicator {
+    background-color: var(--error-color);
+}
+
+/* Table-like Layout Styles */
+.summary-table {
+    display: grid;
+    grid-template-columns: minmax(130px, 1.5fr) minmax(70px, 0.5fr) minmax(100px, 1fr);
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--spacing-lg);
+}
+
+.summary-row {
+    display: contents;
+}
+
+.summary-row>div {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    align-self: center;
+}
+
+.header-row {
+    font-weight: bold;
+    background-color: #f8f8f8;
+}
+
+.header-row>div {
+    border-bottom: 2px solid var(--border-color);
+    padding-top: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+.food-name {
+    font-weight: 500;
+    padding-left: var(--spacing-lg);
+}
+
+.current-servings {
+    text-align: center;
+    font-weight: bold;
+}
+
+.target-servings {
     text-align: right;
-    padding-right: var(--spacing-xs);
-    justify-self: end;
+    padding-right: var(--spacing-lg);
+}
+
+/* Status Colors - modified to work with grid display */
+.summary-row.goal-met {
+    background-color: var(--met-goal-color);
+}
+
+.summary-row.goal-met>div {
+    border-left: 5px solid var(--primary-color);
+}
+
+.summary-row.goal-missed {
+    background-color: var(--missed-goal-color);
+}
+
+.summary-row.goal-missed>div {
+    border-left: 5px solid var(--error-color);
+}
+
+.summary-row.limit-ok {
+    background-color: var(--met-goal-color);
+}
+
+.summary-row.limit-ok>div {
+    border-left: 5px solid var(--primary-color);
+}
+
+.summary-row.limit-near {
+    background-color: var(--near-limit-color);
+}
+
+.summary-row.limit-near>div {
+    border-left: 5px solid var(--limit-color);
+}
+
+.summary-row.limit-exceeded {
+    background-color: var(--missed-goal-color);
+}
+
+.summary-row.limit-exceeded>div {
+    border-left: 5px solid var(--error-color);
 }
 
 /* Goal Status Highlighting */
-.goal-met, .limit-ok {
+.goal-met,
+.limit-ok {
     background-color: var(--met-goal-color);
     border-left: 5px solid var(--primary-color);
 }
@@ -436,7 +630,7 @@ h2:first-child, h3:first-child {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 5px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 1000;
     padding: 0;
     min-width: 180px;
@@ -492,7 +686,7 @@ h2:first-child, h3:first-child {
     padding: 12px 25px;
     color: white;
     border-radius: 30px;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
     font-size: var(--font-sm);
     opacity: 0;
     transition: opacity 0.4s ease-in-out;
@@ -526,7 +720,7 @@ h2:first-child, h3:first-child {
     width: 100%;
     height: 100%;
     overflow: auto;
-    background-color: rgba(0,0,0,0.55);
+    background-color: rgba(0, 0, 0, 0.55);
 }
 
 .modal.modal-open {
@@ -543,11 +737,13 @@ h2:first-child, h3:first-child {
     font-size: var(--font-lg, 1.2rem);
     font-weight: bold;
     color: white;
-    border-bottom: none !important; /* Force override any global styles */
+    border-bottom: none !important;
+    /* Force override any global styles */
     border: none !important;
     text-decoration: none !important;
     line-height: 1.3;
-    font-family: sans-serif; /* Ensure consistent font */
+    font-family: sans-serif;
+    /* Ensure consistent font */
 }
 
 /* Ensure header doesn't inherit unwanted styles */
@@ -578,8 +774,9 @@ h3.modal-title {
     width: 85%;
     max-width: 480px;
     position: relative;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    overflow: hidden; /* Keep content within rounded corners */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    /* Keep content within rounded corners */
     display: flex;
     flex-direction: column;
 }
@@ -599,7 +796,7 @@ h3.modal-title {
     position: absolute;
     top: 12px;
     right: 15px;
-    color: rgba(255,255,255,0.8);
+    color: rgba(255, 255, 255, 0.8);
     background: none;
     border: none;
     font-size: 24px;
@@ -612,7 +809,7 @@ h3.modal-title {
 .modal-close-btn:hover,
 .modal-close-btn:focus {
     color: white;
-    text-shadow: 0 0 2px rgba(255,255,255,0.5);
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 /* Modal actions container */
@@ -622,7 +819,8 @@ h3.modal-title {
     align-items: center;
     padding: 15px 20px;
     border-top: 1px solid var(--border-color);
-    background-color: #f8f8f8; /* Light gray background */
+    background-color: #f8f8f8;
+    /* Light gray background */
 }
 
 /* Button styling */
@@ -631,7 +829,8 @@ h3.modal-title {
     border-radius: 4px;
     cursor: pointer;
     font-size: var(--font-sm);
-    min-width: 80px; /* Ensure consistent button width */
+    min-width: 80px;
+    /* Ensure consistent button width */
 }
 
 .primary-btn {
@@ -675,12 +874,14 @@ h3.modal-title {
 
 /* Specific modal styles that need to be integrated */
 #edit-totals-list {
-    padding: 0; /* Remove additional padding if present */
+    padding: 0;
+    /* Remove additional padding if present */
 }
 
 /* Specific styles for the Edit Totals modal */
 .edit-totals-body {
-    padding: 20px !important; /* Ensure padding */
+    padding: 10px !important;
+    /* Ensure padding */
 }
 
 #modal-body p {
@@ -697,9 +898,13 @@ h3.modal-title {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 0; /* Increased padding for more spacing */
-    margin-bottom: 8px; /* Add margin between items */
+    padding: 8px 0;
+    /* Reduced padding for more compact vertical spacing */
+    margin-bottom: 4px;
+    /* Smaller margin between items */
     border-bottom: 1px solid var(--border-color);
+    border-radius: 4px;
+    /* Slight rounding to match card design */
 }
 
 .edit-totals-item:last-child {
@@ -709,26 +914,33 @@ h3.modal-title {
 
 .edit-item-name {
     flex-grow: 1;
-    margin-right: 16px; /* Increased margin */
-    font-weight: 500; /* Slightly bolder */
+    margin-right: 12px;
+    /* Slightly reduced margin */
+    font-weight: 500;
+    /* Match card style */
+    padding-left: 8px;
+    /* Add some padding on the left */
 }
 
 .edit-item-controls {
     display: flex;
     align-items: center;
-    min-width: 120px; /* Ensure adequate space */
+    min-width: 100px;
+    /* Ensure adequate space */
     justify-content: flex-end;
 }
 
 .edit-item-controls button {
-    width: 32px; /* Slightly bigger buttons */
-    height: 32px;
+    width: 28px;
+    /* Slightly smaller buttons */
+    height: 28px;
     border-radius: 50%;
     cursor: pointer;
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: bold;
     line-height: 1;
-    margin: 0 8px; /* Increased margin for better spacing */
+    margin: 0 6px;
+    /* Reduced margin */
     color: white;
     transition: background-color 0.2s;
     border: none;
@@ -751,11 +963,13 @@ h3.modal-title {
 }
 
 .edit-current-total {
-    min-width: 30px;
+    min-width: 24px;
     text-align: center;
     font-weight: bold;
-    font-size: 1.2rem; /* Larger text */
-    margin: 0 10px; /* Add space around the number */
+    font-size: 1.1rem;
+    /* Slightly smaller text */
+    margin: 0 8px;
+    /* Reduced space around the number */
 }
 
 /* Ensure the close button doesn't inherit unwanted styles */
@@ -763,7 +977,7 @@ h3.modal-title {
     position: absolute;
     top: 12px;
     right: 15px;
-    color: rgba(255,255,255,0.8);
+    color: rgba(255, 255, 255, 0.8);
     background: none;
     border: none;
     font-size: 24px;
@@ -810,7 +1024,7 @@ h3.modal-title {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0,0,0,0.6);
+    background-color: rgba(0, 0, 0, 0.6);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -820,7 +1034,7 @@ h3.modal-title {
 .custom-dialog {
     background-color: white;
     border-radius: 8px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
     width: 90%;
     max-width: 500px;
     max-height: 90vh;
@@ -918,103 +1132,142 @@ footer {
 /* ================================== */
 
 @media (max-width: 480px) {
+
     /* Very small screens */
     #menu-toggle-btn {
         top: var(--spacing-sm);
         left: var(--spacing-sm);
         font-size: 1.8rem;
     }
-    
+
     .main-menu {
         top: 55px;
         left: 5px;
         min-width: 160px;
     }
-    
+
     #toast-message.toast {
         padding: 10px 20px;
         font-size: 0.9em;
     }
-    
+
     .food-group-item {
         flex-direction: row;
         flex-wrap: nowrap;
         align-items: flex-start;
     }
-    
+
     .food-group-item .info {
         flex: 1 1 auto;
         min-width: 0;
         margin-right: var(--spacing-sm);
         margin-bottom: 0;
     }
-    
+
     .food-group-item .controls {
         margin-left: 0;
         flex-shrink: 0;
         align-self: flex-start;
     }
-    
+
     .food-group-item .controls input[type="number"] {
         width: 30px;
     }
-    
+
     .food-group-item .controls button {
         width: 28px;
         height: 28px;
         font-size: 1.1rem;
     }
-    
+
     .modal-content {
         width: 90%;
         max-width: 340px;
         padding: 15px;
     }
-    
+
     #modal-title {
         font-size: 1.3em;
         padding-bottom: 0.4rem;
     }
-    
+
     #modal-body {
         font-size: 0.9em;
         max-height: 70vh;
     }
-    
-    /* Optimize grid layout for small screens */
-    #history-content li, #current-week-summary-content li {
-        grid-template-columns: 1fr 1.5fr; /* Adjust column ratio */
-        padding: var(--spacing-sm);
-        gap: var(--spacing-sm);
-    }
+
 }
 
 @media (min-width: 481px) and (max-width: 600px) {
+
     /* Medium small screens */
     #menu-toggle-btn {
         top: var(--spacing-sm);
         left: var(--spacing-sm);
         font-size: 1.8rem;
     }
-    
+
     .main-menu {
         top: 55px;
         left: 5px;
         min-width: 160px;
     }
-    
+
     #toast-message.toast {
         padding: 10px 20px;
         font-size: 0.9em;
     }
-    
+
     .food-group-item .info {
         max-width: 65%;
         margin-right: var(--spacing-sm);
     }
-    
+
     .modal-content {
         width: 80%;
         padding: 20px;
+    }
+}
+
+/* Mobile Responsive Table Adjustments */
+@media (max-width: 480px) {
+    .summary-table {
+        grid-template-columns: minmax(100px, 1fr) minmax(60px, 0.4fr) minmax(80px, 0.8fr);
+        font-size: var(--font-sm);
+    }
+
+    .summary-row>div {
+        padding: var(--spacing-sm);
+    }
+
+    .food-name {
+        padding-left: var(--spacing-md);
+    }
+
+    .target-servings {
+        padding-right: var(--spacing-md);
+    }
+
+    .header-row>div {
+        font-size: var(--font-xs);
+    }
+}
+
+@media (max-width: 480px) {
+    /* Very small screens */
+    /* [existing mobile styles remain] */
+
+    /* Add these new styles for the card layout */
+    .card-content {
+        padding: 6px var(--spacing-sm);
+        /* Further reduced padding for mobile */
+    }
+
+    .card-food-name {
+        font-size: var(--font-sm);
+    }
+
+    .metric-label {
+        font-size: calc(var(--font-xs) - 1px);
     }
 }

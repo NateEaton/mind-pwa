@@ -888,10 +888,12 @@ async function handleImportFileSelect(event) {
  */
 async function processImport(importedData, dateRelationship) {
   // Directly use the data service import function
-  return await dataService.importData(importedData);
+  await dataService.importData(importedData);
 
   // After import, reload application state
   await stateManager.initialize(foodGroups);
+
+  return true;
 }
 
 /**
