@@ -394,7 +394,7 @@ function renderTrackerItems() {
 }
 
 /**
- * Render the current week summary
+ * Render the current week summary using slim cards
  */
 function renderCurrentWeekSummary() {
   const state = stateManager.getState();
@@ -410,8 +410,9 @@ function renderCurrentWeekSummary() {
   // Clear previous content
   currentWeekSummaryContent.innerHTML = "";
 
-  // Create list container
-  const ul = document.createElement("ul");
+  // Create cards container
+  const cardsContainer = document.createElement("div");
+  cardsContainer.className = "summary-cards";
 
   // Helper function to get effective weekly target
   const getWeeklyTarget = (group) => {
@@ -422,43 +423,58 @@ function renderCurrentWeekSummary() {
 
   // Render each food group
   state.foodGroups.forEach((group) => {
-    const li = document.createElement("li");
+    const card = document.createElement("div");
+    card.className = "food-card";
+
     const currentTotal = state.weeklyCounts[group.id] || 0;
     const weeklyTarget = getWeeklyTarget(group);
 
-    // Determine status class
+    // For current week, only apply status classes for completed conditions
     let statusClass = "";
 
     if (group.type === "positive") {
+      // Only apply goal-met to positive targets that have been achieved
       if (currentTotal >= weeklyTarget) statusClass = "goal-met";
-      // Optional: Add 'goal-missed' for unmet positive goals
+      // Do not apply goal-missed since the week is still in progress
     } else {
-      // limit
-      if (currentTotal <= weeklyTarget) statusClass = "limit-ok";
-      if (currentTotal > weeklyTarget * 0.75 && currentTotal <= weeklyTarget)
+      // For limits, only show warning/error states
+      if (currentTotal > weeklyTarget) {
+        statusClass = "limit-exceeded";
+      } else if (
+        currentTotal > weeklyTarget * 0.75 &&
+        currentTotal <= weeklyTarget
+      ) {
         statusClass = "limit-near";
-      if (currentTotal > weeklyTarget) statusClass = "limit-exceeded";
+      }
     }
 
     // Apply status class if assigned
-    if (statusClass) li.classList.add(statusClass);
+    if (statusClass) card.classList.add(statusClass);
 
-    // Create the list item content
-    li.innerHTML = `
-      <span class="food-name">${group.name}</span>
-      <span class="servings">
-        Current: ${currentTotal} / Target ${
-      group.type === "limit" ? "≤" : "≥"
-    } ${weeklyTarget} per week
-      </span>
+    // Create the card content
+    card.innerHTML = `
+      <div class="status-indicator"></div>
+      <div class="card-content">
+        <div class="card-food-name">${group.name}</div>
+        <div class="metric-container">
+          <div class="metric-label">SERVINGS</div>
+          <div class="metric-value">${currentTotal}</div>
+        </div>
+        <div class="metric-container">
+          <div class="metric-label">TARGET</div>
+          <div class="metric-value">${
+            group.type === "limit" ? "≤" : "≥"
+          } ${weeklyTarget}</div>
+        </div>
+      </div>
     `;
 
-    // Add the list item to the list
-    ul.appendChild(li);
+    // Add the card to the container
+    cardsContainer.appendChild(card);
   });
 
-  // Add the list to the container
-  currentWeekSummaryContent.appendChild(ul);
+  // Add the cards container to the view
+  currentWeekSummaryContent.appendChild(cardsContainer);
 
   // Enable the edit button if it exists
   if (editCurrentWeekBtn) {
@@ -467,7 +483,7 @@ function renderCurrentWeekSummary() {
 }
 
 /**
- * Render the history view
+ * Render the history view using slim cards
  * @param {number} weekIndex - Optional index to display (defaults to current state index)
  */
 function renderHistory(weekIndex) {
@@ -564,8 +580,9 @@ function renderHistory(weekIndex) {
     historyDatePicker.value = weekData.weekStartDate;
   }
 
-  // Create the list for the history content
-  const ul = document.createElement("ul");
+  // Create cards container
+  const cardsContainer = document.createElement("div");
+  cardsContainer.className = "summary-cards";
 
   // Use stored targets if available, otherwise use current config
   const targets =
@@ -606,46 +623,53 @@ function renderHistory(weekIndex) {
       effectiveWeeklyTarget = targetInfo.target;
     }
 
-    // Create list item
-    const li = document.createElement("li");
+    // Create card
+    const card = document.createElement("div");
+    card.className = "food-card";
 
-    // Determine status class
+    // In history view, always apply status classes since the weeks are complete
     let statusClass = "";
     if (targetInfo.type === "positive") {
-      if (total >= effectiveWeeklyTarget) statusClass = "goal-met";
-      else statusClass = "goal-missed";
+      statusClass = total >= effectiveWeeklyTarget ? "goal-met" : "goal-missed";
     } else {
       // limit
-      if (total <= effectiveWeeklyTarget) statusClass = "limit-ok";
-      if (
-        effectiveWeeklyTarget > 0 &&
-        total > effectiveWeeklyTarget * 0.75 &&
-        total <= effectiveWeeklyTarget
-      ) {
-        statusClass = "limit-near";
+      if (total <= effectiveWeeklyTarget) {
+        statusClass = "limit-ok";
+        if (effectiveWeeklyTarget > 0 && total > effectiveWeeklyTarget * 0.75) {
+          statusClass = "limit-near";
+        }
+      } else {
+        statusClass = "limit-exceeded";
       }
-      if (total > effectiveWeeklyTarget) statusClass = "limit-exceeded";
     }
 
     // Apply status class
-    if (statusClass) li.classList.add(statusClass);
+    if (statusClass) card.classList.add(statusClass);
 
-    // Create list item content
-    li.innerHTML = `
-      <span class="food-name">${targetInfo.name || group.name}</span>
-      <span class="servings">
-        Total: ${total} / Target ${
-      targetInfo.type === "limit" ? "≤" : "≥"
-    } ${effectiveWeeklyTarget} per week
-      </span>
+    // Create the card content
+    card.innerHTML = `
+      <div class="status-indicator"></div>
+      <div class="card-content">
+        <div class="card-food-name">${targetInfo.name || group.name}</div>
+        <div class="metric-container">
+          <div class="metric-label">SERVINGS</div>
+          <div class="metric-value">${total}</div>
+        </div>
+        <div class="metric-container">
+          <div class="metric-label">TARGET</div>
+          <div class="metric-value">${
+            targetInfo.type === "limit" ? "≤" : "≥"
+          } ${effectiveWeeklyTarget}</div>
+        </div>
+      </div>
     `;
 
-    // Add list item to the list
-    ul.appendChild(li);
+    // Add card to the container
+    cardsContainer.appendChild(card);
   });
 
-  // Add the list to the container
-  historyContent.appendChild(ul);
+  // Add the cards container to the view
+  historyContent.appendChild(cardsContainer);
 }
 
 /**
