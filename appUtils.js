@@ -39,98 +39,6 @@ function triggerHapticFeedback(duration = 50) {
 }
 
 /**
- * Show a confirmation dialog using a Promise
- * @param {Object} options - Dialog options
- * @param {string} options.title - Dialog title
- * @param {string} options.message - Main dialog message
- * @param {string} [options.confirmText='OK'] - Text for confirm button
- * @param {string} [options.cancelText='Cancel'] - Text for cancel button
- * @param {string} [options.details=null] - Optional details HTML
- * @param {string} [options.actionDesc=null] - Optional action description HTML
- * @returns {Promise<boolean>} Promise resolving to true if confirmed, false if canceled
- */
-function showConfirmDialog(options) {
-  return new Promise((resolve) => {
-    const {
-      title,
-      message,
-      confirmText = "OK",
-      cancelText = "Cancel",
-      details = null,
-      actionDesc = null,
-    } = options;
-
-    // Create the dialog elements
-    const overlay = document.createElement("div");
-    overlay.className = "custom-dialog-overlay";
-
-    const dialog = document.createElement("div");
-    dialog.className = "custom-dialog";
-
-    // Build the dialog content
-    dialog.innerHTML = `
-      <div class="custom-dialog-header">${title}</div>
-      <div class="custom-dialog-body">
-        ${
-          details
-            ? `
-          <div class="dialog-import-details">
-            ${details}
-          </div>
-        `
-            : ""
-        }
-        ${
-          actionDesc
-            ? `
-          <div class="dialog-action-description">
-            ${actionDesc}
-          </div>
-        `
-            : ""
-        }
-        <div class="custom-dialog-message">${message}</div>
-      </div>
-      <div class="custom-dialog-footer">
-        <button class="btn-cancel">${cancelText}</button>
-        <button class="btn-confirm">${confirmText}</button>
-      </div>
-    `;
-
-    // Add to DOM
-    document.body.appendChild(overlay);
-    overlay.appendChild(dialog);
-
-    // Center in viewport
-    dialog.style.display = "flex";
-
-    // Focus the confirm button
-    const confirmButton = dialog.querySelector(".btn-confirm");
-    confirmButton.focus();
-
-    // Handle button clicks
-    dialog.querySelector(".btn-cancel").addEventListener("click", () => {
-      document.body.removeChild(overlay);
-      resolve(false);
-    });
-
-    dialog.querySelector(".btn-confirm").addEventListener("click", () => {
-      document.body.removeChild(overlay);
-      resolve(true);
-    });
-
-    // Handle escape key
-    document.addEventListener("keydown", function escHandler(e) {
-      if (e.key === "Escape") {
-        document.removeEventListener("keydown", escHandler);
-        document.body.removeChild(overlay);
-        resolve(false);
-      }
-    });
-  });
-}
-
-/**
  * Register the service worker for the application
  * @returns {Promise<ServiceWorkerRegistration|null>} Promise resolving to the registration or null if failed
  */
@@ -344,7 +252,6 @@ async function loadAppVersion(versionElement = null) {
 // Export public API
 export default {
   triggerHapticFeedback,
-  showConfirmDialog,
   registerServiceWorker,
   formatDate,
   debounce,

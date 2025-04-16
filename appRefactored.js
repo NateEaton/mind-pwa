@@ -600,7 +600,18 @@ function handleAboutClick() {
     </div>
   `;
 
-  uiRenderer.openModal(aboutTitle, aboutContent);
+  // Use the new modal format with footer
+  uiRenderer.openModal(aboutTitle, aboutContent, {
+    showFooter: true,
+    buttons: [
+      {
+        label: "Close",
+        id: "about-close-btn",
+        class: "primary-btn",
+        onClick: () => uiRenderer.closeModal(),
+      },
+    ],
+  });
 
   // Update version in the modal
   const modalVersionEl = document.getElementById("modal-app-version");
@@ -809,8 +820,8 @@ async function handleImportFileSelect(event) {
           .toLowerCase()}</p>
       `;
 
-      // Show confirmation dialog
-      const confirmed = await appUtils.showConfirmDialog({
+      // Show confirmation dialog using uiRenderer instead of appUtils
+      const confirmed = await uiRenderer.showConfirmDialog({
         title: "Import Confirmation",
         details: fileDetails,
         actionDesc: actionDescription,
@@ -927,7 +938,11 @@ function openEditTotalsModal(source) {
   if (source === "current") {
     editingWeekDataRef = state;
     dataToEdit = state.weeklyCounts;
-    title = `Edit Totals: Current Week (Starts ${state.currentWeekStartDate})`;
+    const weekStartDate = new Date(`${state.currentWeekStartDate}T00:00:00`);
+    title = `Edit Totals: Week of ${weekStartDate.toLocaleDateString(
+      undefined,
+      { month: "short", day: "numeric", year: "numeric" }
+    )}`;
     editingSource = "current";
   } else if (source === "history") {
     if (
@@ -940,7 +955,13 @@ function openEditTotalsModal(source) {
 
     editingWeekDataRef = state.history[state.currentHistoryIndex];
     dataToEdit = editingWeekDataRef.totals;
-    title = `Edit Totals: Week of ${editingWeekDataRef.weekStartDate}`;
+    const historyWeekDate = new Date(
+      `${editingWeekDataRef.weekStartDate}T00:00:00`
+    );
+    title = `Edit Totals: Week of ${historyWeekDate.toLocaleDateString(
+      undefined,
+      { month: "short", day: "numeric", year: "numeric" }
+    )}`;
     editingSource = "history";
   } else {
     console.error("Invalid source for edit modal:", source);

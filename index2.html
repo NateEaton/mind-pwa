@@ -25,7 +25,7 @@
     <title>MIND Diet Tracker</title>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"> <!-- For older compatibility -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="refactored-style.css">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png"> <!-- Basic iOS support -->
 </head>
@@ -111,14 +111,16 @@
     <!-- Edit Totals Modal Structure (Initially Hidden) -->
     <div id="edit-totals-modal" class="modal">
         <div class="modal-content">
-            <button id="edit-totals-close-btn" class="modal-close-btn" aria-label="Close editor">×</button>
-            <h3 id="edit-totals-title">Edit Weekly Totals</h3>
-            <div id="edit-totals-list" class="modal-body">
+            <div class="modal-header">
+                <h3 id="edit-totals-title" class="modal-title">Edit Weekly Totals</h3>
+                <button id="edit-totals-close-btn" class="modal-close-btn" aria-label="Close editor">×</button>
+            </div>
+            <div id="edit-totals-list" class="modal-body edit-totals-body">
                 <!-- Items will be generated here -->
             </div>
-            <div class="modal-actions" style="text-align: right; margin-top: 1.5rem;">
-                 <button id="edit-totals-cancel-btn" style="margin-right: 0.5rem;">Cancel</button>
-                 <button id="edit-totals-save-btn" style="font-weight: bold;">Save Changes</button>
+            <div class="modal-actions">
+                <button id="edit-totals-cancel-btn" class="secondary-btn">Cancel</button>
+                <button id="edit-totals-save-btn" class="primary-btn">Save Changes</button>
             </div>
         </div>
     </div>
@@ -126,9 +128,13 @@
     <!-- *** ADD GENERIC MODAL STRUCTURE (Initially Hidden) *** -->
     <div id="generic-modal" class="modal">
         <div class="modal-content">
-            <button id="modal-close-btn" class="modal-close-btn" aria-label="Close modal">×</button>
-            <h3 id="modal-title">Dialog Title</h3>
-            <div id="modal-body">Modal content goes here.</div> 
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">Dialog Title</h3>
+                <button id="modal-close-btn" class="modal-close-btn" aria-label="Close modal">×</button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                Modal content goes here.
+            </div>
         </div>
     </div>
 
@@ -144,15 +150,18 @@
             <div class="info">
                 <button class="info-btn">i</button>
                 <div class="text-container">
-                  <span class="name">Food Group Name</span>
-                  <span class="target">Target: X servings per week</span>
+                    <div class="name-row">
+                        <span class="name">Food Group Name</span>
+                    </div>
+                    <span class="target">Target: X servings per week</span>
                 </div>
             </div>
             <div class="controls">
+                <!-- Weekly badge now first (left) in the controls section -->
+                <span class="weekly-badge" style="display: none;"><span class="wk-val">0</span></span>
                 <button class="decrement-btn" aria-label="Decrement count">-</button>
                 <input type="number" class="count-input" value="0" min="0" step="1" aria-label="Current count">
                 <button class="increment-btn" aria-label="Increment count">+</button>
-                <span class="current-week-total" style="display: none;">(Wk: <span class="wk-val">0</span>)</span>
             </div>
         </div>
     </template>
