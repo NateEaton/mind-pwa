@@ -753,7 +753,12 @@ h3:first-child {
     padding: 15px 20px;
     position: relative;
     border-radius: 8px 8px 0 0;
-    margin: -1px;
+    margin: 0;
+    /* Remove all margins */
+    width: 100%;
+    /* Ensure it takes full width */
+    box-sizing: border-box;
+    /* Include padding in width calculation */
     border-bottom: none !important;
     text-decoration: none !important;
 }
@@ -779,6 +784,8 @@ h3.modal-title {
     /* Keep content within rounded corners */
     display: flex;
     flex-direction: column;
+    padding: 0;
+    /* Ensure no padding on the container */
 }
 
 /* Modal body - renamed from modal-body */
@@ -789,6 +796,8 @@ h3.modal-title {
     max-height: 60vh;
     overflow-y: auto;
     line-height: 1.6;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* Modal close button - moved to header */
@@ -820,7 +829,10 @@ h3.modal-title {
     padding: 15px 20px;
     border-top: 1px solid var(--border-color);
     background-color: #f8f8f8;
-    /* Light gray background */
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    /* Remove any margins */
 }
 
 /* Button styling */
@@ -1181,19 +1193,26 @@ footer {
     }
 
     .modal-content {
-        width: 90%;
+        width: 95%;
+        /* Increase width on mobile */
         max-width: 340px;
+        padding: 0;
+        /* Ensure no padding */
+    }
+
+    .modal-header {
+        padding: 12px 15px;
+        /* Slightly reduce padding on mobile */
+    }
+
+    .modal-body {
         padding: 15px;
+        /* Reduce body padding on mobile */
     }
 
-    #modal-title {
-        font-size: 1.3em;
-        padding-bottom: 0.4rem;
-    }
-
-    #modal-body {
-        font-size: 0.9em;
-        max-height: 70vh;
+    .modal-actions {
+        padding: 12px 15px;
+        /* Reduce footer padding on mobile */
     }
 
 }
