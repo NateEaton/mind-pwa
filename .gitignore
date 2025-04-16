@@ -1,5 +1,6 @@
 *.txt
 .DS_Store
+.prettierrc
 manifest.json
 export*.json
 mind-diet-tracker*.json
@@ -7,3 +8,4 @@ mind-diet-tracker*.json
 *.log
 *.tmp
 *.bak
+scratch/*

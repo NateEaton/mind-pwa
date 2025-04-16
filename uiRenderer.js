@@ -1,0 +1,924 @@
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import dataService from "./dataService.js";
+import stateManager from "./stateManager.js";
+
+/**
+ * UIRenderer - Responsible for rendering UI components based on application state
+ */
+
+// DOM Elements cache - populated during initialization
+const domElements = {
+  views: {},
+  navButtons: null,
+  trackerElements: {
+    dailyGoalsList: null,
+    weeklyGoalsList: null,
+    dailyGoalsDateEl: null,
+    weeklyGoalsDateEl: null,
+    foodGroupTemplate: null,
+  },
+  currentWeekElements: {
+    currentWeekStartDateEl: null,
+    currentWeekSummaryContent: null,
+    editCurrentWeekBtn: null,
+  },
+  historyElements: {
+    historyContent: null,
+    historyWeekLabel: null,
+    prevWeekBtn: null,
+    nextWeekBtn: null,
+    historyDatePicker: null,
+    editHistoryWeekBtn: null,
+  },
+  modalElements: {
+    genericModal: null,
+    modalTitle: null,
+    modalBody: null,
+    modalCloseBtn: null,
+    editTotalsModal: null,
+    editTotalsTitle: null,
+    editTotalsList: null,
+    editTotalsItemTemplate: null,
+  },
+  toastElements: {
+    toastContainer: null,
+    toastMessage: null,
+  },
+};
+
+let toastTimeout = null; // For managing toast hide timer
+
+/**
+ * Initialize the UI renderer by caching DOM elements
+ */
+function initialize() {
+  // Cache main view elements
+  domElements.views = {
+    tracker: document.getElementById("tracker-view"),
+    "current-week": document.getElementById("current-week-view"),
+    history: document.getElementById("history-view"),
+  };
+
+  // Cache navigation buttons
+  domElements.navButtons = document.querySelectorAll("nav button[data-view]");
+
+  // Cache tracker view elements
+  domElements.trackerElements = {
+    dailyGoalsList: document.getElementById("daily-goals-list"),
+    weeklyGoalsList: document.getElementById("weekly-goals-list"),
+    dailyGoalsDateEl: document.getElementById("daily-goals-date"),
+    weeklyGoalsDateEl: document.getElementById("weekly-goals-date"),
+    foodGroupTemplate: document.getElementById("food-group-item-template"),
+  };
+
+  // Cache current week view elements
+  domElements.currentWeekElements = {
+    currentWeekStartDateEl: document.getElementById("current-week-start-date"),
+    currentWeekSummaryContent: document.getElementById(
+      "current-week-summary-content"
+    ),
+    editCurrentWeekBtn: document.getElementById("edit-current-week-btn"),
+  };
+
+  // Cache history view elements
+  domElements.historyElements = {
+    historyContent: document.getElementById("history-content"),
+    historyWeekLabel: document.getElementById("history-week-label"),
+    prevWeekBtn: document.getElementById("prev-week-btn"),
+    nextWeekBtn: document.getElementById("next-week-btn"),
+    historyDatePicker: document.getElementById("history-date-picker"),
+    editHistoryWeekBtn: document.getElementById("edit-history-week-btn"),
+  };
+
+  // Cache modal elements
+  domElements.modalElements = {
+    genericModal: document.getElementById("generic-modal"),
+    modalTitle: document.getElementById("modal-title"),
+    modalBody: document.getElementById("modal-body"),
+    modalCloseBtn: document.getElementById("modal-close-btn"),
+    editTotalsModal: document.getElementById("edit-totals-modal"),
+    editTotalsTitle: document.getElementById("edit-totals-title"),
+    editTotalsList: document.getElementById("edit-totals-list"),
+    editTotalsItemTemplate: document.getElementById(
+      "edit-totals-item-template"
+    ),
+  };
+
+  // Cache toast elements
+  domElements.toastElements = {
+    toastContainer: document.getElementById("toast-container"),
+    toastMessage: document.getElementById("toast-message"),
+  };
+
+  // Log initialization status
+  if (allRequiredElementsCached()) {
+    console.log("UI Renderer initialized successfully");
+  } else {
+    console.warn("UI Renderer initialized with missing elements");
+  }
+
+  // Subscribe to state changes
+  stateManager.subscribe(handleStateChange);
+}
+
+/**
+ * Check if all required DOM elements are cached
+ * @returns {boolean} True if all required elements are cached
+ */
+function allRequiredElementsCached() {
+  // Check main views
+  if (
+    !domElements.views.tracker ||
+    !domElements.views["current-week"] ||
+    !domElements.views.history
+  ) {
+    console.warn("Missing main view elements");
+    return false;
+  }
+
+  // Check tracker elements
+  if (
+    !domElements.trackerElements.dailyGoalsList ||
+    !domElements.trackerElements.weeklyGoalsList ||
+    !domElements.trackerElements.foodGroupTemplate
+  ) {
+    console.warn("Missing tracker elements");
+    return false;
+  }
+
+  // Check current week elements
+  if (!domElements.currentWeekElements.currentWeekSummaryContent) {
+    console.warn("Missing current week elements");
+    return false;
+  }
+
+  // Check history elements
+  if (!domElements.historyElements.historyContent) {
+    console.warn("Missing history elements");
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Handle state changes by updating the UI
+ * @param {Object} state - The current state
+ * @param {Object} action - The action that caused the state change
+ */
+function handleStateChange(state, action) {
+  console.log(`State changed due to action: ${action.type}`);
+
+  // Determine what to render based on the action type
+  switch (action.type) {
+    case stateManager.ACTION_TYPES.INITIALIZE_STATE:
+      renderEverything();
+      break;
+
+    case stateManager.ACTION_TYPES.UPDATE_DAILY_COUNT:
+    case stateManager.ACTION_TYPES.UPDATE_WEEKLY_COUNT:
+      renderTrackerItems();
+      renderCurrentWeekSummary();
+      break;
+
+    case stateManager.ACTION_TYPES.RESET_DAILY_COUNTS:
+      renderTrackerItems();
+      break;
+
+    case stateManager.ACTION_TYPES.RESET_WEEKLY_COUNTS:
+      renderTrackerItems();
+      renderCurrentWeekSummary();
+      break;
+
+    case stateManager.ACTION_TYPES.SET_CURRENT_DAY:
+    case stateManager.ACTION_TYPES.SET_CURRENT_WEEK:
+      renderDateElements();
+      break;
+
+    case stateManager.ACTION_TYPES.SET_HISTORY:
+      renderHistory();
+      break;
+
+    case stateManager.ACTION_TYPES.SET_HISTORY_INDEX:
+      renderHistory();
+      break;
+
+    case stateManager.ACTION_TYPES.IMPORT_STATE:
+      renderEverything();
+      break;
+
+    default:
+      // For unknown actions, re-render everything to be safe
+      renderEverything();
+      break;
+  }
+}
+
+/**
+ * Render all UI components
+ */
+function renderEverything() {
+  renderDateElements();
+  renderTrackerItems();
+  renderCurrentWeekSummary();
+  renderHistory();
+}
+
+/**
+ * Render date elements across the UI
+ */
+function renderDateElements() {
+  try {
+    const state = stateManager.getState();
+
+    // Format the current day date
+    const displayDate = new Date(`${state.currentDayDate}T00:00:00`);
+
+    // Update daily goals date element
+    if (domElements.trackerElements.dailyGoalsDateEl) {
+      domElements.trackerElements.dailyGoalsDateEl.textContent =
+        `${displayDate.toLocaleDateString(undefined, { weekday: "short" })}, ` +
+        `${displayDate.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        })}`;
+    }
+
+    // Format the week start date
+    const weekStartDateDisplay = new Date(
+      `${state.currentWeekStartDate}T00:00:00`
+    );
+
+    // Update weekly goals date element
+    if (domElements.trackerElements.weeklyGoalsDateEl) {
+      domElements.trackerElements.weeklyGoalsDateEl.textContent =
+        `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, {
+          weekday: "short",
+        })}, ` +
+        `${weekStartDateDisplay.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        })}`;
+    }
+
+    // Update current week start date element
+    if (domElements.currentWeekElements.currentWeekStartDateEl) {
+      domElements.currentWeekElements.currentWeekStartDateEl.textContent =
+        `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, {
+          weekday: "short",
+        })}, ` +
+        `${weekStartDateDisplay.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        })}`;
+    }
+  } catch (error) {
+    console.error("Error rendering date elements:", error);
+
+    // Handle error display
+    if (domElements.trackerElements.dailyGoalsDateEl) {
+      domElements.trackerElements.dailyGoalsDateEl.textContent = "(Error)";
+    }
+    if (domElements.trackerElements.weeklyGoalsDateEl) {
+      domElements.trackerElements.weeklyGoalsDateEl.textContent = "(Error)";
+    }
+  }
+}
+
+/**
+ * Render the tracker items in the daily tracker view
+ */
+function renderTrackerItems() {
+  const state = stateManager.getState();
+  const { dailyGoalsList, weeklyGoalsList, foodGroupTemplate } =
+    domElements.trackerElements;
+
+  // Ensure we have the required elements
+  if (!dailyGoalsList || !weeklyGoalsList || !foodGroupTemplate) {
+    console.error("Missing required elements for renderTrackerItems");
+    return;
+  }
+
+  // Clear the lists
+  dailyGoalsList.innerHTML = "";
+  weeklyGoalsList.innerHTML = "";
+
+  // Render each food group
+  state.foodGroups.forEach((group) => {
+    // Clone the template
+    const item = foodGroupTemplate.content
+      .cloneNode(true)
+      .querySelector(".food-group-item");
+
+    // Set basic properties
+    item.dataset.id = group.id;
+
+    // Get elements for the name-row structure
+    const nameElement = item.querySelector(".name");
+    const weeklyBadge = item.querySelector(".weekly-badge");
+    const weeklyBadgeValue = item.querySelector(".weekly-badge .wk-val");
+
+    // Set name
+    nameElement.textContent = group.name;
+
+    // Set info button data
+    const infoBtn = item.querySelector(".info-btn");
+    if (infoBtn) {
+      infoBtn.dataset.groupId = group.id;
+    }
+
+    // Format target description
+    let targetDesc = "";
+    const targetVal = group.target;
+    const freqText = group.frequency === "day" ? "day" : "week";
+    const unitText = group.unit || "servings";
+
+    if (group.type === "positive") {
+      targetDesc = `Target: ≥ ${targetVal} ${unitText}/${freqText}`;
+    } else {
+      targetDesc = `Limit: ≤ ${targetVal} ${unitText}/${freqText}`;
+      if (group.isOptional) targetDesc += " (optional)";
+    }
+
+    item.querySelector(".target").textContent = targetDesc;
+
+    // Set up count input
+    const countInput = item.querySelector(".count-input");
+
+    // Daily vs weekly food group handling
+    if (group.frequency === "day") {
+      countInput.value = state.dailyCounts[group.id] || 0;
+      countInput.dataset.frequency = "day";
+
+      // Show weekly badge for daily items
+      if (weeklyBadge) {
+        weeklyBadge.style.display = "inline-flex";
+        weeklyBadgeValue.textContent = state.weeklyCounts[group.id] || 0;
+      }
+    } else {
+      countInput.value = state.weeklyCounts[group.id] || 0;
+      countInput.dataset.frequency = "week";
+
+      // Hide badge for weekly items
+      if (weeklyBadge) {
+        weeklyBadge.style.display = "none";
+      }
+    }
+
+    countInput.dataset.groupid = group.id;
+
+    // Add item to the appropriate list
+    if (group.frequency === "day") {
+      dailyGoalsList.appendChild(item);
+    } else if (group.frequency === "week") {
+      weeklyGoalsList.appendChild(item);
+    }
+  });
+}
+
+/**
+ * Render the current week summary
+ */
+function renderCurrentWeekSummary() {
+  const state = stateManager.getState();
+  const { currentWeekSummaryContent, editCurrentWeekBtn } =
+    domElements.currentWeekElements;
+
+  // Ensure we have the required element
+  if (!currentWeekSummaryContent) {
+    console.error("Missing required element for renderCurrentWeekSummary");
+    return;
+  }
+
+  // Clear previous content
+  currentWeekSummaryContent.innerHTML = "";
+
+  // Create list container
+  const ul = document.createElement("ul");
+
+  // Helper function to get effective weekly target
+  const getWeeklyTarget = (group) => {
+    if (group.frequency === "week") return group.target;
+    if (group.frequency === "day") return group.target * 7; // 7 days per week
+    return group.target; // Fallback for special cases
+  };
+
+  // Render each food group
+  state.foodGroups.forEach((group) => {
+    const li = document.createElement("li");
+    const currentTotal = state.weeklyCounts[group.id] || 0;
+    const weeklyTarget = getWeeklyTarget(group);
+
+    // Determine status class
+    let statusClass = "";
+
+    if (group.type === "positive") {
+      if (currentTotal >= weeklyTarget) statusClass = "goal-met";
+      // Optional: Add 'goal-missed' for unmet positive goals
+    } else {
+      // limit
+      if (currentTotal <= weeklyTarget) statusClass = "limit-ok";
+      if (currentTotal > weeklyTarget * 0.75 && currentTotal <= weeklyTarget)
+        statusClass = "limit-near";
+      if (currentTotal > weeklyTarget) statusClass = "limit-exceeded";
+    }
+
+    // Apply status class if assigned
+    if (statusClass) li.classList.add(statusClass);
+
+    // Create the list item content
+    li.innerHTML = `
+      <span class="food-name">${group.name}</span>
+      <span class="servings">
+        Current: ${currentTotal} / Target ${
+      group.type === "limit" ? "≤" : "≥"
+    } ${weeklyTarget} per week
+      </span>
+    `;
+
+    // Add the list item to the list
+    ul.appendChild(li);
+  });
+
+  // Add the list to the container
+  currentWeekSummaryContent.appendChild(ul);
+
+  // Enable the edit button if it exists
+  if (editCurrentWeekBtn) {
+    editCurrentWeekBtn.disabled = false;
+  }
+}
+
+/**
+ * Render the history view
+ * @param {number} weekIndex - Optional index to display (defaults to current state index)
+ */
+function renderHistory(weekIndex) {
+  const state = stateManager.getState();
+  const {
+    historyContent,
+    historyWeekLabel,
+    prevWeekBtn,
+    nextWeekBtn,
+    historyDatePicker,
+    editHistoryWeekBtn,
+  } = domElements.historyElements;
+
+  // Ensure we have the required element
+  if (!historyContent) {
+    console.error("Missing required element for renderHistory");
+    return;
+  }
+
+  // Clear previous content
+  historyContent.innerHTML = "";
+
+  // Default to disabled edit button
+  if (editHistoryWeekBtn) {
+    editHistoryWeekBtn.disabled = true;
+  }
+
+  // Reset history UI elements
+  if (historyWeekLabel) historyWeekLabel.textContent = "Select a week";
+  if (prevWeekBtn) prevWeekBtn.disabled = true;
+  if (nextWeekBtn) nextWeekBtn.disabled = true;
+  if (historyDatePicker) historyDatePicker.value = "";
+
+  // Check if we have any history data
+  if (!state.history || state.history.length === 0) {
+    historyContent.innerHTML = "<p>No history data available yet.</p>";
+    if (historyWeekLabel) historyWeekLabel.textContent = "No History";
+    return;
+  }
+
+  // Determine which index to display
+  let displayIndex =
+    weekIndex !== undefined ? weekIndex : state.currentHistoryIndex;
+
+  // If index is invalid, default to most recent (index 0)
+  if (displayIndex === -1 || displayIndex >= state.history.length) {
+    displayIndex = 0;
+
+    // Update the state with the corrected index
+    stateManager.dispatch({
+      type: stateManager.ACTION_TYPES.SET_HISTORY_INDEX,
+      payload: { index: displayIndex },
+    });
+  }
+
+  // Get the week data to display
+  const weekData = state.history[displayIndex];
+  if (!weekData) {
+    historyContent.innerHTML =
+      "<p>Error: Could not load selected week data.</p>";
+    if (historyWeekLabel) historyWeekLabel.textContent = "Error";
+    return;
+  }
+
+  // Enable the edit button now that we have valid data
+  if (editHistoryWeekBtn) {
+    editHistoryWeekBtn.disabled = false;
+  }
+
+  // Update navigation UI
+  const weekStartDate = new Date(`${weekData.weekStartDate}T00:00:00`);
+
+  if (historyWeekLabel) {
+    historyWeekLabel.textContent = `Week of ${weekStartDate.toLocaleDateString(
+      undefined,
+      {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }
+    )}`;
+  }
+
+  if (prevWeekBtn) {
+    prevWeekBtn.disabled = displayIndex >= state.history.length - 1;
+  }
+
+  if (nextWeekBtn) {
+    nextWeekBtn.disabled = displayIndex <= 0;
+  }
+
+  if (historyDatePicker) {
+    historyDatePicker.value = weekData.weekStartDate;
+  }
+
+  // Create the list for the history content
+  const ul = document.createElement("ul");
+
+  // Use stored targets if available, otherwise use current config
+  const targets =
+    weekData.targets ||
+    state.foodGroups.reduce((acc, group) => {
+      acc[group.id] = {
+        target: group.target,
+        frequency: group.frequency,
+        type: group.type,
+        unit: group.unit,
+        name: group.name,
+      };
+      return acc;
+    }, {});
+
+  // Get the list of food groups to display
+  const foodGroupsToDisplay = state.foodGroups.filter(
+    (group) =>
+      targets[group.id] ||
+      (weekData.totals && typeof weekData.totals[group.id] !== "undefined")
+  );
+
+  // Render each food group in the history view
+  foodGroupsToDisplay.forEach((group) => {
+    const groupId = group.id;
+    const total = weekData.totals[groupId] || 0;
+    const targetInfo = targets[groupId];
+
+    if (!targetInfo) return; // Skip if no target info found
+
+    // Calculate effective weekly target
+    let effectiveWeeklyTarget;
+    if (targetInfo.frequency === "week") {
+      effectiveWeeklyTarget = targetInfo.target;
+    } else if (targetInfo.frequency === "day") {
+      effectiveWeeklyTarget = targetInfo.target * 7;
+    } else {
+      effectiveWeeklyTarget = targetInfo.target;
+    }
+
+    // Create list item
+    const li = document.createElement("li");
+
+    // Determine status class
+    let statusClass = "";
+    if (targetInfo.type === "positive") {
+      if (total >= effectiveWeeklyTarget) statusClass = "goal-met";
+      else statusClass = "goal-missed";
+    } else {
+      // limit
+      if (total <= effectiveWeeklyTarget) statusClass = "limit-ok";
+      if (
+        effectiveWeeklyTarget > 0 &&
+        total > effectiveWeeklyTarget * 0.75 &&
+        total <= effectiveWeeklyTarget
+      ) {
+        statusClass = "limit-near";
+      }
+      if (total > effectiveWeeklyTarget) statusClass = "limit-exceeded";
+    }
+
+    // Apply status class
+    if (statusClass) li.classList.add(statusClass);
+
+    // Create list item content
+    li.innerHTML = `
+      <span class="food-name">${targetInfo.name || group.name}</span>
+      <span class="servings">
+        Total: ${total} / Target ${
+      targetInfo.type === "limit" ? "≤" : "≥"
+    } ${effectiveWeeklyTarget} per week
+      </span>
+    `;
+
+    // Add list item to the list
+    ul.appendChild(li);
+  });
+
+  // Add the list to the container
+  historyContent.appendChild(ul);
+}
+
+/**
+ * Set the active view
+ * @param {string} viewId - The ID of the view to activate
+ */
+function setActiveView(viewId) {
+  // Hide all views
+  Object.values(domElements.views).forEach((view) => {
+    if (view) view.classList.remove("active-view");
+  });
+
+  // Deactivate all nav buttons
+  if (domElements.navButtons) {
+    domElements.navButtons.forEach((button) =>
+      button.classList.remove("active")
+    );
+  }
+
+  // Show the selected view
+  const activeView = domElements.views[viewId];
+  if (activeView) {
+    activeView.classList.add("active-view");
+  } else {
+    console.error(`Could not find view element for key: ${viewId}`);
+  }
+
+  // Activate the corresponding nav button
+  const activeButton = document.querySelector(
+    `nav button[data-view="${viewId}"]`
+  );
+  if (activeButton) {
+    activeButton.classList.add("active");
+  } else {
+    console.error(`Could not find button element for viewId: ${viewId}`);
+  }
+
+  // Handle view-specific actions
+  if (viewId === "history") {
+    renderHistory();
+  } else if (viewId === "current-week") {
+    renderCurrentWeekSummary();
+  } else if (viewId === "tracker") {
+    // Reset history edit button if on tracker view
+    if (domElements.historyElements.editHistoryWeekBtn) {
+      domElements.historyElements.editHistoryWeekBtn.disabled = true;
+    }
+  }
+
+  // Close any open modals or menus
+  closeModal();
+  closeEditTotalsModal();
+}
+
+/**
+ * Show a toast notification
+ * @param {string} message - The message to display
+ * @param {string} type - The toast type ('success' or 'error')
+ * @param {number} duration - The display duration in milliseconds
+ */
+function showToast(message, type = "success", duration = 3000) {
+  const { toastMessage } = domElements.toastElements;
+
+  if (!toastMessage) return;
+
+  // Clear any existing timeout
+  if (toastTimeout) {
+    clearTimeout(toastTimeout);
+  }
+
+  // Reset classes
+  toastMessage.className = "toast";
+
+  // Set content and style
+  toastMessage.textContent = message;
+  toastMessage.classList.add(`toast-${type}`);
+  toastMessage.classList.add("toast-show");
+
+  // Set timeout to hide
+  toastTimeout = setTimeout(() => {
+    toastMessage.classList.remove("toast-show");
+    toastTimeout = null;
+  }, duration);
+}
+
+/**
+ * Open the generic modal with the new header-style design
+ * @param {string} title - The modal title
+ * @param {string} htmlContent - The modal body content as HTML
+ * @param {Object} options - Additional options for the modal
+ * @param {boolean} options.showFooter - Whether to show a footer with buttons
+ * @param {Array} options.buttons - Array of button configs [{label, id, class, onClick}]
+ */
+function openModal(title, htmlContent, options = {}) {
+  const { genericModal, modalTitle, modalBody, modalCloseBtn } =
+    domElements.modalElements;
+
+  if (!genericModal || !modalBody) {
+    console.error("Modal elements not found", { genericModal, modalBody });
+    return;
+  }
+
+  // Set modal title - ensure it's visible and has content
+  if (modalTitle) {
+    modalTitle.textContent = title || "Dialog";
+    modalTitle.style.display = "block"; // Make sure it's visible
+  }
+
+  // Clear and then set the modal body content
+  if (modalBody) {
+    // Ensure the body is properly reset and visible
+    modalBody.style.display = "block";
+    modalBody.innerHTML = ""; // Clear first
+
+    // Add the content - handle both string and HTML content
+    if (typeof htmlContent === "string") {
+      modalBody.innerHTML = htmlContent;
+    } else if (htmlContent instanceof Element) {
+      modalBody.appendChild(htmlContent);
+    } else {
+      console.warn(
+        "Invalid content type provided to modal:",
+        typeof htmlContent
+      );
+      modalBody.textContent = "Content could not be displayed";
+    }
+  }
+
+  // Handle optional footer with buttons
+  const existingFooter = genericModal.querySelector(".modal-actions");
+  if (existingFooter) {
+    existingFooter.remove(); // Remove any existing footer
+  }
+
+  // Add footer if requested
+  if (options.showFooter && options.buttons && options.buttons.length > 0) {
+    const footer = document.createElement("div");
+    footer.className = "modal-actions";
+
+    // Add buttons to footer
+    options.buttons.forEach((button) => {
+      const btn = document.createElement("button");
+      btn.textContent = button.label;
+      btn.id = button.id || "";
+      btn.className = button.class || "secondary-btn"; // Default to secondary
+
+      if (button.onClick) {
+        btn.addEventListener("click", button.onClick);
+      }
+
+      footer.appendChild(btn);
+    });
+
+    genericModal.querySelector(".modal-content").appendChild(footer);
+  }
+
+  // Show the modal
+  genericModal.classList.add("modal-open");
+
+  // Focus close button for accessibility
+  if (modalCloseBtn) {
+    modalCloseBtn.focus();
+  }
+
+  // Debug output
+  console.log("Modal opened with title:", title);
+  console.log("Modal content length:", htmlContent ? htmlContent.length : 0);
+}
+
+/**
+ * Show a confirmation dialog
+ * @param {Object} options - Dialog options
+ * @param {string} options.title - Dialog title
+ * @param {string} options.message - Main dialog message
+ * @param {string} [options.confirmText='OK'] - Text for confirm button
+ * @param {string} [options.cancelText='Cancel'] - Text for cancel button
+ * @param {string} [options.details=null] - Optional details HTML
+ * @param {string} [options.actionDesc=null] - Optional action description HTML
+ * @returns {Promise<boolean>} Promise resolving to true if confirmed, false if canceled
+ */
+function showConfirmDialog(options) {
+  return new Promise((resolve) => {
+    const {
+      title,
+      message,
+      confirmText = "OK",
+      cancelText = "Cancel",
+      details = null,
+      actionDesc = null,
+    } = options;
+
+    // Prepare the dialog content
+    let dialogContent = "";
+
+    if (details) {
+      dialogContent += `
+        <div class="dialog-import-details">
+          ${details}
+        </div>
+      `;
+    }
+
+    if (actionDesc) {
+      dialogContent += `
+        <div class="dialog-action-description">
+          ${actionDesc}
+        </div>
+      `;
+    }
+
+    dialogContent += `<p>${message}</p>`;
+
+    // Use openModal with the new options for footer buttons
+    openModal(title, dialogContent, {
+      showFooter: true,
+      buttons: [
+        {
+          label: cancelText,
+          id: "confirm-cancel-btn",
+          class: "secondary-btn",
+          onClick: () => {
+            closeModal();
+            resolve(false);
+          },
+        },
+        {
+          label: confirmText,
+          id: "confirm-ok-btn",
+          class: "primary-btn",
+          onClick: () => {
+            closeModal();
+            resolve(true);
+          },
+        },
+      ],
+    });
+  });
+}
+
+/**
+ * Close the generic modal
+ */
+function closeModal() {
+  const { genericModal } = domElements.modalElements;
+
+  if (genericModal) {
+    genericModal.classList.remove("modal-open");
+  }
+}
+
+/**
+ * Close the edit totals modal
+ */
+function closeEditTotalsModal() {
+  const { editTotalsModal } = domElements.modalElements;
+
+  if (editTotalsModal) {
+    editTotalsModal.classList.remove("modal-open");
+  }
+}
+
+// Export public API
+export default {
+  initialize,
+  renderEverything,
+  renderTrackerItems,
+  renderCurrentWeekSummary,
+  renderHistory,
+  renderDateElements,
+  setActiveView,
+  showToast,
+  openModal,
+  showConfirmDialog,
+  closeModal,
+  closeEditTotalsModal,
+};

@@ -16,18 +16,46 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+/* ================================== */
+/* === Base Variables and Setup === */
+/* ================================== */
+
 :root {
     --primary-color: #4CAF50;
+    --primary-dark: #388E3C;
     --secondary-color: #8BC34A;
+    --secondary-dark: #689F38;
     --limit-color: #FF9800;
+    --limit-dark: #F57C00;
+    --error-color: #dc3545;
     --bg-color: #f4f4f4;
     --text-color: #333;
+    --text-muted: #666;
     --card-bg: #ffffff;
     --border-color: #ddd;
     --met-goal-color: #d4edda; /* Light green */
     --missed-goal-color: #f8d7da; /* Light red */
     --near-limit-color: #fff3cd; /* Light yellow */
+    
+    /* Standard spacing */
+    --spacing-xs: 0.3rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 0.8rem;
+    --spacing-lg: 1rem;
+    --spacing-xl: 1.5rem;
+    
+    /* Font sizes */
+    --font-xs: 0.8rem;
+    --font-sm: 0.9rem;
+    --font-md: 1rem;
+    --font-lg: 1.2rem;
+    --font-xl: 1.4rem;
+    --font-xxl: 2rem;
 }
+
+/* ================================== */
+/* === Base Element Styles === */
+/* ================================== */
 
 body {
     font-family: sans-serif;
@@ -37,52 +65,57 @@ body {
     line-height: 1.6;
 }
 
+/* Improvement #3: Sticky Header */
 header {
-    background-color: var(--primary-color); /* From block 1 */
-    color: white;                           /* From block 1 */
-    padding: 1rem;                          /* From block 1 (sets all sides) */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* From block 1 */
-    position: relative;                     /* From block 2 (for menu button) */
-    display: flex;                          /* From block 2 */
-    flex-direction: column;                 /* From block 2 */
-    align-items: center;                    /* From block 2 (centers h1 and nav) */
-    /* text-align: center; removed as flexbox handles alignment */
-    /* padding-bottom: 1rem; removed as padding: 1rem covers it */
+    background-color: var(--primary-color);
+    color: white;
+    padding: var(--spacing-lg);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: sticky; /* Make header sticky */
+    top: 0; /* Stick to top of viewport */
+    z-index: 100; /* Ensure it's above other content */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 header h1 {
-    margin: 0 0 0.5rem 0; /* Top, Right, Bottom, Left - Explicitly set bottom margin */
-    font-size: 2rem;
-    width: 100%; /* Useful for centering text if parent align-items doesn't suffice */
-    text-align: center; /* Keep for explicit centering, though align-items might handle it */
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-xxl);
+    width: 100%;
+    text-align: center;
+}
+
+header nav {
+    margin-top: var(--spacing-sm);
 }
 
 nav button {
     background-color: var(--secondary-color);
     color: white;
     border: none;
-    padding: 0.5rem 1rem;
-    margin: 0 0.5rem;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    margin: 0 var(--spacing-sm);
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s ease;
 }
 
 nav button:hover, nav button.active {
-    background-color: #689F38; /* Darker green */
+    background-color: var(--secondary-dark);
 }
 
 main {
-    padding: 1rem;
+    padding: var(--spacing-lg);
     max-width: 800px;
-    margin: 1rem auto;
+    margin: var(--spacing-lg) auto;
 }
 
 .view {
     display: none; /* Hidden by default */
     background-color: var(--card-bg);
-    padding: 1.5rem;
-    margin-bottom: 1rem;
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
@@ -91,43 +124,145 @@ main {
     display: block; /* Show active view */
 }
 
+/* ================================== */
+/* === Typography & Headings === */
+/* ================================== */
+
 h2, h3 {
     color: var(--primary-color);
     border-bottom: 2px solid var(--secondary-color);
-    padding-bottom: 0.3rem;
-    margin-top: 1.5rem;
-    margin-bottom: 1rem;
+    padding-bottom: var(--spacing-xs);
+    margin-top: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
+    line-height: 1.3; /* Improve readability for wrapped headings */
 }
 
 h2:first-child, h3:first-child {
     margin-top: 0;
 }
 
+/* Styling for Dates in Subheadings */
+.heading-date {
+    font-size: 1rem; /* Larger from the previous 0.85em/0.9rem */
+    font-weight: normal;
+    color: var(--primary-color);
+    margin-left: var(--spacing-sm);
+    display: inline-block; /* Prevent awkward wrapping */
+}
+
+/* ================================== */
+/* === Food Group Item Styling === */
+/* ================================== */
+
+/* Improvement #2: More compact food items for reduced scrolling */
 .food-group-item {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start; /* Changed from center to align with top */
-    padding: 0.8rem 0;
+    align-items: center; /* Change from flex-start to center for vertical alignment */
+    padding: var(--spacing-md) 0;
     border-bottom: 1px solid var(--border-color);
-    flex-wrap: nowrap; /* Add this to prevent wrapping by default */
+    flex-wrap: nowrap;
 }
 
 .food-group-item:last-child {
     border-bottom: none;
 }
 
-.food-group-item .target {
-    font-size: 0.9em;
-    color: #555;
-    white-space: nowrap; /* Add this */
-    overflow: hidden; /* Add this */
-    text-overflow: ellipsis; /* Add this */
+.food-group-item .info {
+    display: flex;
+    margin-right: var(--spacing-lg); /* Increase from var(--spacing-md) for more space */
+    flex: 1;
+    min-width: 0;
 }
 
+/* Info button styling */
+.info-btn {
+    background: none;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: var(--font-xs);
+    font-weight: bold;
+    line-height: 18px;
+    text-align: center;
+    padding: 0;
+    margin-right: var(--spacing-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+    align-self: center; /* Change from flex-start to center */
+    margin-top: 0; /* Remove the top margin since we're centering */
+    transition: background-color 0.2s;
+}
+
+.info-btn:hover {
+    background-color: #efefef;
+}
+
+/* Container for food group text */
+.text-container {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+/* Container for name and badge to be on same line */
+.name-row {
+    display: flex;
+    align-items: center; /* Ensures vertical centering */
+    justify-content: space-between; /* Pushes badge to right side */
+    margin-bottom: var(--spacing-xs);
+    width: 100%;
+}
+
+/* Food group name styling */
+.food-group-item .name {
+    font-weight: bold;
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.3;
+    margin-right: auto; /* Push badge to the right */
+    margin-bottom: 0;
+    flex: 1; /* Allow name to take available space */
+}
+
+/* Weekly badge styling - a more visual badge approach */
+.weekly-badge {
+    background-color: var(--secondary-color);
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 18px;
+    margin-right: var(--spacing-sm); /* Changed from margin-left to margin-right */
+    align-self: center;
+}
+
+/* For weekly items (that don't show the badge) ensure proper spacing */
+.food-group-item[data-frequency="week"] .name {
+    margin-bottom: var(--spacing-xs);
+}
+
+.food-group-item .target {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    white-space: normal; /* Changed from nowrap - Allow wrapping */
+    overflow: visible; /* Changed from hidden - Show all text */
+    line-height: 1.3; /* Better readability for wrapped text */
+}
+
+/* Controls section */
 .food-group-item .controls {
     display: flex;
     align-items: center;
-    flex-shrink: 0; /* Add this to prevent controls from shrinking */
+    flex-shrink: 0;
 }
 
 .food-group-item .controls button {
@@ -136,25 +271,28 @@ h2:first-child, h3:first-child {
     border: none;
     width: 30px;
     height: 30px;
-    font-size: 1.2rem;
+    font-size: var(--font-lg);
     border-radius: 50%;
     cursor: pointer;
-    line-height: 1; /* Center symbol vertically */
-    margin: 0 0.3rem;
+    line-height: 1;
+    margin: 0 var(--spacing-xs);
+    min-width: 30px; /* Ensure minimum touch target size */
 }
+
 .food-group-item .controls button.decrement-btn {
-    background-color: #ffc107; /* Amber */
+    background-color: #ffc107;
 }
 
 .food-group-item .controls input[type="number"] {
-    width: 30px; /* Reduced from 50px */
+    width: 30px;
     text-align: center;
-    padding: 0.4rem;
+    padding: var(--spacing-sm);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-size: 1rem;
+    font-size: var(--font-md);
     -moz-appearance: textfield;
     appearance: textfield;
+    margin: 0 var(--spacing-xs);
 }
 
 .food-group-item .controls input[type="number"]::-webkit-inner-spin-button,
@@ -164,29 +302,33 @@ h2:first-child, h3:first-child {
 }
 
 .food-group-item .current-week-total {
-    font-size: 0.8em;
-    color: #666;
-    margin-left: 0.5rem;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-left: var(--spacing-sm);
     font-style: italic;
 }
 
+/* ================================== */
+/* === History & Summary Styling === */
+/* ================================== */
 
-/* History & Summary Styling */
 .history-nav {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
-    flex-wrap: wrap; /* Allow wrapping on small screens */
+    margin-bottom: var(--spacing-lg);
+    flex-wrap: wrap;
 }
+
 .history-nav button, .history-nav input {
-    padding: 0.5rem;
-    margin: 0.2rem;
+    padding: var(--spacing-sm);
+    margin: var(--spacing-xs);
 }
+
 .history-nav span {
     font-weight: bold;
     text-align: center;
-    flex-grow: 1; /* Allow label to take space */
+    flex-grow: 1;
 }
 
 #history-content ul, #current-week-summary-content ul {
@@ -194,451 +336,72 @@ h2:first-child, h3:first-child {
     padding: 0;
 }
 
+/* Improvement #4: Grid layout for summary/history items */
 #history-content li, #current-week-summary-content li {
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    padding: 0.8rem;
-    margin-bottom: 0.5rem;
-    display: flex;
-    justify-content: space-between;
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+    display: grid; /* Change from flex to grid */
+    grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr); /* Create two columns */
+    align-items: center;
+    gap: var(--spacing-md);
 }
 
 #history-content .food-name, #current-week-summary-content .food-name {
     font-weight: bold;
+    padding-left: var(--spacing-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 #history-content .servings, #current-week-summary-content .servings {
     text-align: right;
+    padding-right: var(--spacing-xs);
+    justify-self: end;
 }
 
 /* Goal Status Highlighting */
-.goal-met {
+.goal-met, .limit-ok {
     background-color: var(--met-goal-color);
     border-left: 5px solid var(--primary-color);
 }
+
 .goal-missed {
     background-color: var(--missed-goal-color);
-    border-left: 5px solid #dc3545; /* Red */
+    border-left: 5px solid var(--error-color);
 }
-.limit-ok {
-     background-color: var(--met-goal-color);
-     border-left: 5px solid var(--primary-color);
-}
+
 .limit-near {
     background-color: var(--near-limit-color);
     border-left: 5px solid var(--limit-color);
 }
+
 .limit-exceeded {
     background-color: var(--missed-goal-color);
-    border-left: 5px solid #dc3545; /* Red */
+    border-left: 5px solid var(--error-color);
 }
 
-
-footer {
-    text-align: center;
-    margin-top: 2rem;
-    padding: 1rem;
-    font-size: 0.9em;
-    color: #777;
-}
-
-/* ================================== */
-/* === Menu & Toast Styles Added === */
-/* ================================== */
-
-
-header nav {
-    margin-top: 0.5rem;
-}
-
-/* --- Hamburger Menu Button (#menu-toggle-btn) --- */
-#menu-toggle-btn {
-    position: absolute;
-    top: 1rem; /* Adjust vertical position */
-    left: 1rem; /* Adjust horizontal position */
-    background: none;
-    border: none;
-    color: white; /* Color for the hamburger icon */
-    font-size: 2rem; /* Size of the icon */
-    cursor: pointer;
-    padding: 0.5rem; /* Clickable area */
-    line-height: 1; /* Prevent extra spacing */
-    z-index: 1100; /* Ensure it's above nav if overlap occurs */
-}
-
-/* --- Main Menu Container Styling (#main-menu, .main-menu) --- */
-.main-menu {
-    display: none; /* Hidden by default */
-    position: absolute;
-    top: 60px; /* Position below header - Adjust based on final header height */
-    left: 10px; /* Align with the button's side */
-    background-color: var(--card-bg); /* Use card background color */
-    border: 1px solid var(--border-color); /* Use border color */
-    border-radius: 5px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 1000; /* Ensure menu is above main content */
-    padding: 0;
-    min-width: 180px; /* Adjust width as needed */
-}
-
-/* Style for when the menu is open */
-.main-menu.menu-open {
-    display: block;
-}
-
-/* Menu List Styling */
-.main-menu ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-/* Menu Item Button Styling */
-.main-menu li button {
-    display: block;
-    width: 100%;
-    padding: 0.9rem 1.2rem; /* Generous padding for touch */
-    background: none;
-    border: none;
-    border-bottom: 1px solid var(--border-color); /* Separator lines */
-    text-align: left;
-    cursor: pointer;
-    font-size: 1rem;
-    color: var(--text-color); /* Use standard text color */
-    transition: background-color 0.2s ease; /* Hover effect */
-}
-.main-menu li button:hover {
-    background-color: var(--bg-color); /* Use main background for hover */
-}
-.main-menu li:last-child button {
-    border-bottom: none; /* Remove border from last item */
-}
-
-
-/* --- Toast Notification Styling --- */
-
-/* Container for positioning */
-#toast-container {
-    position: fixed; /* Stick to viewport */
-    bottom: 25px; /* Position from bottom */
-    left: 50%; /* Center horizontally */
-    transform: translateX(-50%); /* Fine-tune centering */
-    z-index: 2000; /* Above everything else */
-    pointer-events: none; /* Allow clicks to pass through container */
-    width: 90%; /* Max width on small screens */
-    max-width: 450px; /* Max width on larger screens */
-    text-align: center; /* Center the toast message element */
-}
-
-/* The toast message element */
-#toast-message.toast {
-    display: inline-block; /* Allow centering via text-align on container */
-    padding: 12px 25px; /* Comfortable padding */
-    color: white;
-    border-radius: 30px; /* Pill shape */
-    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
-    font-size: 0.95em;
-    opacity: 0; /* Hidden by default */
-    transition: opacity 0.4s ease-in-out; /* Fade animation */
-    margin-bottom: 8px; /* Spacing if multiple toasts were implemented */
-    pointer-events: all; /* Allow interaction with toast if ever needed */
-    cursor: default; /* Standard cursor */
-}
-
-/* Class to show the toast */
-#toast-message.toast.toast-show {
-    opacity: 1;
-}
-
-/* Styling for success toasts */
-#toast-message.toast.toast-success {
-    background-color: var(--primary-color); /* Your primary green */
-}
-
-/* Styling for error toasts */
-#toast-message.toast.toast-error {
-    background-color: #d9534f; /* A common bootstrap danger red */
-}
-
-/* Very small screens */
-@media (max-width: 480px) {
-    /* Copy menu button and toast styles from your existing media query */
-    #menu-toggle-btn {
-        top: 0.5rem;
-        left: 0.5rem;
-        font-size: 1.8rem; /* Slightly smaller */
-    }
-    .main-menu {
-         top: 55px; /* Adjust based on smaller header */
-         left: 5px;
-         min-width: 160px;
-    }
-    /* Make toast slightly smaller on mobile */
-    #toast-message.toast {
-         padding: 10px 20px;
-         font-size: 0.9em;
-    }
-
-    .food-group-item {
-        flex-direction: row;      /* Override stacking */
-        flex-wrap: nowrap;        /* Prevent wrapping */
-        align-items: flex-start;  /* Keep vertical alignment tidy */
-    }
-
-    .food-group-item .info {
-        flex: 1 1 auto;
-        min-width: 0;
-        margin-right: 0.5rem;
-        margin-bottom: 0;         /* Remove stacking spacing */
-    }
-
-    .food-group-item .controls {
-        margin-left: 0;           /* No need for indent */
-        flex-shrink: 0;
-        align-self: flex-start;
-    }
-
-    /* Slightly smaller controls on very small screens */
-    .food-group-item .controls input[type="number"] {
-        width: 30px;
-    }
-
-    .food-group-item .controls button {
-        width: 28px;
-        height: 28px;
-        font-size: 1.1rem;
-    }
-
-    .modal-content {
-        width: 75%;
-        max-width: 340px;
-        margin: auto;
-    }
-
-    #modal-title {
-        font-size: 1.3em;
-        padding-bottom: 0.4rem;
-    }
-
-    #modal-body {
-        font-size: 0.9em;
-        max-height: 70vh;
-        max-width: 360vw;
-    }
-}
-
-/* --- Responsive adjustments for Menu Button --- */
-@media (min-width: 481px) and (max-width: 600px) {
-    /* Keep all your existing code */
-    #menu-toggle-btn {
-        top: 0.5rem;
-        left: 0.5rem;
-        font-size: 1.8rem; /* Slightly smaller */
-    }
-    .main-menu {
-         top: 55px; /* Adjust based on smaller header */
-         left: 5px;
-         min-width: 160px;
-    }
-    /* Make toast slightly smaller on mobile */
-    #toast-message.toast {
-         padding: 10px 20px;
-         font-size: 0.9em;
-    }
-
-    /* Change these styles for medium screens */
-    /* Keep horizontal layout but optimize space */
-    .food-group-item {
-        flex-direction: row; /* Keep horizontal on medium screens */
-    }
-
-    /* Optimize controls size */
-    .food-group-item .controls input[type="number"] {
-        width: 30px; /* Slightly narrower input */
-    }
-
-    .food-group-item .controls button {
-        width: 30px; /* Slightly smaller buttons */
-        height: 30px;
-    }
-
-    /* Ensure text doesn't push controls too far */
-    .food-group-item .info {
-        max-width: 65%; /* Limit how much space info can take */
-        margin-right: 0.5rem; /* Reduce right margin */
-    }
-
-    /* Narrower modal on medium screens */
-    .modal-content {
-        width: 75%;
-        padding: 15px 20px 20px 20px;
-    }
-
-    /* Keep these modal adjustments */
-    #modal-title {
-        font-size: 1.3em;
-        padding-bottom: 0.4rem;
-    }
-
-    #modal-body {
-        font-size: 0.9em;
-        max-height: 70vh;
-    }
-}
-
-/* === Styles for Info Button and Generic Modal === */
-
-.food-group-item .info {
-    display: flex; /* Changed from block to flex */
-    margin-right: 1rem;
-    flex: 1; /* Add this to allow it to grow but not push controls off */
-    min-width: 0; /* Add this to allow content to shrink if needed */
-}
-
-.food-group-item .name-container {
-    display: flex;
-    align-items: center;
-    margin-bottom: 0.3rem; /* Add space between name and target */
-}
-
-.info-btn {
-    background: none;
-    border: 1px solid var(--secondary-color);
-    color: var(--secondary-color);
-    border-radius: 50%;
-    width: 22px;
-    height: 22px;
-    font-size: 0.9em;
-    font-weight: bold;
-    line-height: 20px;
-    text-align: center;
-    padding: 0;
-    margin-right: 0.6rem;
-    cursor: pointer;
-    flex-shrink: 0;
-    align-self: flex-start; /* Add this to align to top */
-    margin-top: 0.2rem; /* Add this for vertical alignment */
-    transition: background-color 0.2s;
-}
-
-.info-btn:hover {
-    background-color: #efefef; /* Light hover effect */
-}
-
-/* Add this new class if you can update your HTML */
-.text-container {
-    display: flex;
-    flex-direction: column;
-    min-width: 0; /* Allow text to shrink rather than force wrapping */
-    flex: 1;
-}
-
-/* Food group name styling */
-.food-group-item .name {
-    font-weight: bold;
-    display: block;
-    margin-bottom: 0.25rem; /* Add this for spacing between name and target */
-    white-space: nowrap; /* Add this */
-    overflow: hidden; /* Add this */
-    text-overflow: ellipsis; /* Add this */
-}
-
-/* --- Generic Modal Styles --- */
-.modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1500; /* Sit on top */
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0,0,0,0.55); /* Semi-transparent overlay */
-}
-
-/* Class added by JS to show modal */
-.modal.modal-open {
-    display: flex; /* Use flex to center content box */
-    align-items: center;
-    justify-content: center;
-}
-
-/* Fix for modal width and spacing */
-.modal-content {
-    background-color: var(--card-bg);
-    margin: auto;
-    padding: 20px 25px 25px 25px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    width: 85%; /* Changed from 90% */
-    max-width: 480px; /* Changed from 550px */
-    position: relative;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    line-height: 1.6;
-}
-
-.modal-close-btn {
-    position: absolute;
-    top: 8px;
-    right: 12px;
-    color: #aaa;
-    background: none;
-    border: none;
-    font-size: 28px;
-    font-weight: bold;
-    line-height: 1;
-    padding: 0;
-    cursor: pointer;
-}
-
-.modal-close-btn:hover,
-.modal-close-btn:focus {
-    color: #333; /* Darker on hover */
-    text-decoration: none;
-}
-
-#modal-title { /* Style for the H3 */
-    margin-top: 0;
-    margin-bottom: 1rem;
-    padding-bottom: 0.6rem;
-    border-bottom: 1px solid var(--border-color);
-    color: var(--primary-color);
-    font-size: 1.4em;
-}
-
-#modal-body { /* Style for the content div */
-    font-size: 0.95em;
-    color: var(--text-color);
-    max-height: 60vh; /* Limit height and allow scroll within modal */
-    overflow-y: auto; /* Add scroll if content overflows */
-}
-
-#modal-body p { /* Example styling if using <p> tags in content */
-    margin-top: 0;
-    margin-bottom: 0.8rem;
-}
-#modal-body p:last-child {
-    margin-bottom: 0;
-}
-
-/* === Styles for Edit Totals Feature === */
-
-/* Styling for Edit Buttons on Views */
+/* Edit buttons for weekly views */
 #edit-current-week-btn,
 #edit-history-week-btn {
     background-color: var(--secondary-color);
     color: white;
     border: none;
-    padding: 0.6rem 1rem;
+    padding: var(--spacing-md) var(--spacing-lg);
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s ease;
-    font-size: 0.9em;
+    font-size: var(--font-sm);
+    margin: var(--spacing-lg) auto;
+    display: block;
+    width: 80%;
+    max-width: 250px;
 }
 
 #edit-current-week-btn:hover,
 #edit-history-week-btn:hover {
-    background-color: #689F38; /* Darker green */
+    background-color: var(--secondary-dark);
 }
 
 #edit-current-week-btn:disabled,
@@ -647,107 +410,400 @@ header nav {
     cursor: not-allowed;
 }
 
-/* Edit Totals Modal List Items */
+/* ================================== */
+/* === Menu & Toast Styles === */
+/* ================================== */
+
+#menu-toggle-btn {
+    position: absolute;
+    top: var(--spacing-lg);
+    left: var(--spacing-lg);
+    background: none;
+    border: none;
+    color: white;
+    font-size: var(--font-xxl);
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    line-height: 1;
+    z-index: 1100;
+}
+
+.main-menu {
+    display: none;
+    position: fixed;
+    top: 60px;
+    left: 10px;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    padding: 0;
+    min-width: 180px;
+}
+
+.main-menu.menu-open {
+    display: block;
+}
+
+.main-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.main-menu li button {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    cursor: pointer;
+    font-size: var(--font-md);
+    color: var(--text-color);
+    transition: background-color 0.2s ease;
+}
+
+.main-menu li button:hover {
+    background-color: var(--bg-color);
+}
+
+.main-menu li:last-child button {
+    border-bottom: none;
+}
+
+/* Toast Notification */
+#toast-container {
+    position: fixed;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    pointer-events: none;
+    width: 90%;
+    max-width: 450px;
+    text-align: center;
+}
+
+#toast-message.toast {
+    display: inline-block;
+    padding: 12px 25px;
+    color: white;
+    border-radius: 30px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+    font-size: var(--font-sm);
+    opacity: 0;
+    transition: opacity 0.4s ease-in-out;
+    margin-bottom: 8px;
+    pointer-events: all;
+    cursor: default;
+}
+
+#toast-message.toast.toast-show {
+    opacity: 1;
+}
+
+#toast-message.toast.toast-success {
+    background-color: var(--primary-color);
+}
+
+#toast-message.toast.toast-error {
+    background-color: #d9534f;
+}
+
+/* ================================== */
+/* === Modal Styles === */
+/* ================================== */
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1500;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.55);
+}
+
+.modal.modal-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* New consistent header style for all modals */
+/* Specific styling for the modal title to override any global h3 styles */
+.modal-title {
+    margin: 0;
+    padding: 0;
+    font-size: var(--font-lg, 1.2rem);
+    font-weight: bold;
+    color: white;
+    border-bottom: none !important; /* Force override any global styles */
+    border: none !important;
+    text-decoration: none !important;
+    line-height: 1.3;
+    font-family: sans-serif; /* Ensure consistent font */
+}
+
+/* Ensure header doesn't inherit unwanted styles */
+.modal-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 15px 20px;
+    position: relative;
+    border-radius: 8px 8px 0 0;
+    margin: -1px;
+    border-bottom: none !important;
+    text-decoration: none !important;
+}
+
+/* Prevent global h3 styles from affecting modal title */
+h3.modal-title {
+    background-color: transparent;
+    border-bottom: none !important;
+    padding-bottom: 0;
+}
+
+/* Updated modal content container */
+.modal-content {
+    background-color: var(--card-bg);
+    margin: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 85%;
+    max-width: 480px;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    overflow: hidden; /* Keep content within rounded corners */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Modal body - renamed from modal-body */
+.modal-body {
+    padding: 20px;
+    font-size: var(--font-sm);
+    color: var(--text-color);
+    max-height: 60vh;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+/* Modal close button - moved to header */
+.modal-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 15px;
+    color: rgba(255,255,255,0.8);
+    background: none;
+    border: none;
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+}
+
+.modal-close-btn:hover,
+.modal-close-btn:focus {
+    color: white;
+    text-shadow: 0 0 2px rgba(255,255,255,0.5);
+}
+
+/* Modal actions container */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 15px 20px;
+    border-top: 1px solid var(--border-color);
+    background-color: #f8f8f8; /* Light gray background */
+}
+
+/* Button styling */
+.modal-actions button {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: var(--font-sm);
+    min-width: 80px; /* Ensure consistent button width */
+}
+
+.primary-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: 1px solid var(--primary-color);
+    font-weight: bold;
+}
+
+.secondary-btn {
+    background-color: #f0f0f0;
+    color: var(--text-color);
+    border: 1px solid #ddd;
+    margin-right: var(--spacing-sm);
+}
+
+/* Styles for import dialog details and action description */
+.dialog-import-details {
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    background-color: #f5f5f5;
+    border-left: 4px solid var(--primary-color);
+    font-size: 0.95em;
+}
+
+.dialog-import-details p {
+    margin: 0.5rem 0;
+}
+
+.dialog-import-details strong {
+    color: #333;
+}
+
+.dialog-action-description {
+    margin: 1rem 0;
+    padding: 0.8rem;
+    background-color: var(--near-limit-color);
+    border-left: 4px solid var(--limit-color);
+    font-weight: bold;
+}
+
+/* Specific modal styles that need to be integrated */
+#edit-totals-list {
+    padding: 0; /* Remove additional padding if present */
+}
+
+/* Specific styles for the Edit Totals modal */
+.edit-totals-body {
+    padding: 20px !important; /* Ensure padding */
+}
+
+#modal-body p {
+    margin-top: 0;
+    margin-bottom: var(--spacing-md);
+}
+
+#modal-body p:last-child {
+    margin-bottom: 0;
+}
+
+/* Edit Totals Modal */
 .edit-totals-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.7rem 0;
+    padding: 12px 0; /* Increased padding for more spacing */
+    margin-bottom: 8px; /* Add margin between items */
     border-bottom: 1px solid var(--border-color);
 }
+
 .edit-totals-item:last-child {
     border-bottom: none;
+    margin-bottom: 0;
 }
+
 .edit-item-name {
     flex-grow: 1;
-    margin-right: 1rem;
+    margin-right: 16px; /* Increased margin */
+    font-weight: 500; /* Slightly bolder */
 }
+
 .edit-item-controls {
     display: flex;
     align-items: center;
+    min-width: 120px; /* Ensure adequate space */
+    justify-content: flex-end;
 }
-.edit-item-controls button { /* Base style for BOTH buttons */
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border-color); /* Keep border or remove if desired */
-    /* background-color: #f0f0f0; */ /* REMOVE this default grey background */
+
+.edit-item-controls button {
+    width: 32px; /* Slightly bigger buttons */
+    height: 32px;
     border-radius: 50%;
     cursor: pointer;
     font-size: 1.1rem;
-    font-weight: bold; /* Make symbols bolder */
-    line-height: 1; /* Adjust if vertical centering is off */
-    margin: 0 0.5rem;
-    color: white; /* ADD text color white */
-    transition: background-color 0.2s; /* Add transition */
+    font-weight: bold;
+    line-height: 1;
+    margin: 0 8px; /* Increased margin for better spacing */
+    color: white;
+    transition: background-color 0.2s;
+    border: none;
 }
 
-/* ADD specific styles for each button type */
 .edit-item-controls button.edit-increment-btn {
-     background-color: var(--secondary-color); /* Green */
-     border-color: var(--secondary-color); /* Match border */
-}
-.edit-item-controls button.edit-decrement-btn {
-     background-color: #ffc107; /* Amber/Yellow */
-     border-color: #ffc107; /* Match border */
+    background-color: var(--secondary-color);
 }
 
-/* ADD hover styles matching main tracker */
+.edit-item-controls button.edit-decrement-btn {
+    background-color: #ffc107;
+}
+
 .edit-item-controls button.edit-increment-btn:hover {
-     background-color: #689F38; /* Darker Green */
-     border-color: #689F38;
+    background-color: var(--secondary-dark);
 }
+
 .edit-item-controls button.edit-decrement-btn:hover {
-     background-color: #e0a800; /* Darker Amber */
-     border-color: #e0a800;
+    background-color: #e0a800;
 }
+
 .edit-current-total {
-    min-width: 30px; /* Ensure space for number */
+    min-width: 30px;
     text-align: center;
     font-weight: bold;
-    font-size: 1.1em;
+    font-size: 1.2rem; /* Larger text */
+    margin: 0 10px; /* Add space around the number */
 }
 
-/* Modal Actions Container */
-.modal-actions {
-    /* text-align: right; */ /* REMOVE this */
-    display: flex;          /* ADD: Use flexbox */
-    justify-content: flex-end; /* ADD: Align items (buttons) to the end (right) */
-    align-items: center;    /* ADD: Vertically align items in the center (optional but good) */
+/* Ensure the close button doesn't inherit unwanted styles */
+#edit-totals-close-btn.modal-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 15px;
+    color: rgba(255,255,255,0.8);
+    background: none;
+    border: none;
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+}
 
-    /* Keep existing styles */
-    margin-top: 1.5rem;
-    padding-top: 1rem;
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-lg);
     border-top: 1px solid var(--border-color);
 }
-/* Styling for buttons within modal actions */
+
 .modal-actions button {
-     padding: 0.6rem 1rem;
-     border-radius: 4px;
-     border: 1px solid var(--border-color);
-     cursor: pointer;
-     font-size: 0.95em;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    font-size: var(--font-sm);
 }
+
 .modal-actions button#edit-totals-save-btn {
     background-color: var(--primary-color);
     color: white;
     border-color: var(--primary-color);
     font-weight: bold;
 }
+
 .modal-actions button#edit-totals-cancel-btn {
-     background-color: #eee;
-     color: #333;
-     margin-right: 0.5rem;
+    background-color: #eee;
+    color: var(--text-color);
+    margin-right: var(--spacing-sm);
 }
 
-/* --- Styling for Dates in Subheadings --- */
-.heading-date {
-    font-size: 0.85em;      /* Make date slightly smaller */
-    font-weight: normal;    /* Make date non-bold */
-    color: var(--primary-color);           /* Match h2,h3 color */
-    margin-left: 0.75em;    /* Space after heading text */
-}
-
-/* --- Custom Confirmation Dialog Styling --- */
+/* Custom Confirmation Dialog */
 .custom-dialog-overlay {
     position: fixed;
     top: 0;
@@ -778,7 +834,7 @@ header nav {
     color: white;
     padding: 15px 20px;
     font-weight: bold;
-    font-size: 1.1em;
+    font-size: var(--font-lg);
 }
 
 .custom-dialog-body {
@@ -789,30 +845,30 @@ header nav {
 }
 
 .custom-dialog-message {
-    margin-bottom: 1rem;
-    white-space: pre-line; /* Preserve line breaks */
+    margin-bottom: var(--spacing-lg);
+    white-space: pre-line;
 }
 
 .dialog-import-details {
-    margin-bottom: 1rem;
-    padding: 0.8rem;
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
     background-color: #f5f5f5;
     border-left: 4px solid var(--primary-color);
-    font-size: 0.95em;
+    font-size: var(--font-sm);
 }
 
 .dialog-import-details p {
-    margin: 0.5rem 0;
+    margin: var(--spacing-sm) 0;
 }
 
 .dialog-import-details strong {
-    color: #333;
+    color: var(--text-color);
 }
 
 .dialog-action-description {
-    margin: 1rem 0;
-    padding: 0.8rem;
-    background-color: #fff3cd; /* Light yellow warning background */
+    margin: var(--spacing-lg) 0;
+    padding: var(--spacing-md);
+    background-color: var(--near-limit-color);
     border-left: 4px solid var(--limit-color);
     font-weight: bold;
 }
@@ -821,7 +877,7 @@ header nav {
     padding: 15px 20px;
     display: flex;
     justify-content: flex-end;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid var(--border-color);
 }
 
 .custom-dialog-footer button {
@@ -829,13 +885,13 @@ header nav {
     margin-left: 10px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.95em;
+    font-size: var(--font-sm);
 }
 
 .custom-dialog-footer .btn-cancel {
     background-color: #f0f0f0;
     border: 1px solid #ddd;
-    color: #333;
+    color: var(--text-color);
 }
 
 .custom-dialog-footer .btn-confirm {
@@ -843,4 +899,122 @@ header nav {
     border: 1px solid var(--primary-color);
     color: white;
     font-weight: bold;
+}
+
+/* ================================== */
+/* === Footer === */
+/* ================================== */
+
+footer {
+    text-align: center;
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    font-size: var(--font-sm);
+    color: #777;
+}
+
+/* ================================== */
+/* === Responsive Styles === */
+/* ================================== */
+
+@media (max-width: 480px) {
+    /* Very small screens */
+    #menu-toggle-btn {
+        top: var(--spacing-sm);
+        left: var(--spacing-sm);
+        font-size: 1.8rem;
+    }
+    
+    .main-menu {
+        top: 55px;
+        left: 5px;
+        min-width: 160px;
+    }
+    
+    #toast-message.toast {
+        padding: 10px 20px;
+        font-size: 0.9em;
+    }
+    
+    .food-group-item {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: flex-start;
+    }
+    
+    .food-group-item .info {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-right: var(--spacing-sm);
+        margin-bottom: 0;
+    }
+    
+    .food-group-item .controls {
+        margin-left: 0;
+        flex-shrink: 0;
+        align-self: flex-start;
+    }
+    
+    .food-group-item .controls input[type="number"] {
+        width: 30px;
+    }
+    
+    .food-group-item .controls button {
+        width: 28px;
+        height: 28px;
+        font-size: 1.1rem;
+    }
+    
+    .modal-content {
+        width: 90%;
+        max-width: 340px;
+        padding: 15px;
+    }
+    
+    #modal-title {
+        font-size: 1.3em;
+        padding-bottom: 0.4rem;
+    }
+    
+    #modal-body {
+        font-size: 0.9em;
+        max-height: 70vh;
+    }
+    
+    /* Optimize grid layout for small screens */
+    #history-content li, #current-week-summary-content li {
+        grid-template-columns: 1fr 1.5fr; /* Adjust column ratio */
+        padding: var(--spacing-sm);
+        gap: var(--spacing-sm);
+    }
+}
+
+@media (min-width: 481px) and (max-width: 600px) {
+    /* Medium small screens */
+    #menu-toggle-btn {
+        top: var(--spacing-sm);
+        left: var(--spacing-sm);
+        font-size: 1.8rem;
+    }
+    
+    .main-menu {
+        top: 55px;
+        left: 5px;
+        min-width: 160px;
+    }
+    
+    #toast-message.toast {
+        padding: 10px 20px;
+        font-size: 0.9em;
+    }
+    
+    .food-group-item .info {
+        max-width: 65%;
+        margin-right: var(--spacing-sm);
+    }
+    
+    .modal-content {
+        width: 80%;
+        padding: 20px;
+    }
 }
