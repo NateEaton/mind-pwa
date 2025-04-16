@@ -1,0 +1,1020 @@
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/* ================================== */
+/* === Base Variables and Setup === */
+/* ================================== */
+
+:root {
+    --primary-color: #4CAF50;
+    --primary-dark: #388E3C;
+    --secondary-color: #8BC34A;
+    --secondary-dark: #689F38;
+    --limit-color: #FF9800;
+    --limit-dark: #F57C00;
+    --error-color: #dc3545;
+    --bg-color: #f4f4f4;
+    --text-color: #333;
+    --text-muted: #666;
+    --card-bg: #ffffff;
+    --border-color: #ddd;
+    --met-goal-color: #d4edda; /* Light green */
+    --missed-goal-color: #f8d7da; /* Light red */
+    --near-limit-color: #fff3cd; /* Light yellow */
+    
+    /* Standard spacing */
+    --spacing-xs: 0.3rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 0.8rem;
+    --spacing-lg: 1rem;
+    --spacing-xl: 1.5rem;
+    
+    /* Font sizes */
+    --font-xs: 0.8rem;
+    --font-sm: 0.9rem;
+    --font-md: 1rem;
+    --font-lg: 1.2rem;
+    --font-xl: 1.4rem;
+    --font-xxl: 2rem;
+}
+
+/* ================================== */
+/* === Base Element Styles === */
+/* ================================== */
+
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+/* Improvement #3: Sticky Header */
+header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: var(--spacing-lg);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: sticky; /* Make header sticky */
+    top: 0; /* Stick to top of viewport */
+    z-index: 100; /* Ensure it's above other content */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+header h1 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-xxl);
+    width: 100%;
+    text-align: center;
+}
+
+header nav {
+    margin-top: var(--spacing-sm);
+}
+
+nav button {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    margin: 0 var(--spacing-sm);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+nav button:hover, nav button.active {
+    background-color: var(--secondary-dark);
+}
+
+main {
+    padding: var(--spacing-lg);
+    max-width: 800px;
+    margin: var(--spacing-lg) auto;
+}
+
+.view {
+    display: none; /* Hidden by default */
+    background-color: var(--card-bg);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.view.active-view {
+    display: block; /* Show active view */
+}
+
+/* ================================== */
+/* === Typography & Headings === */
+/* ================================== */
+
+h2, h3 {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--secondary-color);
+    padding-bottom: var(--spacing-xs);
+    margin-top: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
+    line-height: 1.3; /* Improve readability for wrapped headings */
+}
+
+h2:first-child, h3:first-child {
+    margin-top: 0;
+}
+
+/* Styling for Dates in Subheadings */
+.heading-date {
+    font-size: 1rem; /* Larger from the previous 0.85em/0.9rem */
+    font-weight: normal;
+    color: var(--primary-color);
+    margin-left: var(--spacing-sm);
+    display: inline-block; /* Prevent awkward wrapping */
+}
+
+/* ================================== */
+/* === Food Group Item Styling === */
+/* ================================== */
+
+/* Improvement #2: More compact food items for reduced scrolling */
+.food-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center; /* Change from flex-start to center for vertical alignment */
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: nowrap;
+}
+
+.food-group-item:last-child {
+    border-bottom: none;
+}
+
+.food-group-item .info {
+    display: flex;
+    margin-right: var(--spacing-lg); /* Increase from var(--spacing-md) for more space */
+    flex: 1;
+    min-width: 0;
+}
+
+/* Info button styling */
+.info-btn {
+    background: none;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: var(--font-xs);
+    font-weight: bold;
+    line-height: 18px;
+    text-align: center;
+    padding: 0;
+    margin-right: var(--spacing-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+    align-self: center; /* Change from flex-start to center */
+    margin-top: 0; /* Remove the top margin since we're centering */
+    transition: background-color 0.2s;
+}
+
+.info-btn:hover {
+    background-color: #efefef;
+}
+
+/* Container for food group text */
+.text-container {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+/* Container for name and badge to be on same line */
+.name-row {
+    display: flex;
+    align-items: center; /* Ensures vertical centering */
+    justify-content: space-between; /* Pushes badge to right side */
+    margin-bottom: var(--spacing-xs);
+    width: 100%;
+}
+
+/* Food group name styling */
+.food-group-item .name {
+    font-weight: bold;
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.3;
+    margin-right: auto; /* Push badge to the right */
+    margin-bottom: 0;
+    flex: 1; /* Allow name to take available space */
+}
+
+/* Weekly badge styling - a more visual badge approach */
+.weekly-badge {
+    background-color: var(--secondary-color);
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 18px;
+    margin-right: var(--spacing-sm); /* Changed from margin-left to margin-right */
+    align-self: center;
+}
+
+/* For weekly items (that don't show the badge) ensure proper spacing */
+.food-group-item[data-frequency="week"] .name {
+    margin-bottom: var(--spacing-xs);
+}
+
+.food-group-item .target {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    white-space: normal; /* Changed from nowrap - Allow wrapping */
+    overflow: visible; /* Changed from hidden - Show all text */
+    line-height: 1.3; /* Better readability for wrapped text */
+}
+
+/* Controls section */
+.food-group-item .controls {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.food-group-item .controls button {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    width: 30px;
+    height: 30px;
+    font-size: var(--font-lg);
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1;
+    margin: 0 var(--spacing-xs);
+    min-width: 30px; /* Ensure minimum touch target size */
+}
+
+.food-group-item .controls button.decrement-btn {
+    background-color: #ffc107;
+}
+
+.food-group-item .controls input[type="number"] {
+    width: 30px;
+    text-align: center;
+    padding: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: var(--font-md);
+    -moz-appearance: textfield;
+    appearance: textfield;
+    margin: 0 var(--spacing-xs);
+}
+
+.food-group-item .controls input[type="number"]::-webkit-inner-spin-button,
+.food-group-item .controls input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.food-group-item .current-week-total {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-left: var(--spacing-sm);
+    font-style: italic;
+}
+
+/* ================================== */
+/* === History & Summary Styling === */
+/* ================================== */
+
+.history-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+    flex-wrap: wrap;
+}
+
+.history-nav button, .history-nav input {
+    padding: var(--spacing-sm);
+    margin: var(--spacing-xs);
+}
+
+.history-nav span {
+    font-weight: bold;
+    text-align: center;
+    flex-grow: 1;
+}
+
+#history-content ul, #current-week-summary-content ul {
+    list-style: none;
+    padding: 0;
+}
+
+/* Improvement #4: Grid layout for summary/history items */
+#history-content li, #current-week-summary-content li {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+    display: grid; /* Change from flex to grid */
+    grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr); /* Create two columns */
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+#history-content .food-name, #current-week-summary-content .food-name {
+    font-weight: bold;
+    padding-left: var(--spacing-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#history-content .servings, #current-week-summary-content .servings {
+    text-align: right;
+    padding-right: var(--spacing-xs);
+    justify-self: end;
+}
+
+/* Goal Status Highlighting */
+.goal-met, .limit-ok {
+    background-color: var(--met-goal-color);
+    border-left: 5px solid var(--primary-color);
+}
+
+.goal-missed {
+    background-color: var(--missed-goal-color);
+    border-left: 5px solid var(--error-color);
+}
+
+.limit-near {
+    background-color: var(--near-limit-color);
+    border-left: 5px solid var(--limit-color);
+}
+
+.limit-exceeded {
+    background-color: var(--missed-goal-color);
+    border-left: 5px solid var(--error-color);
+}
+
+/* Edit buttons for weekly views */
+#edit-current-week-btn,
+#edit-history-week-btn {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-size: var(--font-sm);
+    margin: var(--spacing-lg) auto;
+    display: block;
+    width: 80%;
+    max-width: 250px;
+}
+
+#edit-current-week-btn:hover,
+#edit-history-week-btn:hover {
+    background-color: var(--secondary-dark);
+}
+
+#edit-current-week-btn:disabled,
+#edit-history-week-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* ================================== */
+/* === Menu & Toast Styles === */
+/* ================================== */
+
+#menu-toggle-btn {
+    position: absolute;
+    top: var(--spacing-lg);
+    left: var(--spacing-lg);
+    background: none;
+    border: none;
+    color: white;
+    font-size: var(--font-xxl);
+    cursor: pointer;
+    padding: var(--spacing-sm);
+    line-height: 1;
+    z-index: 1100;
+}
+
+.main-menu {
+    display: none;
+    position: fixed;
+    top: 60px;
+    left: 10px;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    padding: 0;
+    min-width: 180px;
+}
+
+.main-menu.menu-open {
+    display: block;
+}
+
+.main-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.main-menu li button {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    cursor: pointer;
+    font-size: var(--font-md);
+    color: var(--text-color);
+    transition: background-color 0.2s ease;
+}
+
+.main-menu li button:hover {
+    background-color: var(--bg-color);
+}
+
+.main-menu li:last-child button {
+    border-bottom: none;
+}
+
+/* Toast Notification */
+#toast-container {
+    position: fixed;
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    pointer-events: none;
+    width: 90%;
+    max-width: 450px;
+    text-align: center;
+}
+
+#toast-message.toast {
+    display: inline-block;
+    padding: 12px 25px;
+    color: white;
+    border-radius: 30px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+    font-size: var(--font-sm);
+    opacity: 0;
+    transition: opacity 0.4s ease-in-out;
+    margin-bottom: 8px;
+    pointer-events: all;
+    cursor: default;
+}
+
+#toast-message.toast.toast-show {
+    opacity: 1;
+}
+
+#toast-message.toast.toast-success {
+    background-color: var(--primary-color);
+}
+
+#toast-message.toast.toast-error {
+    background-color: #d9534f;
+}
+
+/* ================================== */
+/* === Modal Styles === */
+/* ================================== */
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1500;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.55);
+}
+
+.modal.modal-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* New consistent header style for all modals */
+/* Specific styling for the modal title to override any global h3 styles */
+.modal-title {
+    margin: 0;
+    padding: 0;
+    font-size: var(--font-lg, 1.2rem);
+    font-weight: bold;
+    color: white;
+    border-bottom: none !important; /* Force override any global styles */
+    border: none !important;
+    text-decoration: none !important;
+    line-height: 1.3;
+    font-family: sans-serif; /* Ensure consistent font */
+}
+
+/* Ensure header doesn't inherit unwanted styles */
+.modal-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 15px 20px;
+    position: relative;
+    border-radius: 8px 8px 0 0;
+    margin: -1px;
+    border-bottom: none !important;
+    text-decoration: none !important;
+}
+
+/* Prevent global h3 styles from affecting modal title */
+h3.modal-title {
+    background-color: transparent;
+    border-bottom: none !important;
+    padding-bottom: 0;
+}
+
+/* Updated modal content container */
+.modal-content {
+    background-color: var(--card-bg);
+    margin: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 85%;
+    max-width: 480px;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    overflow: hidden; /* Keep content within rounded corners */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Modal body - renamed from modal-body */
+.modal-body {
+    padding: 20px;
+    font-size: var(--font-sm);
+    color: var(--text-color);
+    max-height: 60vh;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+/* Modal close button - moved to header */
+.modal-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 15px;
+    color: rgba(255,255,255,0.8);
+    background: none;
+    border: none;
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+}
+
+.modal-close-btn:hover,
+.modal-close-btn:focus {
+    color: white;
+    text-shadow: 0 0 2px rgba(255,255,255,0.5);
+}
+
+/* Modal actions container */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 15px 20px;
+    border-top: 1px solid var(--border-color);
+    background-color: #f8f8f8; /* Light gray background */
+}
+
+/* Button styling */
+.modal-actions button {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: var(--font-sm);
+    min-width: 80px; /* Ensure consistent button width */
+}
+
+.primary-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: 1px solid var(--primary-color);
+    font-weight: bold;
+}
+
+.secondary-btn {
+    background-color: #f0f0f0;
+    color: var(--text-color);
+    border: 1px solid #ddd;
+    margin-right: var(--spacing-sm);
+}
+
+/* Styles for import dialog details and action description */
+.dialog-import-details {
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    background-color: #f5f5f5;
+    border-left: 4px solid var(--primary-color);
+    font-size: 0.95em;
+}
+
+.dialog-import-details p {
+    margin: 0.5rem 0;
+}
+
+.dialog-import-details strong {
+    color: #333;
+}
+
+.dialog-action-description {
+    margin: 1rem 0;
+    padding: 0.8rem;
+    background-color: var(--near-limit-color);
+    border-left: 4px solid var(--limit-color);
+    font-weight: bold;
+}
+
+/* Specific modal styles that need to be integrated */
+#edit-totals-list {
+    padding: 0; /* Remove additional padding if present */
+}
+
+/* Specific styles for the Edit Totals modal */
+.edit-totals-body {
+    padding: 20px !important; /* Ensure padding */
+}
+
+#modal-body p {
+    margin-top: 0;
+    margin-bottom: var(--spacing-md);
+}
+
+#modal-body p:last-child {
+    margin-bottom: 0;
+}
+
+/* Edit Totals Modal */
+.edit-totals-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0; /* Increased padding for more spacing */
+    margin-bottom: 8px; /* Add margin between items */
+    border-bottom: 1px solid var(--border-color);
+}
+
+.edit-totals-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.edit-item-name {
+    flex-grow: 1;
+    margin-right: 16px; /* Increased margin */
+    font-weight: 500; /* Slightly bolder */
+}
+
+.edit-item-controls {
+    display: flex;
+    align-items: center;
+    min-width: 120px; /* Ensure adequate space */
+    justify-content: flex-end;
+}
+
+.edit-item-controls button {
+    width: 32px; /* Slightly bigger buttons */
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: bold;
+    line-height: 1;
+    margin: 0 8px; /* Increased margin for better spacing */
+    color: white;
+    transition: background-color 0.2s;
+    border: none;
+}
+
+.edit-item-controls button.edit-increment-btn {
+    background-color: var(--secondary-color);
+}
+
+.edit-item-controls button.edit-decrement-btn {
+    background-color: #ffc107;
+}
+
+.edit-item-controls button.edit-increment-btn:hover {
+    background-color: var(--secondary-dark);
+}
+
+.edit-item-controls button.edit-decrement-btn:hover {
+    background-color: #e0a800;
+}
+
+.edit-current-total {
+    min-width: 30px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.2rem; /* Larger text */
+    margin: 0 10px; /* Add space around the number */
+}
+
+/* Ensure the close button doesn't inherit unwanted styles */
+#edit-totals-close-btn.modal-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 15px;
+    color: rgba(255,255,255,0.8);
+    background: none;
+    border: none;
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+}
+
+.modal-actions button {
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    font-size: var(--font-sm);
+}
+
+.modal-actions button#edit-totals-save-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+    font-weight: bold;
+}
+
+.modal-actions button#edit-totals-cancel-btn {
+    background-color: #eee;
+    color: var(--text-color);
+    margin-right: var(--spacing-sm);
+}
+
+/* Custom Confirmation Dialog */
+.custom-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0,0,0,0.6);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.custom-dialog {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.custom-dialog-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 15px 20px;
+    font-weight: bold;
+    font-size: var(--font-lg);
+}
+
+.custom-dialog-body {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 60vh;
+    line-height: 1.5;
+}
+
+.custom-dialog-message {
+    margin-bottom: var(--spacing-lg);
+    white-space: pre-line;
+}
+
+.dialog-import-details {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background-color: #f5f5f5;
+    border-left: 4px solid var(--primary-color);
+    font-size: var(--font-sm);
+}
+
+.dialog-import-details p {
+    margin: var(--spacing-sm) 0;
+}
+
+.dialog-import-details strong {
+    color: var(--text-color);
+}
+
+.dialog-action-description {
+    margin: var(--spacing-lg) 0;
+    padding: var(--spacing-md);
+    background-color: var(--near-limit-color);
+    border-left: 4px solid var(--limit-color);
+    font-weight: bold;
+}
+
+.custom-dialog-footer {
+    padding: 15px 20px;
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border-color);
+}
+
+.custom-dialog-footer button {
+    padding: 8px 16px;
+    margin-left: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: var(--font-sm);
+}
+
+.custom-dialog-footer .btn-cancel {
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    color: var(--text-color);
+}
+
+.custom-dialog-footer .btn-confirm {
+    background-color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    color: white;
+    font-weight: bold;
+}
+
+/* ================================== */
+/* === Footer === */
+/* ================================== */
+
+footer {
+    text-align: center;
+    margin-top: var(--spacing-xl);
+    padding: var(--spacing-lg);
+    font-size: var(--font-sm);
+    color: #777;
+}
+
+/* ================================== */
+/* === Responsive Styles === */
+/* ================================== */
+
+@media (max-width: 480px) {
+    /* Very small screens */
+    #menu-toggle-btn {
+        top: var(--spacing-sm);
+        left: var(--spacing-sm);
+        font-size: 1.8rem;
+    }
+    
+    .main-menu {
+        top: 55px;
+        left: 5px;
+        min-width: 160px;
+    }
+    
+    #toast-message.toast {
+        padding: 10px 20px;
+        font-size: 0.9em;
+    }
+    
+    .food-group-item {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: flex-start;
+    }
+    
+    .food-group-item .info {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-right: var(--spacing-sm);
+        margin-bottom: 0;
+    }
+    
+    .food-group-item .controls {
+        margin-left: 0;
+        flex-shrink: 0;
+        align-self: flex-start;
+    }
+    
+    .food-group-item .controls input[type="number"] {
+        width: 30px;
+    }
+    
+    .food-group-item .controls button {
+        width: 28px;
+        height: 28px;
+        font-size: 1.1rem;
+    }
+    
+    .modal-content {
+        width: 90%;
+        max-width: 340px;
+        padding: 15px;
+    }
+    
+    #modal-title {
+        font-size: 1.3em;
+        padding-bottom: 0.4rem;
+    }
+    
+    #modal-body {
+        font-size: 0.9em;
+        max-height: 70vh;
+    }
+    
+    /* Optimize grid layout for small screens */
+    #history-content li, #current-week-summary-content li {
+        grid-template-columns: 1fr 1.5fr; /* Adjust column ratio */
+        padding: var(--spacing-sm);
+        gap: var(--spacing-sm);
+    }
+}
+
+@media (min-width: 481px) and (max-width: 600px) {
+    /* Medium small screens */
+    #menu-toggle-btn {
+        top: var(--spacing-sm);
+        left: var(--spacing-sm);
+        font-size: 1.8rem;
+    }
+    
+    .main-menu {
+        top: 55px;
+        left: 5px;
+        min-width: 160px;
+    }
+    
+    #toast-message.toast {
+        padding: 10px 20px;
+        font-size: 0.9em;
+    }
+    
+    .food-group-item .info {
+        max-width: 65%;
+        margin-right: var(--spacing-sm);
+    }
+    
+    .modal-content {
+        width: 80%;
+        padding: 20px;
+    }
+}
