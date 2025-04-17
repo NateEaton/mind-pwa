@@ -68,7 +68,7 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 This project was developed with assistance from several AI tools:
 
 - **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro.
-- **Refactoring and Enhancement**: Major refactoring, code organization improvements, and UI enhancements were done with assistance from Anthropic's Claude 3.7 Sonnet.
+- **Refactoring and Enhancement**: Major refactoring, code organization improvements, and UI enhancements were done with assistance from Anthropic's Claude Sonnet 3.7.
 - **Workflow and Code Review**: OpenAI's ChatGPT (GPT-4o) provided assistance with development workflow optimization and code review.
 
 AI assistance was used primarily for code generation, architecture suggestions, and debugging support. The underlying application concept, design decisions, and final implementation responsibility remained with the human developer.
