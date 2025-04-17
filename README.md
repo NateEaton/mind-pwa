@@ -35,15 +35,15 @@ For more information about the MIND diet and the research behind it, visit [Rush
 <div align="center">
   <p><strong>Main Views</strong></p>
   <p>
-    <img src="./screenshots/daily-tracker.png" width="230" alt="Daily Tracker View"/>&nbsp;&nbsp;
-    <img src="./screenshots/weekly-summary.png" width="230" alt="Weekly Summary View"/>&nbsp;&nbsp;
-    <img src="./screenshots/history-view.png" width="230" alt="History View"/>
+    <img src="./screenshots/daily-tracker.png" width="180" alt="Daily Tracker View"/>&nbsp;&nbsp;
+    <img src="./screenshots/weekly-summary.png" width="180" alt="Weekly Summary View"/>&nbsp;&nbsp;
+    <img src="./screenshots/history-view.png" width="180" alt="History View"/>
   </p>
   
   <p><strong>Modal Dialogs</strong></p>
   <p>
-    <img src="./screenshots/food-info-modal.png" width="230" alt="Food Information Modal"/>&nbsp;&nbsp;
-    <img src="./screenshots/edit-totals-modal.png" width="230" alt="Edit Weekly Totals"/>
+    <img src="./screenshots/food-info-modal.png" width="180" alt="Food Information Modal"/>&nbsp;&nbsp;
+    <img src="./screenshots/edit-totals-modal.png" width="180" alt="Edit Weekly Totals"/>
   </p>
 
   <details>
