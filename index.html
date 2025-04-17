@@ -31,15 +31,31 @@
 </head>
 <body>
     <header>
-        <h1>MIND Diet Tracker</h1>
-        <!-- ***** ADD HAMBURGER BUTTON ***** -->
-        <button id="menu-toggle-btn" aria-label="Open menu">☰</button>
-        <!-- ******************************** -->
-        <nav>
-            <button data-view="tracker">Daily Tracker</button>
-            <button data-view="current-week">Current Week</button>
-            <button data-view="history">History</button>
-        </nav>
+        <div class="header-top">
+            <h1>MIND Diet Tracker</h1>
+        </div>
+        
+        <!-- Move navigation to its own container below the header title -->
+        <div class="tab-bar-container">
+            <nav class="tab-bar">
+                <button data-view="tracker" class="tab-item">
+                    <span class="tab-icon">📋</span>
+                    <span class="tab-label">Daily Tracker</span>
+                </button>
+                <button data-view="current-week" class="tab-item">
+                    <span class="tab-icon">📊</span>
+                    <span class="tab-label">Weekly</span>
+                </button>
+                <button data-view="history" class="tab-item">
+                    <span class="tab-icon">📅</span>
+                    <span class="tab-label">History</span>
+                </button>
+                <button id="tab-menu-btn" class="tab-item">
+                    <span class="tab-icon">⋮</span>
+                    <span class="tab-label">Menu</span>
+                </button>
+            </nav>
+        </div>
     </header>
 
     <!-- ***** ADD MENU STRUCTURE (Initially Hidden by CSS) ***** -->

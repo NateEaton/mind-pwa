@@ -189,7 +189,6 @@ let editedTotals = {}; // Temporary object holding edits within the modal
 // DOM Elements - these would eventually be moved to a dedicated module
 const domElements = {
   // Menu elements
-  menuToggleBtn: document.getElementById("menu-toggle-btn"),
   mainMenu: document.getElementById("main-menu"),
   exportBtn: document.getElementById("export-btn"),
   importBtnTrigger: document.getElementById("import-btn-trigger"),
@@ -270,10 +269,20 @@ async function initializeApp() {
  */
 function setupEventListeners() {
   // Navigation buttons (using event delegation)
-  document.querySelector("nav").addEventListener("click", handleNavigation);
+  document
+    .querySelector(".tab-bar")
+    .addEventListener("click", handleNavigation);
+
+  // Menu toggle functionality
+  const tabMenuBtn = document.getElementById("tab-menu-btn");
+  if (tabMenuBtn) {
+    tabMenuBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      toggleMenu();
+    });
+  }
 
   // Menu related
-  domElements.menuToggleBtn.addEventListener("click", toggleMenu);
   document.addEventListener("click", handleOutsideMenuClick);
 
   // Menu items
@@ -372,6 +381,20 @@ function handleNavigation(event) {
  * Toggle the main menu
  */
 function toggleMenu() {
+  const menuBtn = document.getElementById("tab-menu-btn");
+
+  // Only position if the menu isn't already open (to prevent repositioning when closing)
+  if (!domElements.mainMenu.classList.contains("menu-open")) {
+    if (menuBtn) {
+      const menuBtnRect = menuBtn.getBoundingClientRect();
+
+      domElements.mainMenu.style.top = menuBtnRect.bottom + 5 + "px";
+      domElements.mainMenu.style.right =
+        window.innerWidth - menuBtnRect.right + "px";
+      domElements.mainMenu.style.left = "auto";
+    }
+  }
+
   domElements.mainMenu.classList.toggle("menu-open");
 }
 
@@ -380,9 +403,11 @@ function toggleMenu() {
  * @param {Event} event - The click event
  */
 function handleOutsideMenuClick(event) {
+  const tabMenuBtn = document.getElementById("tab-menu-btn");
+
   if (
     !domElements.mainMenu.contains(event.target) &&
-    !domElements.menuToggleBtn.contains(event.target) &&
+    !(tabMenuBtn && tabMenuBtn.contains(event.target)) &&
     domElements.mainMenu.classList.contains("menu-open")
   ) {
     closeMenu();

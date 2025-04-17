@@ -76,8 +76,12 @@ function initialize() {
     history: document.getElementById("history-view"),
   };
 
-  // Cache navigation buttons
-  domElements.navButtons = document.querySelectorAll("nav button[data-view]");
+  // Cache tab bar elements
+  domElements.tabBar = {
+    container: document.querySelector(".tab-bar-container"),
+    navButtons: document.querySelectorAll(".tab-bar .tab-item[data-view]"),
+    menuBtn: document.getElementById("tab-menu-btn"),
+  };
 
   // Cache tracker view elements
   domElements.trackerElements = {
@@ -682,12 +686,9 @@ function setActiveView(viewId) {
     if (view) view.classList.remove("active-view");
   });
 
-  // Deactivate all nav buttons
-  if (domElements.navButtons) {
-    domElements.navButtons.forEach((button) =>
-      button.classList.remove("active")
-    );
-  }
+  // Deactivate all tab buttons
+  const tabButtons = document.querySelectorAll(".tab-bar .tab-item");
+  tabButtons.forEach((button) => button.classList.remove("active"));
 
   // Show the selected view
   const activeView = domElements.views[viewId];
@@ -697,14 +698,12 @@ function setActiveView(viewId) {
     console.error(`Could not find view element for key: ${viewId}`);
   }
 
-  // Activate the corresponding nav button
+  // Activate the corresponding tab button
   const activeButton = document.querySelector(
-    `nav button[data-view="${viewId}"]`
+    `.tab-bar button[data-view="${viewId}"]`
   );
   if (activeButton) {
     activeButton.classList.add("active");
-  } else {
-    console.error(`Could not find button element for viewId: ${viewId}`);
   }
 
   // Handle view-specific actions
