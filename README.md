@@ -32,19 +32,25 @@ For more information about the MIND diet and the research behind it, visit [Rush
 
 ## App Screenshots
 
-<div align="center" style="vertical-align: top">
+<div align="center>
+ <div align="center">
   <p><strong>Main Views</strong></p>
-  <p>
-    <img src="./screenshots/daily-tracker.png" width="180" alt="Daily Tracker View" style="vertical-align: top"/>&nbsp;&nbsp;
-    <img src="./screenshots/weekly-summary.png" width="180" alt="Weekly Summary View" style="vertical-align: top"/>&nbsp;&nbsp;
-    <img src="./screenshots/history-view.png" width="180" alt="History View" style="vertical-align: top"/>
-  </p>
+  <table>
+    <tr valign="top">
+      <td><img src="./screenshots/daily-tracker.png" width="180" alt="Daily Tracker View"/></td>
+      <td><img src="./screenshots/weekly-summary.png" width="180" alt="Weekly Summary View"/></td>
+      <td><img src="./screenshots/history-view.png" width="180" alt="History View"/></td>
+    </tr>
+  </table>
   
   <p><strong>Modal Dialogs</strong></p>
-  <p>
-    <img src="./screenshots/food-info-modal.png" width="180" alt="Food Information Modal" style="vertical-align: top"/>&nbsp;&nbsp;
-    <img src="./screenshots/edit-totals-modal.png" width="180" alt="Edit Weekly Totals" style="vertical-align: top"/>
-  </p>
+  <table>
+    <tr valign="top">
+      <td><img src="./screenshots/food-info-modal.png" width="180" alt="Food Information Modal"/></td>
+      <td><img src="./screenshots/edit-totals-modal.png" width="180" alt="Edit Weekly Totals"/></td>
+    </tr>
+  </table>
+</div>
 
   <details>
     <summary>View Full-Size Screenshots</summary>
