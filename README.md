@@ -32,8 +32,7 @@ For more information about the MIND diet and the research behind it, visit [Rush
 
 ## App Screenshots
 
-<div align="center>
- <div align="center">
+<div align="center">
   <p><strong>Main Views</strong></p>
   <table>
     <tr valign="top">
@@ -50,25 +49,24 @@ For more information about the MIND diet and the research behind it, visit [Rush
       <td><img src="./screenshots/edit-totals-modal.png" width="180" alt="Edit Weekly Totals"/></td>
     </tr>
   </table>
-</div>
 
   <details>
     <summary>View Full-Size Screenshots</summary>
     
-    ### Daily Tracker View
-    ![Daily Tracker showing daily and weekly goals with serving counters](./screenshots/daily-tracker.png)
-    
-    ### Weekly Summary View
-    ![Weekly Summary showing progress toward targets with color-coded indicators](./screenshots/weekly-summary.png)
-    
-    ### History View
-    ![History View showing past weeks' data with color-coded status](./screenshots/history-view.png)
-    
-    ### Food Information Modal
-    ![Food Information Modal showing serving size details](./screenshots/food-info-modal.png)
-    
-    ### Edit Weekly Totals
-    ![Edit Weekly Totals Modal for adjusting weekly servings](./screenshots/edit-totals-modal.png)
+### Daily Tracker View
+![Daily Tracker showing daily and weekly goals with serving counters](./screenshots/daily-tracker.png)
+
+### Weekly Summary View
+![Weekly Summary showing progress toward targets with color-coded indicators](./screenshots/weekly-summary.png)
+
+### History View
+![History View showing past weeks' data with color-coded status](./screenshots/history-view.png)
+
+### Food Information Modal
+![Food Information Modal showing serving size details](./screenshots/food-info-modal.png)
+
+### Edit Weekly Totals
+![Edit Weekly Totals Modal for adjusting weekly servings](./screenshots/edit-totals-modal.png)
   </details>
 </div>
 
