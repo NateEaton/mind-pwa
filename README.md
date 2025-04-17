@@ -32,7 +32,7 @@ For more information about the MIND diet and the research behind it, visit [Rush
 
 ## App Screenshots
 
-<div align="center">
+<div align="center" style="vertical-align: top">
   <p><strong>Main Views</strong></p>
   <p>
     <img src="./screenshots/daily-tracker.png" width="180" alt="Daily Tracker View" style="vertical-align: top"/>&nbsp;&nbsp;
