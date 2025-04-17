@@ -2,7 +2,82 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-A simple Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history, all stored locally in your browser.
+A simple Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history, all stored locally on your device.
+
+## What is the MIND Diet?
+
+The MIND (Mediterranean-DASH Intervention for Neurodegenerative Delay) diet was developed by researchers at Rush University Medical Center, led by the late Dr. Martha Clare Morris. It combines elements of the Mediterranean and DASH (Dietary Approaches to Stop Hypertension) diets, focusing specifically on foods and nutrients that scientific research has shown may promote brain health and potentially reduce the risk of cognitive decline.
+
+The MIND diet emphasizes consuming:
+- 2+ servings of vegetables daily (including 1 serving of leafy greens)
+- 3 servings of whole grains daily
+- Beans/legumes 3 times weekly
+- Nuts or nut butters 5 times weekly
+- Berries (especially blueberries) 5 times weekly
+- 2 tablespoons of extra virgin olive oil daily
+- Fish at least once weekly
+- Poultry twice weekly
+- Moderate wine consumption (optional)
+
+It also recommends limiting:
+- Red meat (less than 4 servings weekly)
+- Butter and margarine (less than 1 tablespoon daily)
+- Cheese (less than 1 serving weekly)
+- Pastries and sweets (limited servings)
+- Fried and fast food (less than 1 serving weekly)
+
+The diet has shown promising results in observational studies, with research suggesting that even moderate adherence to the MIND diet principles may be associated with reduced risk of Alzheimer's disease and slower cognitive decline. The MIND diet is currently being further evaluated in clinical trials.
+
+For more information about the MIND diet and the research behind it, visit [Rush University's MIND Diet information page](https://www.rushu.rush.edu/news/rushs-mind-diet-again-ranked-among-best).
+
+## App Screenshots
+
+### Daily Tracker View
+![Daily Tracker showing daily and weekly goals with serving counters](./screenshots/daily-tracker.png)
+
+### Weekly Summary View
+![Weekly Summary showing progress toward targets with color-coded indicators](./screenshots/weekly-summary.png)
+
+### History View
+![History View showing past weeks' data with color-coded status](./screenshots/history-view.png)
+
+### Food Information Modal
+![Food Information Modal showing serving size details](./screenshots/food-info-modal.png)
+
+### Edit Weekly Totals
+![Edit Weekly Totals Modal for adjusting weekly servings](./screenshots/edit-totals-modal.png)
+
+## How to Use the MIND Diet Tracker
+
+### Getting Started
+1. **Open the app** in any modern web browser or install it to your home screen as a PWA
+2. **Daily Tracking:** Use the "Daily Tracker" view to:
+   - Record servings for each food group using the + and - buttons
+   - View your daily counts and running weekly totals
+   - Tap the ⓘ icon next to any food group for serving size information
+
+### Monitoring Progress
+1. **Weekly Summary:** Switch to the "Weekly" view to:
+   - See your progress toward weekly targets
+   - View color-coded status indicators (green for goals met, yellow for approaching limits, red for exceeding limits)
+   - Edit weekly totals if needed using the "Edit Weekly Totals" button
+
+### Viewing History
+1. **History View:** Access the "History" view to:
+   - Browse through previous weeks' data
+   - Navigate using the date picker or prev/next buttons
+   - Edit historical data if needed
+
+### Additional Features
+- **Menu** (☰): Access additional options:
+  - **Export Data**: Save your tracking data as a JSON file
+  - **Import Data**: Restore previously exported data
+  - **About**: View app information and version details
+
+### Understanding Color Coding
+- **Green**: Target met or limit respected
+- **Yellow**: Approaching but not yet meeting target (or approaching limit)
+- **Red**: Target not met or limit exceeded
 
 ## Features
 
@@ -34,6 +109,16 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 *   Manifest.json (for PWA installability)
 *   Node.js (for Git hook version generation during development)
 
+## Development Acknowledgments
+
+This project was developed with assistance from several AI tools:
+
+- **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro.
+- **Refactoring and Enhancement**: Major refactoring, code organization improvements, and UI enhancements were done with assistance from Anthropic's Claude 3.7 Sonnet.
+- **Workflow and Code Review**: OpenAI's ChatGPT (GPT-4o) provided assistance with development workflow optimization and code review.
+
+AI assistance was used primarily for code generation, architecture suggestions, and debugging support. The underlying application concept, design decisions, and final implementation responsibility remained with the human developer.
+
 ## Installation / Deployment (Self-Hosting)
 
 This application is designed to be hosted as a static website. You can run the version deployed on Vercel using the link above or follow the directions below.
@@ -44,15 +129,6 @@ This application is designed to be hosted as a static website. You can run the v
 4.  **Deploy Files:** Place all the files and folders (`index.html`, `app.js`, `db.js`, `style.css`, `sw.js`, `manifest.json`, `version.json`, `icons/` folder, etc.) into a web-accessible directory on your server.
 5.  **Configure Server (if needed):** Ensure your web server is configured to correctly serve files with standard MIME types.
 6.  **Access via HTTPS:** To use PWA installation features and Service Workers reliably, access the deployed application using an **HTTPS** connection.
-
-## Usage
-
-Once deployed, navigate to the application URL in a modern web browser.
-*   Use the navigation buttons (`Daily Tracker`, `Current Week`, `History`) to switch views.
-*   Use the `+` / `-` buttons or type in the input fields on the "Daily Tracker" view to record servings.
-*   Click the `ⓘ` icon next to a food group name for serving size details.
-*   Use the menu (☰ icon) for Import/Export, About, and Settings options.
-*   Use the "Edit Weekly Totals" buttons on the "Current Week" or "History" views to adjust recorded totals after the fact.
 
 ## Future Enhancements (Potential Ideas)
 
@@ -74,4 +150,3 @@ The core principles of the GPLv3 ensure that users have the freedom to run, stud
 See the [LICENSE](LICENSE) file for the full license text.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-
