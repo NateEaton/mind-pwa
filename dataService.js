@@ -329,13 +329,67 @@ async function dbOperation(storeName, mode, operation) {
 }
 
 /**
+ * Normalize week data into a standard history record format
+ * @param {Object} weekData - Base week data (must contain weekStartDate)
+ * @param {Object} [options] - Additional options
+ * @param {Object} [options.existingRecord] - Existing record for this week if any
+ * @param {Object} [options.foodGroups] - Food groups configuration to build targets
+ * @param {Object} [options.importInfo] - Information about an import if this is from import
+ * @returns {Object} Normalized history record
+ */
+function normalizeWeekData(weekData, options = {}) {
+  const now = getCurrentTimestamp();
+  const weekStartDate = weekData.weekStartDate;
+  const existingRecord = options.existingRecord || null;
+
+  // Build targets object
+  let targets = weekData.targets || {};
+
+  // If targets not provided but we have foodGroups, build them
+  if (Object.keys(targets).length === 0 && options.foodGroups) {
+    options.foodGroups.forEach((group) => {
+      targets[group.id] = {
+        target: group.target,
+        frequency: group.frequency,
+        type: group.type,
+        unit: group.unit,
+      };
+    });
+  }
+
+  // Build metadata
+  const metadata = {
+    createdAt: existingRecord?.metadata?.createdAt || now,
+    updatedAt: now,
+    schemaVersion: SCHEMA.VERSION,
+    deviceInfo: getDeviceInfo(),
+    deviceId: getDeviceId(),
+    syncStatus: options.importInfo ? "imported" : "local",
+  };
+
+  // Add import details if available
+  if (options.importInfo) {
+    metadata.importedFrom = options.importInfo.deviceId || "unknown";
+  }
+
+  // Create normalized record structure
+  return {
+    id: existingRecord?.id || generateUUID(),
+    weekStartDate: weekStartDate,
+    weekEndDate: getWeekEndDate(weekStartDate),
+    totals: weekData.totals || weekData.weeklyCounts || {},
+    targets: targets,
+    metadata: metadata,
+  };
+}
+
+/**
  * Save a week's history data to IndexedDB with normalized structure
  * @param {Object} weekData - The week data to save
+ * @param {Object} [options] - Additional options
  * @returns {Promise<void>} Promise that resolves when save is complete
  */
-async function saveWeekHistory(weekData) {
-  // Normalize and enhance the data structure
-  const now = getCurrentTimestamp();
+async function saveWeekHistory(weekData, options = {}) {
   const weekStartDate = weekData.weekStartDate;
 
   // Get the existing record if it exists
@@ -358,21 +412,10 @@ async function saveWeekHistory(weekData) {
   }
 
   // Create normalized record structure
-  const normalizedRecord = {
-    id: existingRecord?.id || generateUUID(),
-    weekStartDate: weekStartDate,
-    weekEndDate: getWeekEndDate(weekStartDate),
-    totals: weekData.totals || {},
-    targets: weekData.targets || {},
-    metadata: {
-      createdAt: existingRecord?.metadata?.createdAt || now,
-      updatedAt: now,
-      schemaVersion: SCHEMA.VERSION,
-      deviceInfo: getDeviceInfo(),
-      deviceId: getDeviceId(),
-      syncStatus: "local",
-    },
-  };
+  const normalizedRecord = normalizeWeekData(weekData, {
+    existingRecord,
+    ...options,
+  });
 
   // Save the normalized record
   return dbOperation(
@@ -397,6 +440,29 @@ async function saveWeekHistory(weekData) {
         reject(new Error(`Error saving week data: ${event.target.error}`));
     }
   );
+}
+
+/**
+ * Create a history record from imported current state data
+ * @param {Object} currentStateData - The current state data to convert
+ * @param {Object} importInfo - Import related information
+ * @param {Array} foodGroups - The food groups configuration with targets
+ * @returns {Object} A properly formatted history record
+ */
+function createHistoryFromCurrentState(
+  currentStateData,
+  importInfo,
+  foodGroups
+) {
+  const weekData = {
+    weekStartDate: currentStateData.currentWeekStartDate,
+    totals: currentStateData.weeklyCounts,
+  };
+
+  return normalizeWeekData(weekData, {
+    foodGroups,
+    importInfo,
+  });
 }
 
 /**
@@ -871,10 +937,16 @@ async function importData(importedData) {
       );
     }
 
-    // 1. Clear existing data
-    console.log("Clearing existing data...");
-    await clearHistoryStore();
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    // Check if this is a partial import (like PAST_WEEK scenario)
+    const isPartialImport =
+      importedData.currentState?.metadata?.partialImport === true;
+
+    if (!isPartialImport) {
+      // 1. Clear existing data only for full imports
+      console.log("Clearing existing data...");
+      await clearHistoryStore();
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
 
     // 2. Restore current state with timestamp
     if (importedData.currentState) {
@@ -1170,6 +1242,7 @@ export default {
   // Import/Export
   exportData,
   importData,
+  createHistoryFromCurrentState,
 
   // Diagnostics
   getDBStats,
