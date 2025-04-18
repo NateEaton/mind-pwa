@@ -107,125 +107,37 @@ export class CloudSyncManager {
     }
   }
 
-  // In CloudSyncManager.js - enhance syncCurrentWeek
-  async syncCurrentWeek() {
-    // Define the filename for current week data
-    const currentWeekFileName = "mind-diet-current-week.json";
+  async syncCurrentWeek(forceUpload = false) {
+    console.log("=== Starting Current Week Sync ===");
 
-    // Find or create the file in the cloud
-    const fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
-
-    // Get local current week data
-    const localData = this.dataService.loadState();
-    console.log("Local data for sync:", {
-      structure: Object.keys(localData),
-      dailyCountsKeys: Object.keys(localData.dailyCounts || {}),
-      weeklyCountsKeys: Object.keys(localData.weeklyCounts || {}),
-      lastModified: localData.lastModified,
-      timestamp: new Date(localData.lastModified).toISOString(),
-    });
-
-    // Ensure localData has required fields
-    if (!localData.lastModified) {
-      localData.lastModified = Date.now();
-    }
-
-    // Download remote data if it exists
-    let remoteData = null;
     try {
-      remoteData = await this.provider.downloadFile(fileInfo.id);
-      console.log("Downloaded remote data:", remoteData);
+      // Define the filename for current week data
+      const currentWeekFileName = "mind-diet-current-week.json";
 
-      // Validate remote data
-      if (!this.validateData(remoteData, "current")) {
-        console.log("Remote data is invalid, uploading local data");
-        await this.provider.uploadFile(fileInfo.id, localData);
-        return;
+      // Find or create the file in the cloud
+      const fileInfo = await this.provider.findOrCreateFile(
+        currentWeekFileName
+      );
+      console.log("Current week file info:", fileInfo);
+
+      // Get local current week data
+      const localData = this.dataService.loadState();
+
+      // Ensure valid timestamps
+      if (!localData.lastModified) {
+        console.log("Adding missing lastModified timestamp");
+        localData.lastModified = Date.now();
       }
 
-      // Check if remote data is valid
-      if (
-        !remoteData ||
-        typeof remoteData !== "object" ||
-        Object.keys(remoteData).length === 0
-      ) {
-        console.log("Remote data is empty or invalid, uploading local data");
-        await this.provider.uploadFile(fileInfo.id, localData);
-        return;
-      }
+      // Always use forceUpload approach for now until we resolve the issues
+      console.log("Using direct upload approach");
+      await this.provider.uploadFile(fileInfo.id, localData);
+      console.log("Successfully uploaded local data to server");
+
+      return;
     } catch (error) {
-      console.warn("Could not download current week file:", error);
-      // If we can't download, just upload our local copy
-      await this.provider.uploadFile(fileInfo.id, localData);
-      return;
-    }
-
-    if (!remoteData) {
-      // No remote data exists yet, just upload local data
-      console.log("No remote data found, uploading local data");
-      await this.provider.uploadFile(fileInfo.id, localData);
-      return;
-    }
-
-    // Compare modification timestamps to detect conflicts
-    const localModified = localData.lastModified || 0;
-    const remoteModified = remoteData.lastModified || 0;
-
-    console.log(
-      "Comparing timestamps - Local:",
-      new Date(localModified).toISOString(),
-      "Remote:",
-      new Date(remoteModified).toISOString()
-    );
-
-    if (remoteModified > localModified) {
-      // Remote is newer, use it but merge with current day data
-      console.log("Remote data is newer, merging with local data");
-      const mergedData = this.mergeCurrentWeekData(localData, remoteData);
-
-      // Log specific counts before and after
-      console.log("LOCAL food counts:", JSON.stringify(localData.weeklyCounts));
-      console.log(
-        "REMOTE food counts:",
-        JSON.stringify(remoteData.weeklyCounts)
-      );
-      console.log(
-        "MERGED food counts:",
-        JSON.stringify(mergedData.weeklyCounts)
-      );
-
-      // Save merged data locally
-      this.dataService.saveState(mergedData);
-
-      // Upload merged data back to cloud
-      console.log("Uploading merged data back to cloud");
-      await this.provider.uploadFile(fileInfo.id, mergedData);
-    } else if (localModified > remoteModified) {
-      // Local is newer, upload it
-      console.log("Local data is newer, uploading to cloud");
-      await this.provider.uploadFile(fileInfo.id, localData);
-    } else {
-      // Same timestamp, check if content is actually different
-      const localJSON = JSON.stringify(localData);
-      const remoteJSON = JSON.stringify(remoteData);
-
-      if (localJSON !== remoteJSON) {
-        console.log(
-          "Timestamps are equal but content differs, performing full merge"
-        );
-        const mergedData = this.mergeCurrentWeekData(localData, remoteData);
-
-        // Save merged data locally
-        this.dataService.saveState(mergedData);
-
-        // Upload merged data back to cloud
-        console.log(
-          "Uploading merged data back to cloud after content-based merge"
-        );
-        await this.provider.uploadFile(fileInfo.id, mergedData);
-      } else {
-        console.log("Current week data already in sync (content identical)");
-      }
+      console.error("Error in current week sync:", error);
+      throw error;
     }
   }
 
@@ -360,72 +272,33 @@ export class CloudSyncManager {
     return true;
   }
 
-  async syncHistory() {
-    const historyFileName = "mind-diet-history.json";
+  async syncHistory(forceUpload = false) {
+    console.log("=== Starting History Sync ===");
 
-    // Find or create the file in the cloud
-    const fileInfo = await this.provider.findOrCreateFile(historyFileName);
-
-    // Get local history data
-    const localHistory = await this.dataService.getAllWeekHistory();
-    console.log("Local history for sync:", {
-      count: localHistory.length,
-      firstItem: localHistory.length > 0 ? localHistory[0] : null,
-    });
-
-    // Download remote history if it exists
-    let remoteHistory = [];
     try {
-      const remoteData = await this.provider.downloadFile(fileInfo.id);
-      console.log("Remote history data:", remoteData);
+      const historyFileName = "mind-diet-history.json";
 
-      if (remoteData && typeof remoteData === "object") {
-        // Handle both array format and {history: []} format
-        if (Array.isArray(remoteData)) {
-          remoteHistory = remoteData;
-        } else if (remoteData.history && Array.isArray(remoteData.history)) {
-          remoteHistory = remoteData.history;
-        }
-      }
+      // Find or create the file in the cloud
+      const fileInfo = await this.provider.findOrCreateFile(historyFileName);
 
-      console.log("Parsed remote history:", {
-        count: remoteHistory.length,
-        firstItem: remoteHistory.length > 0 ? remoteHistory[0] : null,
+      // Get local history data
+      const localHistory = await this.dataService.getAllWeekHistory();
+      console.log("Local history for sync:", {
+        count: localHistory.length,
+        firstItem: localHistory.length > 0 ? localHistory[0] : null,
       });
-    } catch (error) {
-      console.warn("Could not download history file:", error);
-      // If we can't download, just upload our local copy
+
+      // Always use direct upload approach
       const historyPackage = { history: localHistory };
       await this.provider.uploadFile(fileInfo.id, historyPackage);
       this.lastHistorySyncTimestamp = Date.now();
+      console.log("Successfully uploaded history data to server");
+
       return;
+    } catch (error) {
+      console.error("Error in history sync:", error);
+      throw error;
     }
-
-    if (remoteHistory.length === 0) {
-      // No remote history exists yet, just upload local history
-      await this.provider.uploadFile(fileInfo.id, { history: localHistory });
-      this.lastHistorySyncTimestamp = Date.now();
-      return;
-    }
-
-    // Merge histories by week key
-    const mergedHistory = this.mergeHistoryData(localHistory, remoteHistory);
-
-    // If there were changes, save locally and upload
-    if (mergedHistory.changed) {
-      // Save merged history locally
-      await this.dataService.clearHistoryStore();
-      for (const weekData of mergedHistory.data) {
-        await this.dataService.saveWeekHistory(weekData);
-      }
-
-      // Upload merged history
-      await this.provider.uploadFile(fileInfo.id, {
-        history: mergedHistory.data,
-      });
-    }
-
-    this.lastHistorySyncTimestamp = Date.now();
   }
 
   mergeHistoryData(localHistory, remoteHistory) {

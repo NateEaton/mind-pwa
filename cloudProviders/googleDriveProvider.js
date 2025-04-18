@@ -233,28 +233,126 @@ class GoogleDriveProvider {
     }
   }
 
+  async uploadFile(fileId, content) {
+    console.log(`Uploading to file ID: ${fileId}...`);
+
+    // Ensure content is non-empty
+    if (
+      !content ||
+      (typeof content === "object" && Object.keys(content).length === 0)
+    ) {
+      console.error("Cannot upload empty content:", content);
+      throw new Error("Cannot upload empty or null content");
+    }
+
+    // Convert to string ensuring valid JSON
+    let contentStr;
+    try {
+      contentStr = JSON.stringify(content);
+    } catch (e) {
+      console.error("Failed to stringify content:", e);
+      throw new Error("Content cannot be converted to JSON");
+    }
+
+    const contentSize = contentStr.length;
+    console.log(
+      `Content size: ${contentSize} bytes, preview:`,
+      contentStr.length > 200
+        ? contentStr.substring(0, 200) + "..."
+        : contentStr
+    );
+
+    // Create blob with proper MIME type
+    const contentBlob = new Blob([contentStr], {
+      type: "application/json",
+    });
+
+    try {
+      // Use the simple media upload approach
+      const response = await this.gapi.client.request({
+        path: `/upload/drive/v3/files/${fileId}`,
+        method: "PATCH",
+        params: { uploadType: "media" },
+        body: contentBlob,
+      });
+
+      console.log(`Upload successful:`, response.result);
+      return response.result;
+    } catch (error) {
+      console.error(`Error uploading to file ${fileId}:`, error);
+      throw error;
+    }
+  }
+
   async downloadFile(fileId) {
     try {
       console.log(`Downloading file with ID: ${fileId}...`);
+
+      // First, try to get the file metadata to check properties
+      const metadataResponse = await this.gapi.client.drive.files.get({
+        fileId: fileId,
+        fields: "id,name,mimeType,size",
+      });
+
+      console.log("File metadata:", metadataResponse.result);
+
+      // Then download the content
       const response = await this.gapi.client.drive.files.get({
         fileId: fileId,
         alt: "media",
       });
-  
-      const contentSize = JSON.stringify(response.result).length;
-      console.log(
-        `Downloaded file content (${contentSize} bytes)`,
-        contentSize < 1000 ? response.result : "Content too large to log"
-      );
-      
-      if (response.result) {
-        console.log("Downloaded data structure:", Object.keys(response.result));
-        if (response.result.weeklyCounts) {
-          console.log("Weekly counts in downloaded data:", response.result.weeklyCounts);
-        }
+
+      // Validate response
+      if (!response || !response.body) {
+        console.error("Empty response from Google Drive API");
+        return null;
       }
-  
-      return response.result;
+
+      // Log the raw response for debugging
+      console.log("Raw response body type:", typeof response.body);
+      console.log(
+        "Raw response sample:",
+        typeof response.body === "string"
+          ? response.body.substring(0, 100)
+          : JSON.stringify(response.body).substring(0, 100)
+      );
+
+      // Process the response based on type
+      let parsedContent;
+
+      if (typeof response.body === "string") {
+        // Handle string response
+        if (response.body.trim() === "") {
+          console.error("Downloaded empty string from Google Drive");
+          return null;
+        }
+
+        try {
+          // Try to parse as JSON
+          parsedContent = JSON.parse(response.body);
+          console.log("Parsed string response as JSON object");
+        } catch (e) {
+          console.warn("Could not parse response as JSON:", e);
+          // Return the string if it's not empty
+          parsedContent = response.body;
+        }
+      } else {
+        // Handle object response
+        parsedContent = response.body;
+      }
+
+      // Final validation of content
+      if (
+        !parsedContent ||
+        (typeof parsedContent === "object" &&
+          Object.keys(parsedContent).length === 0)
+      ) {
+        console.error("Downloaded empty content from Google Drive");
+        return null;
+      }
+
+      console.log("Downloaded content:", parsedContent);
+      return parsedContent;
     } catch (error) {
       if (error.status === 404) {
         console.log(`File with ID ${fileId} not found`);
@@ -264,39 +362,6 @@ class GoogleDriveProvider {
       throw error;
     }
   }
-
-  async uploadFile(fileId, content) {
-    console.log(`Uploading to file ID: ${fileId}...`);
-    // Log the content structure and first ~100 characters to verify it's not empty
-    console.log("Content structure:", Object.keys(content));
-    const contentStr = JSON.stringify(content);
-    console.log("Content preview:", contentStr.substring(0, 100) + (contentStr.length > 100 ? "..." : ""));
-    const contentSize = contentStr.length;
-    console.log(`Content size: ${contentSize} bytes`);
-  
-    if (contentSize <= 2) {
-      console.error("Attempted to upload empty content! Aborting upload.");
-      throw new Error("Cannot upload empty content");
-    }
-  
-    const contentBlob = new Blob([contentStr], {
-      type: "application/json",
-    });
-  
-    try {
-      const response = await this.gapi.client.request({
-        path: `/upload/drive/v3/files/${fileId}`,
-        method: "PATCH",
-        params: { uploadType: "media" },
-        body: contentBlob,
-      });
-  
-      console.log(`Upload successful:`, response.result);
-      return response.result;
-    } catch (error) {
-      console.error(`Error uploading to file ${fileId}:`, error);
-      throw error;
-    }
-  }
+}
 
 export default GoogleDriveProvider;
