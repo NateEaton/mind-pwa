@@ -514,6 +514,30 @@ function getFoodGroup(id) {
   return state.foodGroups.find(group => group.id === id) || null;
 }
 
+async reload() {
+  console.log("Reloading state from data service");
+  
+  // Load fresh data from data service
+  const freshData = dataService.loadState();
+  console.log("Fresh data loaded:", freshData);
+  
+  // Update state with fresh data
+  this.dispatch({
+    type: this.ACTION_TYPES.SET_STATE,
+    payload: freshData
+  });
+  
+  // Also reload history if needed
+  const historyData = await dataService.getAllWeekHistory();
+  this.dispatch({
+    type: this.ACTION_TYPES.SET_HISTORY,
+    payload: { history: historyData }
+  });
+  
+  console.log("State reloaded");
+  return true;
+}
+
 // Export public API
 export default {
   // State management
