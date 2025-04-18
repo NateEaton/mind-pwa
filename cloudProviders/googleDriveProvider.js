@@ -267,11 +267,19 @@ class GoogleDriveProvider {
 
   async uploadFile(fileId, content) {
     console.log(`Uploading to file ID: ${fileId}...`);
-    const contentSize = JSON.stringify(content).length;
+    // Log the content structure and first ~100 characters to verify it's not empty
+    console.log("Content structure:", Object.keys(content));
+    const contentStr = JSON.stringify(content);
+    console.log("Content preview:", contentStr.substring(0, 100) + (contentStr.length > 100 ? "..." : ""));
+    const contentSize = contentStr.length;
     console.log(`Content size: ${contentSize} bytes`);
-    console.log("Content to upload:", JSON.stringify(content).substring(0, 500) + "...");
   
-    const contentBlob = new Blob([JSON.stringify(content)], {
+    if (contentSize <= 2) {
+      console.error("Attempted to upload empty content! Aborting upload.");
+      throw new Error("Cannot upload empty content");
+    }
+  
+    const contentBlob = new Blob([contentStr], {
       type: "application/json",
     });
   
@@ -284,7 +292,6 @@ class GoogleDriveProvider {
       });
   
       console.log(`Upload successful:`, response.result);
-      console.log(`Upload timestamp: ${new Date().toISOString()}`);
       return response.result;
     } catch (error) {
       console.error(`Error uploading to file ${fileId}:`, error);

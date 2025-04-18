@@ -114,48 +114,44 @@ export class CloudSyncManager {
 
     // Find or create the file in the cloud
     const fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
-    console.log("Current week file info:", fileInfo);
 
     // Get local current week data
     const localData = this.dataService.loadState();
+    console.log("Local data for sync:", {
+      structure: Object.keys(localData),
+      dailyCountsKeys: Object.keys(localData.dailyCounts || {}),
+      weeklyCountsKeys: Object.keys(localData.weeklyCounts || {}),
+      lastModified: localData.lastModified,
+      timestamp: new Date(localData.lastModified).toISOString(),
+    });
 
-    // Ensure lastModified exists and is a number
+    // Ensure localData has required fields
     if (!localData.lastModified) {
       localData.lastModified = Date.now();
-      console.log(
-        "Added missing lastModified timestamp to local data:",
-        localData.lastModified
-      );
     }
-
-    console.log(
-      "Local data timestamp:",
-      localData.lastModified,
-      "formatted:",
-      new Date(localData.lastModified).toISOString()
-    );
 
     // Download remote data if it exists
     let remoteData = null;
     try {
       remoteData = await this.provider.downloadFile(fileInfo.id);
+      console.log("Downloaded remote data:", remoteData);
 
-      // Ensure remote data has a lastModified as well
-      if (remoteData && !remoteData.lastModified) {
-        remoteData.lastModified = Date.now() - 10000; // Slightly older than local
-        console.log(
-          "Added missing lastModified timestamp to remote data:",
-          remoteData.lastModified
-        );
+      // Validate remote data
+      if (!this.validateData(remoteData, "current")) {
+        console.log("Remote data is invalid, uploading local data");
+        await this.provider.uploadFile(fileInfo.id, localData);
+        return;
       }
 
-      if (remoteData) {
-        console.log(
-          "Remote data timestamp:",
-          remoteData.lastModified,
-          "formatted:",
-          new Date(remoteData.lastModified).toISOString()
-        );
+      // Check if remote data is valid
+      if (
+        !remoteData ||
+        typeof remoteData !== "object" ||
+        Object.keys(remoteData).length === 0
+      ) {
+        console.log("Remote data is empty or invalid, uploading local data");
+        await this.provider.uploadFile(fileInfo.id, localData);
+        return;
       }
     } catch (error) {
       console.warn("Could not download current week file:", error);
@@ -372,18 +368,35 @@ export class CloudSyncManager {
 
     // Get local history data
     const localHistory = await this.dataService.getAllWeekHistory();
+    console.log("Local history for sync:", {
+      count: localHistory.length,
+      firstItem: localHistory.length > 0 ? localHistory[0] : null,
+    });
 
     // Download remote history if it exists
     let remoteHistory = [];
     try {
       const remoteData = await this.provider.downloadFile(fileInfo.id);
-      if (remoteData && Array.isArray(remoteData.history)) {
-        remoteHistory = remoteData.history;
+      console.log("Remote history data:", remoteData);
+
+      if (remoteData && typeof remoteData === "object") {
+        // Handle both array format and {history: []} format
+        if (Array.isArray(remoteData)) {
+          remoteHistory = remoteData;
+        } else if (remoteData.history && Array.isArray(remoteData.history)) {
+          remoteHistory = remoteData.history;
+        }
       }
+
+      console.log("Parsed remote history:", {
+        count: remoteHistory.length,
+        firstItem: remoteHistory.length > 0 ? remoteHistory[0] : null,
+      });
     } catch (error) {
       console.warn("Could not download history file:", error);
       // If we can't download, just upload our local copy
-      await this.provider.uploadFile(fileInfo.id, { history: localHistory });
+      const historyPackage = { history: localHistory };
+      await this.provider.uploadFile(fileInfo.id, historyPackage);
       this.lastHistorySyncTimestamp = Date.now();
       return;
     }
@@ -520,6 +533,43 @@ export class CloudSyncManager {
     }
 
     // If no constraints or can't detect, allow sync
+    return true;
+  }
+
+  // Add this to CloudSyncManager
+  validateData(data, type = "current") {
+    if (!data || typeof data !== "object") {
+      console.error(`Invalid ${type} data:`, data);
+      return false;
+    }
+
+    if (type === "current") {
+      // Must have these fields for current week data
+      const requiredFields = [
+        "currentDayDate",
+        "currentWeekStartDate",
+        "dailyCounts",
+        "weeklyCounts",
+      ];
+      const missingFields = requiredFields.filter((field) => !(field in data));
+
+      if (missingFields.length > 0) {
+        console.error(
+          `Current week data missing required fields:`,
+          missingFields
+        );
+        return false;
+      }
+
+      // Ensure lastModified is present
+      if (!data.lastModified) {
+        console.warn(
+          "Current week data missing lastModified timestamp, adding one"
+        );
+        data.lastModified = Date.now() - 10000; // Slightly older than "now"
+      }
+    }
+
     return true;
   }
 }

@@ -514,12 +514,18 @@ function getFoodGroup(id) {
   return state.foodGroups.find(group => group.id === id) || null;
 }
 
+// Add to stateManager
 async reload() {
   console.log("Reloading state from data service");
   
   // Load fresh data from data service
-  const freshData = dataService.loadState();
-  console.log("Fresh data loaded:", freshData);
+  const freshData = this.dataService.loadState();
+  console.log("Fresh data loaded:", {
+    dayDate: freshData.currentDayDate,
+    weekStartDate: freshData.currentWeekStartDate,
+    dailyCounts: Object.keys(freshData.dailyCounts || {}),
+    weeklyCounts: Object.keys(freshData.weeklyCounts || {})
+  });
   
   // Update state with fresh data
   this.dispatch({
@@ -528,13 +534,15 @@ async reload() {
   });
   
   // Also reload history if needed
-  const historyData = await dataService.getAllWeekHistory();
+  const historyData = await this.dataService.getAllWeekHistory();
+  console.log("History data loaded:", historyData.length, "weeks");
+  
   this.dispatch({
     type: this.ACTION_TYPES.SET_HISTORY,
     payload: { history: historyData }
   });
   
-  console.log("State reloaded");
+  console.log("State reloaded successfully");
   return true;
 }
 

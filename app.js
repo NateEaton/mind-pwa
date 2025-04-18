@@ -1405,20 +1405,33 @@ async function syncData(silent = false) {
   }
 
   try {
-    console.log("Starting sync operation...");
+    console.log("Starting sync operation");
     const result = await cloudSync.sync();
     console.log("Sync completed:", result);
 
-    // After successful sync, need to reload state from data service
-    // This ensures UI reflects the latest data from the server
-    console.log("Reloading state from data service after sync");
-    await stateManager.reload();
+    // Force a complete reload of state from dataService
+    console.log("Reloading state after sync");
+    if (typeof stateManager.reload === "function") {
+      await stateManager.reload();
+    } else {
+      console.warn("stateManager.reload not found, manually reloading state");
+      // Fallback if reload method doesn't exist
+      const freshData = dataService.loadState();
+      stateManager.dispatch({
+        type: stateManager.ACTION_TYPES.SET_STATE,
+        payload: freshData,
+      });
 
-    // After state reload, refresh UI completely
-    console.log("Refreshing UI after sync");
+      const historyData = await dataService.getAllWeekHistory();
+      stateManager.dispatch({
+        type: stateManager.ACTION_TYPES.SET_HISTORY,
+        payload: { history: historyData },
+      });
+    }
+
+    // Now refresh the UI
+    console.log("Refreshing UI after state reload");
     uiRenderer.renderEverything();
-
-    console.log("Sync and UI refresh complete");
 
     if (!silent) {
       uiRenderer.showToast("Data synchronized successfully!", "success");
