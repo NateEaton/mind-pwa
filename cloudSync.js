@@ -129,12 +129,28 @@ export class CloudSyncManager {
         localData.lastModified = Date.now();
       }
 
-      // Always use forceUpload approach for now until we resolve the issues
-      console.log("Using direct upload approach");
-      await this.provider.uploadFile(fileInfo.id, localData);
-      console.log("Successfully uploaded local data to server");
+      // First, download remote data
+      console.log("Downloading remote data...");
+      let remoteData = await this.provider.downloadFile(fileInfo.id);
 
-      return;
+      // If remote data exists and is valid, merge with local
+      let dataToUpload = localData;
+      if (remoteData && this.validateData(remoteData, "current")) {
+        console.log("Remote data found, merging with local data");
+        dataToUpload = this.mergeCurrentWeekData(localData, remoteData);
+
+        // Update local store with merged data
+        console.log("Updating local store with merged data");
+        this.dataService.saveState(dataToUpload);
+      } else {
+        console.log("No valid remote data, using local data only");
+      }
+
+      // Upload the (possibly merged) data
+      await this.provider.uploadFile(fileInfo.id, dataToUpload);
+      console.log("Successfully uploaded data to server");
+
+      return dataToUpload;
     } catch (error) {
       console.error("Error in current week sync:", error);
       throw error;

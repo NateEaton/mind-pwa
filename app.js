@@ -1382,7 +1382,6 @@ function handleSyncError(error) {
   }
 }
 
-// In app.js - enhance syncData function to ensure UI refresh
 async function syncData(silent = false) {
   console.log("syncData called", {
     cloudSync,
@@ -1401,17 +1400,21 @@ async function syncData(silent = false) {
   }
 
   if (!silent) {
-    uiRenderer.showToast("Syncing data...", "info", 1000);
+    uiRenderer.showToast("Syncing data...", "info", 2000);
   }
 
   try {
     console.log("Starting sync operation");
+    // Update UI to show sync in progress
+    updateSyncUIElements();
+
     const result = await cloudSync.sync();
     console.log("Sync completed:", result);
 
     // Force a complete reload of state from dataService
     console.log("Reloading state after sync");
     if (typeof stateManager.reload === "function") {
+      console.log("stateManager.reload is typeof function, calling reload");
       await stateManager.reload();
     } else {
       console.warn("stateManager.reload not found, manually reloading state");
@@ -1439,6 +1442,14 @@ async function syncData(silent = false) {
   } catch (error) {
     console.error("Sync error:", error);
     handleSyncError(error);
+  } finally {
+    // Make sure syncInProgress is set to false if the cloudSync object exists
+    if (cloudSync) {
+      cloudSync.syncInProgress = false;
+    }
+
+    // Update the UI elements to reflect current state
+    updateSyncUIElements();
   }
 }
 

@@ -235,54 +235,42 @@ class GoogleDriveProvider {
 
   async uploadFile(fileId, content) {
     console.log(`Uploading to file ID: ${fileId}...`);
-
-    // Ensure content is non-empty
-    if (
-      !content ||
-      (typeof content === "object" && Object.keys(content).length === 0)
-    ) {
+  
+    if (!content || (typeof content === "object" && Object.keys(content).length === 0)) {
       console.error("Cannot upload empty content:", content);
       throw new Error("Cannot upload empty or null content");
     }
-
-    // Convert to string ensuring valid JSON
-    let contentStr;
+  
+    const contentStr = JSON.stringify(content);
+    const accessToken = this.gapi.client.getToken().access_token;
+  
     try {
-      contentStr = JSON.stringify(content);
-    } catch (e) {
-      console.error("Failed to stringify content:", e);
-      throw new Error("Content cannot be converted to JSON");
-    }
-
-    const contentSize = contentStr.length;
-    console.log(
-      `Content size: ${contentSize} bytes, preview:`,
-      contentStr.length > 200
-        ? contentStr.substring(0, 200) + "..."
-        : contentStr
-    );
-
-    // Create blob with proper MIME type
-    const contentBlob = new Blob([contentStr], {
-      type: "application/json",
-    });
-
-    try {
-      // Use the simple media upload approach
-      const response = await this.gapi.client.request({
-        path: `/upload/drive/v3/files/${fileId}`,
-        method: "PATCH",
-        params: { uploadType: "media" },
-        body: contentBlob,
-      });
-
-      console.log(`Upload successful:`, response.result);
-      return response.result;
+      const response = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "Content-Length": contentStr.length.toString(),
+          },
+          body: contentStr,
+        }
+      );
+  
+      const result = await response.json();
+      console.log("Upload result:", result);
+  
+      // Optionally verify immediately
+      const verifyData = await this.downloadFile(fileId);
+      console.log("Verification data:", verifyData);
+      return result;
     } catch (error) {
-      console.error(`Error uploading to file ${fileId}:`, error);
+      console.error("Upload failed:", error);
       throw error;
     }
   }
+
 
   async downloadFile(fileId) {
     try {
@@ -309,13 +297,18 @@ class GoogleDriveProvider {
       }
 
       // Log the raw response for debugging
-      console.log("Raw response body type:", typeof response.body);
-      console.log(
-        "Raw response sample:",
-        typeof response.body === "string"
-          ? response.body.substring(0, 100)
-          : JSON.stringify(response.body).substring(0, 100)
-      );
+      //console.log("Raw response body type:", typeof response.body);
+      //console.log(
+      //  "Raw response sample:",
+      //  typeof response.body === "string"
+      //    ? response.body.substring(0, 100)
+      //    : JSON.stringify(response.body).substring(0, 100)
+      //);
+      console.log("Raw response:", typeof response.body, response.body);
+      if (response.body === "{}" || response.body === "" || !response.body) {
+        console.log("Received empty JSON object from Google Drive");
+        return null;
+      }
 
       // Process the response based on type
       let parsedContent;
