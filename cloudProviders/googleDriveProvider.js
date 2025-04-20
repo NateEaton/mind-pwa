@@ -1,9 +1,10 @@
 // cloudProviders/googleDriveProvider.js
+import { CONFIG } from "../config.js";
+
 class GoogleDriveProvider {
   constructor() {
-    this.CLIENT_ID =
-      "3317861929-kdi9gcksdifd67cfa3j5jk55kp9jdh3v.apps.googleusercontent.com";
-    this.API_KEY = "AIzaSyDXAO61SD6EMIrzeU57HUmQZWJH6vUy_64";
+    this.GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID;
+    this.GOOGLE_API_KEY = CONFIG.GOOGLE_API_KEY;
     this.SCOPES = "https://www.googleapis.com/auth/drive.appdata";
     this.DISCOVERY_DOCS = [
       "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
@@ -26,7 +27,7 @@ class GoogleDriveProvider {
             async () => {
               try {
                 await window.gapi.client.init({
-                  apiKey: this.API_KEY,
+                  apiKey: this.GOOGLE_API_KEY,
                   discoveryDocs: this.DISCOVERY_DOCS,
                   scope: this.SCOPES,
                 });
@@ -38,7 +39,7 @@ class GoogleDriveProvider {
                 gisScript.onload = () => {
                   this.tokenClient =
                     window.google.accounts.oauth2.initTokenClient({
-                      client_id: this.CLIENT_ID,
+                      client_id: this.GOOGLE_CLIENT_ID,
                       scope: this.SCOPES,
                       callback: "", // Will be set later
                     });
@@ -194,7 +195,9 @@ class GoogleDriveProvider {
   async findOrCreateFile(filename, mimeType = "application/json") {
     try {
       // Search for the file in the app data folder
-      console.log(`Searching for file '${filename}' in appDataFolder...`);
+      console.log(
+        `Searching for Google Drive file '${filename}' in appDataFolder...`
+      );
       const response = await this.gapi.client.drive.files.list({
         spaces: "appDataFolder",
         fields: "files(id, name, modifiedTime)",
@@ -234,16 +237,19 @@ class GoogleDriveProvider {
   }
 
   async uploadFile(fileId, content) {
-    console.log(`Uploading to file ID: ${fileId}...`);
-  
-    if (!content || (typeof content === "object" && Object.keys(content).length === 0)) {
+    console.log(`Uploading to Google Drive file ID: ${fileId}...`);
+
+    if (
+      !content ||
+      (typeof content === "object" && Object.keys(content).length === 0)
+    ) {
       console.error("Cannot upload empty content:", content);
       throw new Error("Cannot upload empty or null content");
     }
-  
+
     const contentStr = JSON.stringify(content);
     const accessToken = this.gapi.client.getToken().access_token;
-  
+
     try {
       const response = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
@@ -257,10 +263,10 @@ class GoogleDriveProvider {
           body: contentStr,
         }
       );
-  
+
       const result = await response.json();
       console.log("Upload result:", result);
-  
+
       // Optionally verify immediately
       const verifyData = await this.downloadFile(fileId);
       console.log("Verification data:", verifyData);
@@ -271,10 +277,9 @@ class GoogleDriveProvider {
     }
   }
 
-
   async downloadFile(fileId) {
     try {
-      console.log(`Downloading file with ID: ${fileId}...`);
+      console.log(`Downloading Google Drive file with ID: ${fileId}...`);
 
       // First, try to get the file metadata to check properties
       const metadataResponse = await this.gapi.client.drive.files.get({

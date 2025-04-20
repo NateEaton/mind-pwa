@@ -374,9 +374,44 @@ async function initializeApp() {
   console.log("Initializing app...");
 
   try {
+    // Check for pending sync provider change from Dropbox auth
+    const pendingSyncStr = localStorage.getItem("pendingSync");
+    let pendingSync = null;
+
+    if (pendingSyncStr) {
+      try {
+        pendingSync = JSON.parse(pendingSyncStr);
+        // Only use if recent (within last 5 minutes)
+        const pendingAge = Date.now() - pendingSync.timestamp;
+        if (pendingAge > 5 * 60 * 1000) {
+          console.log("Pending sync settings expired, ignoring");
+          pendingSync = null;
+        } else {
+          console.log("Found pending sync settings:", pendingSync);
+        }
+
+        // Clear the pending sync data
+        localStorage.removeItem("pendingSync");
+      } catch (e) {
+        console.error("Error parsing pending sync settings:", e);
+      }
+    }
+
     // Initialize data service first
     await dataService.initialize();
     console.log("Data service initialized");
+
+    // Apply pending sync settings if available
+    if (pendingSync && pendingSync.provider) {
+      console.log("Applying pending sync provider:", pendingSync.provider);
+      await dataService.savePreference("cloudSyncEnabled", true);
+      await dataService.savePreference(
+        "cloudSyncProvider",
+        pendingSync.provider
+      );
+      // Force syncEnabled true in memory
+      syncEnabled = true;
+    }
 
     // Get user preference for cloud sync
     syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
@@ -1469,16 +1504,50 @@ function handleSettings() {
   showSyncSettings();
 }
 
-// Add a sync settings dialog
 function showSyncSettings() {
   closeMenu();
 
-  // Get current sync settings
-  const syncEnabled = dataService.getPreference("cloudSyncEnabled", false);
-  const currentSyncProvider = dataService.getPreference(
-    "cloudSyncProvider",
-    "gdrive"
-  );
+  // Force a fresh read of the preference from the data service
+  dataService
+    .getPreference("cloudSyncEnabled", false)
+    .then((freshValue) => {
+      // Use the console to debug the actual value
+      console.log(
+        "Settings dialog opening with cloud sync enabled:",
+        freshValue,
+        "Global variable:",
+        syncEnabled
+      );
+
+      // Override the global variable to match what's in storage
+      syncEnabled = freshValue;
+    })
+    .catch((err) => {
+      console.error("Error loading sync enabled preference:", err);
+    });
+
+  // Use the global variable (which should now match storage)
+  let syncEnabled = window.syncEnabled || false;
+
+  // Determine the actual current provider
+  let currentSyncProvider;
+  if (cloudSync && cloudSync.provider) {
+    // If we have an active cloud sync, check what type it is
+    currentSyncProvider = cloudSync.provider.constructor.name.includes(
+      "Dropbox"
+    )
+      ? "dropbox"
+      : "gdrive";
+    console.log("Active provider detected:", currentSyncProvider);
+  } else {
+    // Fall back to saved preference
+    currentSyncProvider = dataService.getPreference(
+      "cloudSyncProvider",
+      "gdrive"
+    );
+    console.log("Using saved provider preference:", currentSyncProvider);
+  }
+
   const autoSyncInterval = dataService.getPreference("autoSyncInterval", 15);
   const syncWifiOnly = dataService.getPreference("syncWifiOnly", false);
 
@@ -1664,8 +1733,11 @@ function saveSettingsAndCloseModal() {
   dataService.savePreference("autoSyncInterval", autoSyncInterval);
   dataService.savePreference("syncWifiOnly", syncWifiOnly);
 
-  // Update global variables
-  syncEnabled = newSyncEnabled; // Use the global variable
+  // Update global variables - ensure this directly modifies the global variable
+  window.syncEnabled = newSyncEnabled; // Use window to modify global scope
+  syncEnabled = newSyncEnabled; // Update local reference too
+
+  console.log("Saved sync settings, syncEnabled =", syncEnabled);
 
   // Handle cloud sync initialization or cleanup based on enabled status
   if (syncEnabled) {
@@ -1729,6 +1801,7 @@ function saveSettingsAndCloseModal() {
     }
     cloudSync = null;
     setSyncReady(false);
+    console.log("Cloud sync disabled completely");
   }
 
   // Update the main menu Sync Now button
