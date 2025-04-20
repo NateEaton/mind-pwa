@@ -1,4 +1,13 @@
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get __dirname equivalent in ES Module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Step back to root (if this script is in /scripts or similar)
+const outputPath = path.join(__dirname, "..", "config.js");
 
 const config = {
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
@@ -8,5 +17,5 @@ const config = {
 
 const content = `export const CONFIG = ${JSON.stringify(config, null, 2)};\n`;
 
-fs.writeFileSync("config.js", content);
-console.log("✅ config.js generated");
+fs.writeFileSync(outputPath, content);
+console.log(`✅ config.js generated at ${outputPath}`);
