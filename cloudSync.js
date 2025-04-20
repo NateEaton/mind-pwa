@@ -22,11 +22,17 @@ export class CloudSyncManager {
     } else {
       throw new Error(`Unsupported cloud provider: ${providerName}`);
     }
-
+  
     // Load sync state before initializing provider
     this.loadSyncState();
-
-    await this.provider.initialize();
+  
+    // Initialize the provider and check if it was successful
+    const initResult = await this.provider.initialize();
+    if (!initResult) {
+      console.warn(`Provider ${providerName} initialization failed, likely due to missing config`);
+      return false;
+    }
+    
     this.isAuthenticated = await this.provider.checkAuth();
     return this.isAuthenticated;
   }

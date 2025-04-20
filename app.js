@@ -445,25 +445,44 @@ async function initializeApp() {
         cloudSync.syncWifiOnly = syncWifiOnly;
 
         // Initialize provider
-        await cloudSync.initialize(syncProvider);
-        console.log("Cloud sync initialized successfully");
-
-        // Configure auto-sync
-        if (autoSyncInterval > 0) {
-          cloudSync.startAutoSync(autoSyncInterval);
-          console.log(
-            `Auto-sync configured for every ${autoSyncInterval} minutes`
+        const initResult = await cloudSync.initialize(syncProvider);
+        
+        // Check if initialization failed due to missing config
+        if (!initResult) {
+          console.warn("Cloud sync initialization failed: Config missing or invalid");
+          // Show a user-friendly toast
+          uiRenderer.showToast(
+            "Cloud sync is disabled: API keys not configured",
+            "warning",
+            5000
           );
+          
+          // Update preferences to disable sync
+          await dataService.savePreference("cloudSyncEnabled", false);
+          syncEnabled = false;
+          
+          // Update UI to reflect sync is disabled
+          updateSyncUIElements();
+        } else {
+          console.log("Cloud sync initialized successfully");
+
+          // Configure auto-sync
+          if (autoSyncInterval > 0) {
+            cloudSync.startAutoSync(autoSyncInterval);
+            console.log(
+              `Auto-sync configured for every ${autoSyncInterval} minutes`
+            );
+          }
+
+          // Mark sync as ready
+          setSyncReady(true);
+
+          // Update UI elements
+          updateSyncUIElements();
+
+          // Attempt initial sync
+          syncData(true);
         }
-
-        // Mark sync as ready
-        setSyncReady(true);
-
-        // Update UI elements
-        updateSyncUIElements();
-
-        // Attempt initial sync
-        syncData(true);
       } catch (error) {
         console.error("Failed to initialize cloud sync:", error);
         // Keep sync disabled but don't interrupt app initialization

@@ -1,15 +1,32 @@
 // cloudProviders/dropboxProvider.js
-import { CONFIG } from "../config.js";
-
 class DropboxProvider {
   constructor() {
-    this.DROPBOX_APP_KEY = CONFIG.DROPBOX_APP_KEY;
+    this.DROPBOX_APP_KEY = null;
     this.ACCESS_TOKEN = null;
     this.REDIRECT_URI = window.location.origin;
     this.dbx = null;
+    this.configLoaded = false;
   }
 
   async initialize() {
+    // Dynamically load config
+    try {
+      const configModule = await import("../config.js");
+      this.DROPBOX_APP_KEY = configModule.CONFIG.DROPBOX_APP_KEY;
+      this.configLoaded = true;
+      console.log("Dropbox config loaded successfully");
+    } catch (configError) {
+      console.warn("Failed to load config.js:", configError);
+      this.configLoaded = false;
+      return false;
+    }
+
+    // If config didn't load properly, don't proceed
+    if (!this.DROPBOX_APP_KEY) {
+      console.warn("Dropbox API key not available");
+      return false;
+    }
+    
     // Load the Dropbox SDK
     return new Promise((resolve, reject) => {
       try {

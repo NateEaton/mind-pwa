@@ -1,10 +1,8 @@
 // cloudProviders/googleDriveProvider.js
-import { CONFIG } from "../config.js";
-
 class GoogleDriveProvider {
   constructor() {
-    this.GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID;
-    this.GOOGLE_API_KEY = CONFIG.GOOGLE_API_KEY;
+    this.GOOGLE_CLIENT_ID = null;
+    this.GOOGLE_API_KEY = null;
     this.SCOPES = "https://www.googleapis.com/auth/drive.appdata";
     this.DISCOVERY_DOCS = [
       "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
@@ -12,10 +10,30 @@ class GoogleDriveProvider {
     this.gapi = null;
     this.tokenClient = null;
     this.currentUser = null;
+    this.configLoaded = false;
   }
 
   async initialize() {
     try {
+      // Dynamically load config
+      try {
+        const configModule = await import("../config.js");
+        this.GOOGLE_CLIENT_ID = configModule.CONFIG.GOOGLE_CLIENT_ID;
+        this.GOOGLE_API_KEY = configModule.CONFIG.GOOGLE_API_KEY;
+        this.configLoaded = true;
+        console.log("Google Drive config loaded successfully");
+      } catch (configError) {
+        console.warn("Failed to load config.js:", configError);
+        this.configLoaded = false;
+        return false;
+      }
+
+      // If config didn't load properly, don't proceed
+      if (!this.GOOGLE_CLIENT_ID || !this.GOOGLE_API_KEY) {
+        console.warn("Google Drive API keys not available");
+        return false;
+      }
+      
       // Load the Google API client library
       return new Promise((resolve, reject) => {
         const script = document.createElement("script");
