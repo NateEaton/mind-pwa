@@ -23,6 +23,9 @@ export class CloudSyncManager {
       throw new Error(`Unsupported cloud provider: ${providerName}`);
     }
 
+    // Load sync state before initializing provider
+    this.loadSyncState();
+
     await this.provider.initialize();
     this.isAuthenticated = await this.provider.checkAuth();
     return this.isAuthenticated;
@@ -254,19 +257,39 @@ export class CloudSyncManager {
   }
 
   async checkIfHistorySyncNeeded() {
-    // Check if we've had a week transition since last sync
+    // Always log the current decision factors for debugging
     const currentState = this.dataService.loadState();
     const currentWeekStart = currentState.currentWeekStartDate;
 
+    console.log("Checking if history sync needed:", {
+      currentWeekStart,
+      lastSyncedWeek: this.lastSyncedWeek,
+      lastHistorySyncTimestamp: this.lastHistorySyncTimestamp || "never",
+      historyLength: (await this.dataService.getAllWeekHistory()).length,
+    });
+
     // If we don't have a record of the last synced week, sync is needed
     if (!this.lastSyncedWeek) {
+      console.log("No record of last synced week, sync needed");
       this.lastSyncedWeek = currentWeekStart;
       return true;
     }
 
     // If the current week has changed since last sync, sync history
     if (this.lastSyncedWeek !== currentWeekStart) {
+      console.log(
+        `Week transition detected: ${this.lastSyncedWeek} -> ${currentWeekStart}, sync needed`
+      );
       this.lastSyncedWeek = currentWeekStart;
+      return true;
+    }
+
+    // Check if local history data has been updated since last sync
+    if (currentState.metadata && currentState.metadata.historyUpdated) {
+      console.log("History updated flag detected, sync needed");
+      // Clear the flag after detecting it
+      delete currentState.metadata.historyUpdated;
+      this.dataService.saveState(currentState);
       return true;
     }
 
@@ -278,7 +301,15 @@ export class CloudSyncManager {
       if (this.lastHistorySyncTimestamp) {
         const fileModifiedTime = new Date(fileInfo.modifiedTime).getTime();
         // If file has been modified since our last sync, we need to sync again
-        return fileModifiedTime > this.lastHistorySyncTimestamp;
+        const needsSync = fileModifiedTime > this.lastHistorySyncTimestamp;
+        console.log(
+          `Cloud file modified: ${new Date(
+            fileModifiedTime
+          ).toISOString()}, Last sync: ${new Date(
+            this.lastHistorySyncTimestamp
+          ).toISOString()}, Needs sync: ${needsSync}`
+        );
+        return needsSync;
       }
     } catch (error) {
       console.warn("Error checking history file:", error);
@@ -296,21 +327,89 @@ export class CloudSyncManager {
 
       // Find or create the file in the cloud
       const fileInfo = await this.provider.findOrCreateFile(historyFileName);
+      console.log("History file info:", fileInfo);
 
       // Get local history data
       const localHistory = await this.dataService.getAllWeekHistory();
       console.log("Local history for sync:", {
         count: localHistory.length,
-        firstItem: localHistory.length > 0 ? localHistory[0] : null,
+        firstDate:
+          localHistory.length > 0 ? localHistory[0].weekStartDate : null,
+        lastDate:
+          localHistory.length > 0
+            ? localHistory[localHistory.length - 1].weekStartDate
+            : null,
       });
 
-      // Always use direct upload approach
-      const historyPackage = { history: localHistory };
-      await this.provider.uploadFile(fileInfo.id, historyPackage);
+      // First, download remote history data to merge with local
+      console.log("Downloading remote history data...");
+      const remoteData = await this.provider.downloadFile(fileInfo.id);
+      let dataToUpload = { history: localHistory };
+
+      // If remote data exists and has history, merge with local
+      if (
+        remoteData &&
+        remoteData.history &&
+        Array.isArray(remoteData.history)
+      ) {
+        console.log("Remote history found, merging with local history:", {
+          count: remoteData.history.length,
+          firstDate:
+            remoteData.history.length > 0
+              ? remoteData.history[0].weekStartDate
+              : null,
+          lastDate:
+            remoteData.history.length > 0
+              ? remoteData.history[remoteData.history.length - 1].weekStartDate
+              : null,
+        });
+
+        const mergeResult = this.mergeHistoryData(
+          localHistory,
+          remoteData.history
+        );
+
+        if (mergeResult.changed) {
+          console.log("History merged with changes detected");
+          dataToUpload = { history: mergeResult.data };
+
+          // Save each history item individually to avoid key issues
+          console.log("Updating local store with merged history data");
+          try {
+            // Instead of bulk updating, save each week one by one
+            for (const weekData of mergeResult.data) {
+              // Ensure the week has a valid key
+              if (!weekData.weekStartDate) {
+                console.warn(
+                  "History item missing weekStartDate, skipping",
+                  weekData
+                );
+                continue;
+              }
+              // Save individual week to the database
+              await this.dataService.saveWeekHistory(weekData);
+            }
+          } catch (error) {
+            console.error("Error saving merged history:", error);
+            // Continue with the sync even if local save failed
+          }
+        } else {
+          console.log("No changes after merging history");
+        }
+      } else {
+        console.log("No valid remote history data, using local data only");
+      }
+
+      // Upload the (possibly merged) data
+      console.log("Uploading history data to cloud...");
+      await this.provider.uploadFile(fileInfo.id, dataToUpload);
       this.lastHistorySyncTimestamp = Date.now();
       console.log("Successfully uploaded history data to server");
 
-      return;
+      // Store last synced week in localStorage for persistence
+      this.storeLastSyncedState();
+
+      return dataToUpload.history;
     } catch (error) {
       console.error("Error in history sync:", error);
       throw error;
@@ -318,15 +417,60 @@ export class CloudSyncManager {
   }
 
   mergeHistoryData(localHistory, remoteHistory) {
+    console.log("Starting history merge process");
+    console.log(`Local history: ${localHistory.length} items`);
+    console.log(`Remote history: ${remoteHistory.length} items`);
+
+    // Validate both arrays and create safe copies
+    if (!Array.isArray(localHistory)) {
+      console.warn("Local history is not an array, using empty array");
+      localHistory = [];
+    }
+    if (!Array.isArray(remoteHistory)) {
+      console.warn("Remote history is not an array, using empty array");
+      remoteHistory = [];
+    }
+
     // Create a map of weeks by start date for easy lookup
     const weekMap = new Map();
 
-    // Process all local history first
-    localHistory.forEach((week) => {
+    // Process all local history first - ensure structure is valid
+    localHistory.forEach((week, index) => {
+      // Skip if week is missing a start date
+      if (!week.weekStartDate) {
+        console.warn(
+          `Local history item at index ${index} missing weekStartDate, skipping`,
+          week
+        );
+        return;
+      }
+
+      // Log week data for debugging
+      console.log(`Local week ${week.weekStartDate}:`, {
+        hasTotals: !!week.totals,
+        hasTargets: !!week.targets,
+        updatedAt: week.metadata?.updatedAt || 0,
+      });
+
+      // Ensure totals exists
+      if (!week.totals) {
+        console.warn(
+          `Local week ${week.weekStartDate} missing totals, adding empty object`
+        );
+        week.totals = {};
+      }
+
+      // Ensure metadata exists
+      if (!week.metadata) {
+        week.metadata = { updatedAt: Date.now() };
+      } else if (!week.metadata.updatedAt) {
+        week.metadata.updatedAt = Date.now();
+      }
+
       weekMap.set(week.weekStartDate, {
         source: "local",
         data: week,
-        updatedAt: week.metadata?.updatedAt || 0,
+        updatedAt: week.metadata.updatedAt || 0,
       });
     });
 
@@ -334,15 +478,47 @@ export class CloudSyncManager {
     let changed = false;
 
     // Process remote history, overwriting local only if newer
-    remoteHistory.forEach((week) => {
+    remoteHistory.forEach((week, index) => {
+      // Skip if week is missing a start date
+      if (!week.weekStartDate) {
+        console.warn(
+          `Remote history item at index ${index} missing weekStartDate, skipping`,
+          week
+        );
+        return;
+      }
+
+      // Log week data for debugging
+      console.log(`Remote week ${week.weekStartDate}:`, {
+        hasTotals: !!week.totals,
+        hasTargets: !!week.targets,
+        updatedAt: week.metadata?.updatedAt || 0,
+      });
+
+      // Ensure totals exists
+      if (!week.totals) {
+        console.warn(
+          `Remote week ${week.weekStartDate} missing totals, adding empty object`
+        );
+        week.totals = {};
+      }
+
+      // Ensure metadata exists
+      if (!week.metadata) {
+        week.metadata = { updatedAt: Date.now() };
+      } else if (!week.metadata.updatedAt) {
+        week.metadata.updatedAt = Date.now();
+      }
+
       const existingWeek = weekMap.get(week.weekStartDate);
 
       if (!existingWeek) {
         // New week from remote, add it
+        console.log(`New week found in remote data: ${week.weekStartDate}`);
         weekMap.set(week.weekStartDate, {
           source: "remote",
           data: week,
-          updatedAt: week.metadata?.updatedAt || 0,
+          updatedAt: week.metadata.updatedAt || 0,
         });
         changed = true;
       } else {
@@ -351,12 +527,19 @@ export class CloudSyncManager {
 
         if (remoteUpdatedAt > existingWeek.updatedAt) {
           // Remote is newer
+          console.log(
+            `Newer version found for week ${week.weekStartDate}: remote (${remoteUpdatedAt}) > local (${existingWeek.updatedAt})`
+          );
           weekMap.set(week.weekStartDate, {
             source: "remote",
             data: week,
             updatedAt: remoteUpdatedAt,
           });
           changed = true;
+        } else {
+          console.log(
+            `Using local version for week ${week.weekStartDate}: local (${existingWeek.updatedAt}) >= remote (${remoteUpdatedAt})`
+          );
         }
       }
     });
@@ -368,9 +551,45 @@ export class CloudSyncManager {
         return new Date(b.weekStartDate) - new Date(a.weekStartDate);
       });
 
+    console.log(
+      `Merge complete. Result has ${mergedData.length} weeks, changed: ${changed}`
+    );
+
+    // Do a final validation to ensure all weeks have the required structure
+    const validatedData = mergedData.filter((week) => {
+      if (!week.weekStartDate) {
+        console.warn("Filtering out history item missing weekStartDate", week);
+        return false;
+      }
+
+      // Ensure totals exists
+      if (!week.totals) {
+        console.warn(
+          `Week ${week.weekStartDate} missing totals, adding empty object`
+        );
+        week.totals = {};
+      }
+
+      // Ensure metadata exists
+      if (!week.metadata) {
+        week.metadata = { updatedAt: Date.now() };
+      }
+
+      return true;
+    });
+
+    if (validatedData.length !== mergedData.length) {
+      console.warn(
+        `Filtered out ${
+          mergedData.length - validatedData.length
+        } invalid history items`
+      );
+      changed = true;
+    }
+
     return {
-      data: mergedData,
-      changed: changed || mergedData.length !== localHistory.length,
+      data: validatedData,
+      changed: changed || validatedData.length !== localHistory.length,
     };
   }
 
@@ -460,6 +679,41 @@ export class CloudSyncManager {
     }
 
     return true;
+  }
+
+  /**
+   * Store sync state in localStorage to persist between sessions
+   */
+  storeLastSyncedState() {
+    try {
+      const syncState = {
+        lastSyncedWeek: this.lastSyncedWeek,
+        lastHistorySyncTimestamp: this.lastHistorySyncTimestamp,
+        lastSyncTimestamp: this.lastSyncTimestamp,
+      };
+      localStorage.setItem("cloudSyncState", JSON.stringify(syncState));
+      console.log("Stored sync state:", syncState);
+    } catch (error) {
+      console.warn("Failed to store sync state:", error);
+    }
+  }
+
+  /**
+   * Load sync state from localStorage
+   */
+  loadSyncState() {
+    try {
+      const storedState = localStorage.getItem("cloudSyncState");
+      if (storedState) {
+        const syncState = JSON.parse(storedState);
+        this.lastSyncedWeek = syncState.lastSyncedWeek;
+        this.lastHistorySyncTimestamp = syncState.lastHistorySyncTimestamp;
+        this.lastSyncTimestamp = syncState.lastSyncTimestamp;
+        console.log("Loaded sync state:", syncState);
+      }
+    } catch (error) {
+      console.warn("Failed to load sync state:", error);
+    }
   }
 }
 
