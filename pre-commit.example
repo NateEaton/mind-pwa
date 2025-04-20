@@ -4,7 +4,7 @@
 echo "Running pre-commit hook to update version..."
 
 # Run the node script (make sure Node is in your PATH)
-node ./update-version.js
+node ./update-version.cjs
 
 # Check if the script failed
 if [ $? -ne 0 ]; then

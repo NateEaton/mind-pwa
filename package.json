@@ -1,0 +1,13 @@
+{
+    "name": "mind-pwa",
+    "version": "1.0.0",
+    "description": "MIND diet tracker PWA",
+    "type": "module",
+    "scripts": {
+      "generate-config": "node scripts/generateConfig.js",
+      "build": "npm run generate-config && vite build"
+    },
+    "dependencies": {},
+    "devDependencies": {}
+  }
+  
