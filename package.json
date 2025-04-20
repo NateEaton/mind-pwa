@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
       "generate-config": "node scripts/generateConfig.js",
-      "build": "npm run generate-config && vite build"
+      "build": "npm run generate-config"
     },
     "dependencies": {},
     "devDependencies": {}
