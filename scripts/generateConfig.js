@@ -1,5 +1,4 @@
-// scripts/generateConfig.js
-const fs = require("fs");
+import fs from "fs";
 
 const config = {
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
