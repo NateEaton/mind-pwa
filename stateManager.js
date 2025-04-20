@@ -20,7 +20,7 @@ import dataService from "./dataService.js";
 
 /**
  * StateManager - Centralized state management with publisher/subscriber pattern
- * 
+ *
  * This module manages the application state using a publisher/subscriber pattern,
  * allowing components to subscribe to state changes and receive updates.
  */
@@ -28,26 +28,27 @@ import dataService from "./dataService.js";
 // Action types (similar to Redux)
 export const ACTION_TYPES = {
   // State initialization
-  INITIALIZE_STATE: 'INITIALIZE_STATE',
-  
+  INITIALIZE_STATE: "INITIALIZE_STATE",
+  SET_STATE: "SET_STATE",
+
   // Food counts
-  UPDATE_DAILY_COUNT: 'UPDATE_DAILY_COUNT',
-  UPDATE_WEEKLY_COUNT: 'UPDATE_WEEKLY_COUNT',
-  
+  UPDATE_DAILY_COUNT: "UPDATE_DAILY_COUNT",
+  UPDATE_WEEKLY_COUNT: "UPDATE_WEEKLY_COUNT",
+
   // Date changes
-  SET_CURRENT_DAY: 'SET_CURRENT_DAY',
-  SET_CURRENT_WEEK: 'SET_CURRENT_WEEK',
-  
+  SET_CURRENT_DAY: "SET_CURRENT_DAY",
+  SET_CURRENT_WEEK: "SET_CURRENT_WEEK",
+
   // Bulk operations
-  RESET_DAILY_COUNTS: 'RESET_DAILY_COUNTS',
-  RESET_WEEKLY_COUNTS: 'RESET_WEEKLY_COUNTS',
-  
+  RESET_DAILY_COUNTS: "RESET_DAILY_COUNTS",
+  RESET_WEEKLY_COUNTS: "RESET_WEEKLY_COUNTS",
+
   // History operations
-  SET_HISTORY: 'SET_HISTORY',
-  SET_HISTORY_INDEX: 'SET_HISTORY_INDEX',
-  
+  SET_HISTORY: "SET_HISTORY",
+  SET_HISTORY_INDEX: "SET_HISTORY_INDEX",
+
   // Import/Export
-  IMPORT_STATE: 'IMPORT_STATE'
+  IMPORT_STATE: "IMPORT_STATE",
 };
 
 // Default initial state
@@ -58,7 +59,7 @@ const defaultState = {
   weeklyCounts: {}, // { food_id: count }
   history: [], // Array of past week objects { weekStartDate, totals: {...} }
   currentHistoryIndex: -1, // Index for viewed history week (-1 = none selected)
-  foodGroups: [] // Reference to food groups configuration
+  foodGroups: [], // Reference to food groups configuration
 };
 
 // Private state container
@@ -73,12 +74,12 @@ const _subscribers = [];
  * @returns {Function} Unsubscribe function
  */
 function subscribe(callback) {
-  if (typeof callback !== 'function') {
-    throw new Error('Subscriber callback must be a function');
+  if (typeof callback !== "function") {
+    throw new Error("Subscriber callback must be a function");
   }
-  
+
   _subscribers.push(callback);
-  
+
   // Return unsubscribe function
   return () => {
     const index = _subscribers.indexOf(callback);
@@ -94,11 +95,11 @@ function subscribe(callback) {
  * @param {Object} action - The action that caused the change
  */
 function notifySubscribers(state, action) {
-  _subscribers.forEach(callback => {
+  _subscribers.forEach((callback) => {
     try {
       callback(state, action);
     } catch (error) {
-      console.error('Error in subscriber callback:', error);
+      console.error("Error in subscriber callback:", error);
     }
   });
 }
@@ -112,28 +113,30 @@ function notifySubscribers(state, action) {
  */
 function dispatch(action) {
   if (!action || !action.type) {
-    console.error('Invalid action:', action);
+    console.error("Invalid action:", action);
     return _state;
   }
 
   const prevState = { ..._state };
   const nextState = reducer(prevState, action);
-  
+
   // Only update and notify if state actually changed
   if (JSON.stringify(prevState) !== JSON.stringify(nextState)) {
     _state = nextState;
-    
+
     // Persist state changes to storage if needed
-    if (action.type !== ACTION_TYPES.INITIALIZE_STATE && 
-        action.type !== ACTION_TYPES.SET_HISTORY &&
-        action.type !== ACTION_TYPES.SET_HISTORY_INDEX) {
+    if (
+      action.type !== ACTION_TYPES.INITIALIZE_STATE &&
+      action.type !== ACTION_TYPES.SET_HISTORY &&
+      action.type !== ACTION_TYPES.SET_HISTORY_INDEX
+    ) {
       saveStateToStorage();
     }
-    
+
     // Notify subscribers
     notifySubscribers(_state, action);
   }
-  
+
   return _state;
 }
 
@@ -145,93 +148,99 @@ function dispatch(action) {
  */
 function reducer(state, action) {
   switch (action.type) {
+    case ACTION_TYPES.SET_STATE:
+      return {
+        ...state,
+        ...action.payload,
+      };
+
     case ACTION_TYPES.INITIALIZE_STATE:
       return {
         ...state,
         ...action.payload,
       };
-      
+
     case ACTION_TYPES.UPDATE_DAILY_COUNT:
       const { groupId, count } = action.payload;
       const oldDailyCount = state.dailyCounts[groupId] || 0;
       const diff = count - oldDailyCount;
-      
+
       // Update both daily count and weekly total by the difference
       return {
         ...state,
         dailyCounts: {
           ...state.dailyCounts,
-          [groupId]: count
+          [groupId]: count,
         },
         weeklyCounts: {
           ...state.weeklyCounts,
-          [groupId]: (state.weeklyCounts[groupId] || 0) + diff
-        }
+          [groupId]: (state.weeklyCounts[groupId] || 0) + diff,
+        },
       };
-      
+
     case ACTION_TYPES.UPDATE_WEEKLY_COUNT:
       return {
         ...state,
         weeklyCounts: {
           ...state.weeklyCounts,
-          [action.payload.groupId]: action.payload.count
-        }
+          [action.payload.groupId]: action.payload.count,
+        },
       };
-      
+
     case ACTION_TYPES.SET_CURRENT_DAY:
       return {
         ...state,
-        currentDayDate: action.payload.date
+        currentDayDate: action.payload.date,
       };
-      
+
     case ACTION_TYPES.SET_CURRENT_WEEK:
       return {
         ...state,
-        currentWeekStartDate: action.payload.date
+        currentWeekStartDate: action.payload.date,
       };
-      
+
     case ACTION_TYPES.RESET_DAILY_COUNTS:
       // Reset all daily counts to 0
       const resetDailyCounts = {};
-      Object.keys(state.dailyCounts).forEach(key => {
+      Object.keys(state.dailyCounts).forEach((key) => {
         resetDailyCounts[key] = 0;
       });
-      
+
       return {
         ...state,
-        dailyCounts: resetDailyCounts
+        dailyCounts: resetDailyCounts,
       };
-      
+
     case ACTION_TYPES.RESET_WEEKLY_COUNTS:
       // Reset all weekly counts to 0
       const resetWeeklyCounts = {};
-      Object.keys(state.weeklyCounts).forEach(key => {
+      Object.keys(state.weeklyCounts).forEach((key) => {
         resetWeeklyCounts[key] = 0;
       });
-      
+
       return {
         ...state,
-        weeklyCounts: resetWeeklyCounts
+        weeklyCounts: resetWeeklyCounts,
       };
-      
+
     case ACTION_TYPES.SET_HISTORY:
       return {
         ...state,
-        history: action.payload.history
+        history: action.payload.history,
       };
-      
+
     case ACTION_TYPES.SET_HISTORY_INDEX:
       return {
         ...state,
-        currentHistoryIndex: action.payload.index
+        currentHistoryIndex: action.payload.index,
       };
-      
+
     case ACTION_TYPES.IMPORT_STATE:
       // Complete replacement of state with imported data
       return {
-        ...action.payload
+        ...action.payload,
       };
-      
+
     default:
       console.warn(`Unknown action type: ${action.type}`);
       return state;
@@ -246,9 +255,9 @@ function saveStateToStorage() {
     currentDayDate: _state.currentDayDate,
     currentWeekStartDate: _state.currentWeekStartDate,
     dailyCounts: _state.dailyCounts,
-    weeklyCounts: _state.weeklyCounts
+    weeklyCounts: _state.weeklyCounts,
   };
-  
+
   dataService.saveState(stateToSave);
 }
 
@@ -268,40 +277,40 @@ function loadStateFromStorage() {
 async function initialize(foodGroups) {
   // Load state from storage
   const savedState = loadStateFromStorage();
-  
+
   // Set initial state
   const initialState = {
     ...savedState,
     foodGroups,
-    history: []
+    history: [],
   };
-  
+
   // Dispatch initialization action
   dispatch({
     type: ACTION_TYPES.INITIALIZE_STATE,
-    payload: initialState
+    payload: initialState,
   });
-  
+
   // Load history data
   try {
     const historyData = await dataService.getAllWeekHistory();
-    
+
     dispatch({
       type: ACTION_TYPES.SET_HISTORY,
-      payload: { history: historyData }
+      payload: { history: historyData },
     });
-    
+
     // Set default history index if history exists
     if (historyData.length > 0) {
       dispatch({
         type: ACTION_TYPES.SET_HISTORY_INDEX,
-        payload: { index: 0 }
+        payload: { index: 0 },
       });
     }
   } catch (error) {
-    console.error('Failed to load history data:', error);
+    console.error("Failed to load history data:", error);
   }
-  
+
   return getState();
 }
 
@@ -323,7 +332,7 @@ function getState() {
 function updateDailyCount(groupId, count) {
   return dispatch({
     type: ACTION_TYPES.UPDATE_DAILY_COUNT,
-    payload: { groupId, count }
+    payload: { groupId, count },
   });
 }
 
@@ -336,7 +345,7 @@ function updateDailyCount(groupId, count) {
 function updateWeeklyCount(groupId, count) {
   return dispatch({
     type: ACTION_TYPES.UPDATE_WEEKLY_COUNT,
-    payload: { groupId, count }
+    payload: { groupId, count },
   });
 }
 
@@ -347,7 +356,7 @@ function updateWeeklyCount(groupId, count) {
 function resetDailyCounts() {
   return dispatch({
     type: ACTION_TYPES.RESET_DAILY_COUNTS,
-    payload: {}
+    payload: {},
   });
 }
 
@@ -358,7 +367,7 @@ function resetDailyCounts() {
 function resetWeeklyCounts() {
   return dispatch({
     type: ACTION_TYPES.RESET_WEEKLY_COUNTS,
-    payload: {}
+    payload: {},
   });
 }
 
@@ -370,7 +379,7 @@ function resetWeeklyCounts() {
 function setCurrentDay(date) {
   return dispatch({
     type: ACTION_TYPES.SET_CURRENT_DAY,
-    payload: { date }
+    payload: { date },
   });
 }
 
@@ -382,7 +391,7 @@ function setCurrentDay(date) {
 function setCurrentWeek(date) {
   return dispatch({
     type: ACTION_TYPES.SET_CURRENT_WEEK,
-    payload: { date }
+    payload: { date },
   });
 }
 
@@ -395,61 +404,67 @@ async function checkDateAndReset() {
   const today = dataService.getCurrentDate();
   const todayStr = dataService.getTodayDateString();
   const currentWeekStartStr = dataService.getWeekStartDate(today);
-  
+
   let stateChanged = false;
   let weekResetOccurred = false;
-  
+
   // Check for week change
   if (state.currentWeekStartDate !== currentWeekStartStr) {
-    console.log(`Week reset: ${state.currentWeekStartDate} -> ${currentWeekStartStr}`);
-    
+    console.log(
+      `Week reset: ${state.currentWeekStartDate} -> ${currentWeekStartStr}`
+    );
+
     // Archive the completed week before resetting
     await archiveCurrentWeek();
-    
+
     // Set new week start date
     setCurrentWeek(currentWeekStartStr);
-    
+
     // Reset weekly counts
     resetWeeklyCounts();
-    
+
     // Reset daily counts and set new day (handled by week change)
     resetDailyCounts();
     setCurrentDay(todayStr);
-    
+
     stateChanged = true;
     weekResetOccurred = true;
   }
-  
+
   // Check for day change (if week didn't already reset)
   if (!weekResetOccurred && state.currentDayDate !== todayStr) {
     console.log(`Day reset: ${state.currentDayDate} -> ${todayStr}`);
-    
+
     // Add daily counts to weekly before resetting
     const { dailyCounts, weeklyCounts } = state;
-    
+
     // Find all daily-tracked food groups
-    const dailyGroups = state.foodGroups.filter(group => 
-      group.frequency === 'day' || group.id === 'butter_margarine' || group.id === 'wine'
+    const dailyGroups = state.foodGroups.filter(
+      (group) =>
+        group.frequency === "day" ||
+        group.id === "butter_margarine" ||
+        group.id === "wine"
     );
-    
+
     // Update weekly counts for each daily group
-    dailyGroups.forEach(group => {
+    dailyGroups.forEach((group) => {
       const groupId = group.id;
       if (dailyCounts[groupId] && dailyCounts[groupId] > 0) {
-        const newWeeklyCount = (weeklyCounts[groupId] || 0) + dailyCounts[groupId];
+        const newWeeklyCount =
+          (weeklyCounts[groupId] || 0) + dailyCounts[groupId];
         updateWeeklyCount(groupId, newWeeklyCount);
       }
     });
-    
+
     // Reset daily counts
     resetDailyCounts();
-    
+
     // Set new day
     setCurrentDay(todayStr);
-    
+
     stateChanged = true;
   }
-  
+
   return stateChanged;
 }
 
@@ -459,13 +474,13 @@ async function checkDateAndReset() {
  */
 async function archiveCurrentWeek() {
   const state = getState();
-  
+
   // Create week data object for archiving
   const weekData = {
     weekStartDate: state.currentWeekStartDate,
-    weekStartDaySetting: 'Sunday', // Default day setting
+    weekStartDaySetting: "Sunday", // Default day setting
     totals: { ...state.weeklyCounts },
-    
+
     // Store targets for future reference
     targets: state.foodGroups.reduce((acc, group) => {
       acc[group.id] = {
@@ -475,31 +490,34 @@ async function archiveCurrentWeek() {
         unit: group.unit,
       };
       return acc;
-    }, {})
+    }, {}),
   };
-  
+
   try {
     // Save week data to history store
     await dataService.saveWeekHistory(weekData);
     console.log(`Archived week ${state.currentWeekStartDate}`);
-    
+
     // Refresh history data
     const historyData = await dataService.getAllWeekHistory();
-    
+
     dispatch({
       type: ACTION_TYPES.SET_HISTORY,
-      payload: { history: historyData }
+      payload: { history: historyData },
     });
-    
+
     // Reset history index to show most recent
     if (historyData.length > 0) {
       dispatch({
         type: ACTION_TYPES.SET_HISTORY_INDEX,
-        payload: { index: 0 }
+        payload: { index: 0 },
       });
     }
   } catch (error) {
-    console.error(`Failed to archive week ${state.currentWeekStartDate}:`, error);
+    console.error(
+      `Failed to archive week ${state.currentWeekStartDate}:`,
+      error
+    );
     throw error;
   }
 }
@@ -511,7 +529,42 @@ async function archiveCurrentWeek() {
  */
 function getFoodGroup(id) {
   const state = getState();
-  return state.foodGroups.find(group => group.id === id) || null;
+  return state.foodGroups.find((group) => group.id === id) || null;
+}
+
+/**
+ * Reload state from persistent storage
+ * @returns {Promise<boolean>} Success indicator
+ */
+async function reload() {
+  console.log("Reloading state from data service");
+
+  // Load fresh data from data service
+  const freshData = dataService.loadState();
+  console.log("Fresh data loaded:", {
+    dayDate: freshData.currentDayDate,
+    weekStartDate: freshData.currentWeekStartDate,
+    dailyCounts: Object.keys(freshData.dailyCounts || {}),
+    weeklyCounts: Object.keys(freshData.weeklyCounts || {}),
+  });
+
+  // Update state with fresh data
+  dispatch({
+    type: ACTION_TYPES.SET_STATE,
+    payload: freshData,
+  });
+
+  // Also reload history if needed
+  const historyData = await dataService.getAllWeekHistory();
+  console.log("History data loaded:", historyData.length, "weeks");
+
+  dispatch({
+    type: ACTION_TYPES.SET_HISTORY,
+    payload: { history: historyData },
+  });
+
+  console.log("State reloaded successfully");
+  return true;
 }
 
 // Export public API
@@ -521,7 +574,7 @@ export default {
   getState,
   subscribe,
   dispatch,
-  
+
   // Action creators
   updateDailyCount,
   updateWeeklyCount,
@@ -529,14 +582,15 @@ export default {
   resetWeeklyCounts,
   setCurrentDay,
   setCurrentWeek,
-  
+
   // Date check & reset
   checkDateAndReset,
   archiveCurrentWeek,
-  
+
   // Helper functions
   getFoodGroup,
-  
+  reload, // Add reload to the exported methods
+
   // Action types (for external use)
-  ACTION_TYPES
+  ACTION_TYPES,
 };

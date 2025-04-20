@@ -1,8 +1,10 @@
 *.txt
 .DS_Store
 .prettierrc
+config.js
 manifest.json
 export*.json
+client_secret*
 mind-diet-tracker*.json
 *.diff
 *.log
