@@ -49,6 +49,8 @@ export const ACTION_TYPES = {
 
   // Import/Export
   IMPORT_STATE: "IMPORT_STATE",
+
+  UPDATE_METADATA: "UPDATE_METADATA",
 };
 
 // Default initial state
@@ -60,6 +62,11 @@ const defaultState = {
   history: [], // Array of past week objects { weekStartDate, totals: {...} }
   currentHistoryIndex: -1, // Index for viewed history week (-1 = none selected)
   foodGroups: [], // Reference to food groups configuration
+  metadata: {
+    currentWeekDirty: false,
+    historyDirty: false,
+    lastModified: null,
+  },
 };
 
 // Private state container
@@ -202,25 +209,23 @@ function reducer(state, action) {
     case ACTION_TYPES.RESET_DAILY_COUNTS:
       // Reset all daily counts to 0
       const resetDailyCounts = {};
-      Object.keys(state.dailyCounts).forEach((key) => {
-        resetDailyCounts[key] = 0;
-      });
+      const dailyResetTimestamp = action.payload?.resetTimestamp || Date.now();
 
       return {
         ...state,
         dailyCounts: resetDailyCounts,
+        lastModified: dailyResetTimestamp,
       };
 
     case ACTION_TYPES.RESET_WEEKLY_COUNTS:
       // Reset all weekly counts to 0
       const resetWeeklyCounts = {};
-      Object.keys(state.weeklyCounts).forEach((key) => {
-        resetWeeklyCounts[key] = 0;
-      });
+      const weeklyResetTimestamp = action.payload?.resetTimestamp || Date.now();
 
       return {
         ...state,
         weeklyCounts: resetWeeklyCounts,
+        lastModified: weeklyResetTimestamp,
       };
 
     case ACTION_TYPES.SET_HISTORY:
@@ -241,6 +246,15 @@ function reducer(state, action) {
         ...action.payload,
       };
 
+    case ACTION_TYPES.UPDATE_METADATA:
+      return {
+        ...state,
+        metadata: {
+          ...(state.metadata || {}),
+          ...action.payload.metadata,
+        },
+      };
+
     default:
       console.warn(`Unknown action type: ${action.type}`);
       return state;
@@ -251,13 +265,19 @@ function reducer(state, action) {
  * Save current state to persistent storage
  */
 function saveStateToStorage() {
+  // Include metadata in the state object being saved
   const stateToSave = {
     currentDayDate: _state.currentDayDate,
     currentWeekStartDate: _state.currentWeekStartDate,
     dailyCounts: _state.dailyCounts,
     weeklyCounts: _state.weeklyCounts,
+    metadata: _state.metadata, // <--- ADD THIS LINE
   };
 
+  // Optionally add lastModified here if you want stateManager to control it consistently
+  // stateToSave.lastModified = _state.lastModified; // Ensure lastModified is saved
+
+  console.log("StateManager saving state to storage:", stateToSave); // Add logging to verify
   dataService.saveState(stateToSave);
 }
 
@@ -330,10 +350,18 @@ function getState() {
  * @returns {Object} The action object
  */
 function updateDailyCount(groupId, count) {
-  return dispatch({
+  const result = dispatch({
     type: ACTION_TYPES.UPDATE_DAILY_COUNT,
     payload: { groupId, count },
   });
+
+  // Set dirty flag and update lastModified timestamp
+  updateMetadata({
+    currentWeekDirty: true,
+    lastModified: Date.now(),
+  });
+
+  return result;
 }
 
 /**
@@ -343,31 +371,41 @@ function updateDailyCount(groupId, count) {
  * @returns {Object} The action object
  */
 function updateWeeklyCount(groupId, count) {
-  return dispatch({
+  const result = dispatch({
     type: ACTION_TYPES.UPDATE_WEEKLY_COUNT,
     payload: { groupId, count },
   });
+
+  // Set dirty flag and update lastModified timestamp
+  updateMetadata({
+    currentWeekDirty: true,
+    lastModified: Date.now(),
+  });
+
+  return result;
 }
 
 /**
  * Action creator for resetting daily counts
+ * @param {number} [resetTimestamp] - Optional timestamp for the reset
  * @returns {Object} The action object
  */
-function resetDailyCounts() {
+function resetDailyCounts(resetTimestamp = null) {
   return dispatch({
     type: ACTION_TYPES.RESET_DAILY_COUNTS,
-    payload: {},
+    payload: { resetTimestamp },
   });
 }
 
 /**
  * Action creator for resetting weekly counts
+ * @param {number} [resetTimestamp] - Optional timestamp for the reset
  * @returns {Object} The action object
  */
-function resetWeeklyCounts() {
+function resetWeeklyCounts(resetTimestamp = null) {
   return dispatch({
     type: ACTION_TYPES.RESET_WEEKLY_COUNTS,
-    payload: {},
+    payload: { resetTimestamp },
   });
 }
 
@@ -407,28 +445,70 @@ async function checkDateAndReset() {
 
   let stateChanged = false;
   let weekResetOccurred = false;
+  let dateResetType = null;
+
+  // Get the last modified timestamp for the week
+  const lastUpdateTimestamp = state.lastModified || Date.now();
+
+  // Calculate how many weeks have passed since the current week start date
+  const currentWeekStart = new Date(state.currentWeekStartDate + "T00:00:00");
+  const newWeekStart = new Date(currentWeekStartStr + "T00:00:00");
+  const daysDiff = Math.round(
+    (newWeekStart - currentWeekStart) / (24 * 60 * 60 * 1000)
+  );
+  const weeksDiff = Math.floor(daysDiff / 7);
 
   // Check for week change
   if (state.currentWeekStartDate !== currentWeekStartStr) {
     console.log(
-      `Week reset: ${state.currentWeekStartDate} -> ${currentWeekStartStr}`
+      `Week reset: ${state.currentWeekStartDate} -> ${currentWeekStartStr}, weeks difference: ${weeksDiff}`
     );
 
-    // Archive the completed week before resetting
-    await archiveCurrentWeek();
+    // Handle multi-week gap case
+    if (weeksDiff > 1) {
+      console.log(`Multi-week gap detected: ${weeksDiff} weeks`);
 
-    // Set new week start date
-    setCurrentWeek(currentWeekStartStr);
+      // Archive the completed week before resetting - with timestamp of following Sunday midnight
+      const nextWeekStartDate = getNextWeekStartDate(
+        state.currentWeekStartDate
+      );
+      await archiveCurrentWeek(getMidnightTimestamp(nextWeekStartDate));
 
-    // Reset weekly counts
-    resetWeeklyCounts();
+      // No need to create empty records for intermediate weeks
 
-    // Reset daily counts and set new day (handled by week change)
-    resetDailyCounts();
-    setCurrentDay(todayStr);
+      // Set new week start date - with timestamp of current week start
+      setCurrentWeek(currentWeekStartStr);
+
+      // Reset weekly counts with timestamp of current week start midnight
+      const resetTimestamp = getMidnightTimestamp(currentWeekStartStr);
+      resetWeeklyCounts(resetTimestamp);
+
+      // Reset daily counts
+      resetDailyCounts(resetTimestamp);
+
+      // Set new day
+      setCurrentDay(todayStr);
+    } else {
+      // Normal single week change
+
+      // Archive the completed week before resetting
+      await archiveCurrentWeek();
+
+      // Set new week start date
+      setCurrentWeek(currentWeekStartStr);
+
+      // Reset weekly counts with timestamp of midnight on the day after last update
+      const resetTimestamp = getMidnightAfterDate(state.currentWeekStartDate);
+      resetWeeklyCounts(resetTimestamp);
+
+      // Reset daily counts and set new day (handled by week change)
+      resetDailyCounts(resetTimestamp);
+      setCurrentDay(todayStr);
+    }
 
     stateChanged = true;
     weekResetOccurred = true;
+    dateResetType = "WEEKLY";
   }
 
   // Check for day change (if week didn't already reset)
@@ -456,30 +536,86 @@ async function checkDateAndReset() {
       }
     });
 
-    // Reset daily counts
-    resetDailyCounts();
+    // Reset daily counts with timestamp of midnight on the day after last update
+    const resetTimestamp = getMidnightAfterDate(state.currentDayDate);
+    resetDailyCounts(resetTimestamp);
 
     // Set new day
     setCurrentDay(todayStr);
 
     stateChanged = true;
+    dateResetType = "DAILY";
+  }
+
+  // If a reset occurred, update metadata
+  if (stateChanged) {
+    updateMetadata({
+      dateResetPerformed: true,
+      dateResetType: dateResetType,
+      dateResetTimestamp: Date.now(),
+      lastModified: Date.now(), // Update lastModified for sync comparison
+    });
   }
 
   return stateChanged;
 }
 
 /**
+ * Get midnight timestamp for the day after the specified date
+ * @param {string} dateStr - YYYY-MM-DD date string
+ * @returns {number} Timestamp for midnight after the date
+ */
+function getMidnightAfterDate(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00`);
+  const nextDay = new Date(date);
+  nextDay.setDate(date.getDate() + 1);
+  nextDay.setHours(0, 0, 0, 0);
+  return nextDay.getTime();
+}
+
+/**
+ * Get midnight timestamp for the specified date
+ * @param {string} dateStr - YYYY-MM-DD date string
+ * @returns {number} Timestamp for midnight of the date
+ */
+function getMidnightTimestamp(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00`);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+/**
+ * Get the start date of the week after the specified week
+ * @param {string} weekStartDateStr - YYYY-MM-DD of week start
+ * @returns {string} YYYY-MM-DD of next week start
+ */
+function getNextWeekStartDate(weekStartDateStr) {
+  const weekStartDate = new Date(`${weekStartDateStr}T00:00:00`);
+  const nextWeekStart = new Date(weekStartDate);
+  nextWeekStart.setDate(weekStartDate.getDate() + 7);
+
+  const year = nextWeekStart.getFullYear();
+  const month = String(nextWeekStart.getMonth() + 1).padStart(2, "0");
+  const day = String(nextWeekStart.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Archive the current week's data to history
+ * @param {number} [archiveTimestamp] - Optional timestamp for the archive operation
  * @returns {Promise<void>}
  */
-async function archiveCurrentWeek() {
+async function archiveCurrentWeek(archiveTimestamp = null) {
   const state = getState();
+  const timestamp = archiveTimestamp || Date.now();
 
   // Create week data object for archiving
   const weekData = {
     weekStartDate: state.currentWeekStartDate,
     weekStartDaySetting: "Sunday", // Default day setting
     totals: { ...state.weeklyCounts },
+    timestamp: timestamp, // Add timestamp for the archive operation
 
     // Store targets for future reference
     targets: state.foodGroups.reduce((acc, group) => {
@@ -496,7 +632,9 @@ async function archiveCurrentWeek() {
   try {
     // Save week data to history store
     await dataService.saveWeekHistory(weekData);
-    console.log(`Archived week ${state.currentWeekStartDate}`);
+    console.log(
+      `Archived week ${state.currentWeekStartDate} with timestamp ${timestamp}`
+    );
 
     // Refresh history data
     const historyData = await dataService.getAllWeekHistory();
@@ -504,6 +642,12 @@ async function archiveCurrentWeek() {
     dispatch({
       type: ACTION_TYPES.SET_HISTORY,
       payload: { history: historyData },
+    });
+
+    // Set history dirty flag
+    updateMetadata({
+      historyDirty: true,
+      lastHistoryUpdate: timestamp,
     });
 
     // Reset history index to show most recent
@@ -565,6 +709,25 @@ async function reload() {
 
   console.log("State reloaded successfully");
   return true;
+}
+
+/**
+ * Update metadata in the state
+ * @param {Object} metadataChanges - The metadata properties to update
+ */
+function updateMetadata(metadataChanges) {
+  const state = getState();
+  const currentMetadata = state.metadata || {};
+
+  dispatch({
+    type: ACTION_TYPES.UPDATE_METADATA,
+    payload: {
+      metadata: {
+        ...currentMetadata,
+        ...metadataChanges,
+      },
+    },
+  });
 }
 
 // Export public API

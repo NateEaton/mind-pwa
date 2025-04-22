@@ -22,17 +22,19 @@ export class CloudSyncManager {
     } else {
       throw new Error(`Unsupported cloud provider: ${providerName}`);
     }
-  
+
     // Load sync state before initializing provider
     this.loadSyncState();
-  
+
     // Initialize the provider and check if it was successful
     const initResult = await this.provider.initialize();
     if (!initResult) {
-      console.warn(`Provider ${providerName} initialization failed, likely due to missing config`);
+      console.warn(
+        `Provider ${providerName} initialization failed, likely due to missing config`
+      );
       return false;
     }
-    
+
     this.isAuthenticated = await this.provider.checkAuth();
     return this.isAuthenticated;
   }
@@ -43,7 +45,105 @@ export class CloudSyncManager {
     return this.isAuthenticated;
   }
 
-  async sync() {
+  // In cloudSync.js within CloudSyncManager class
+  // In cloudSync.js - Enhance determineWhatToSync function
+  async determineWhatToSync() {
+    try {
+      // Get state to check dirty flags
+      const currentState = this.dataService.loadState();
+      const metadata = currentState.metadata || {};
+
+      // Debug output to see exactly what metadata is available
+      console.log(
+        "Sync determination metadata:",
+        JSON.stringify(metadata, null, 2)
+      );
+
+      const currentWeekDirty = metadata.currentWeekDirty || false;
+      const historyDirty = metadata.historyDirty || false;
+
+      // Check if reset was performed
+      const dateResetPerformed = metadata.dateResetPerformed || false;
+      const dateResetType = metadata.dateResetType || null;
+
+      // Always sync current week if reset was performed or data is dirty
+      const syncCurrent = currentWeekDirty || dateResetPerformed;
+
+      // Always sync history if weekly reset occurred or if history is dirty
+      const syncHistory =
+        historyDirty || (dateResetPerformed && dateResetType === "WEEKLY");
+
+      console.log("Sync determination:", {
+        syncCurrent,
+        syncHistory,
+        currentWeekDirty,
+        historyDirty,
+        dateResetPerformed,
+        dateResetType,
+        metadata: metadata, // Add full metadata object for debugging
+      });
+
+      return { syncCurrent, syncHistory };
+    } catch (error) {
+      console.error("Error determining what to sync:", error);
+      // Default to syncing everything if we can't determine
+      return { syncCurrent: true, syncHistory: true };
+    }
+  }
+
+  /**
+   * Clear a specific dirty flag in state metadata
+   * @param {string} flagName - Name of the flag to clear
+   */
+  async clearDirtyFlag(flagName) {
+    try {
+      // Get current state
+      const currentState = this.dataService.loadState();
+      const metadata = currentState.metadata || {};
+
+      // Update metadata
+      metadata[flagName] = false;
+      
+      // Clear the fresh install flag if this was a data sync
+      if (flagName === "currentWeekDirty") {
+        metadata.isFreshInstall = false;
+      }
+
+      // Save updated state
+      currentState.metadata = metadata;
+      this.dataService.saveState(currentState);
+
+      console.log(`Cleared ${flagName} flag`);
+    } catch (error) {
+      console.warn(`Failed to clear ${flagName} flag:`, error);
+    }
+  }
+
+  /**
+   * Clear date reset flags after sync
+   */
+  async clearDateResetFlags() {
+    try {
+      // Get current state
+      const currentState = this.dataService.loadState();
+      const metadata = currentState.metadata || {};
+
+      // Clear reset flags
+      delete metadata.dateResetPerformed;
+      delete metadata.dateResetType;
+      delete metadata.dateResetTimestamp;
+
+      // Save updated state
+      currentState.metadata = metadata;
+      this.dataService.saveState(currentState);
+
+      console.log("Cleared date reset flags");
+    } catch (error) {
+      console.warn("Failed to clear date reset flags:", error);
+    }
+  }
+
+  async sync(silent = false, force = false) {
     if (this.syncInProgress) {
       console.log("Sync already in progress, skipping");
       return false;
@@ -82,24 +182,48 @@ export class CloudSyncManager {
         }
       }
 
+      // Determine what needs to be synced
+      const { syncCurrent, syncHistory } = await this.determineWhatToSync();
+
+      // Force initial sync if there's no last sync timestamp
+      const isFirstSync = !this.lastSyncTimestamp;
+      if (isFirstSync) {
+        console.log("This appears to be the first sync, forcing upload");
+        force = true;
+      }
+
+      let syncResults = { currentWeekSynced: false, historySynced: false };
+
       // Now proceed with actual sync
       try {
-        // 1. Download and merge current week file
-        await this.syncCurrentWeek();
+        // 1. Sync current week data if needed
+        if (syncCurrent || force) {
+          await this.syncCurrentWeek(force);
+          syncResults.currentWeekSynced = true;
 
-        // 2. Sync history file if needed
-        const needsHistorySync = await this.checkIfHistorySyncNeeded();
-        if (needsHistorySync) {
+          // Clear the current week dirty flag
+          await this.clearDirtyFlag("currentWeekDirty");
+
+          // Clear date reset flags if they were set
+          await this.clearDateResetFlags();
+        }
+
+        // 2. Sync history data if needed
+        if (syncHistory) {
           await this.syncHistory();
+          syncResults.historySynced = true;
+
+          // Clear the history dirty flag
+          await this.clearDirtyFlag("historyDirty");
         }
 
         this.lastSyncTimestamp = Date.now();
         this.onSyncComplete({
           timestamp: this.lastSyncTimestamp,
-          historySynced: needsHistorySync,
+          ...syncResults,
         });
 
-        return true;
+        return syncResults;
       } catch (syncError) {
         console.error("Sync operation failed:", syncError);
         const error = new Error(`Sync failed: ${syncError.message}`);
@@ -123,14 +247,18 @@ export class CloudSyncManager {
       // Define the filename for current week data
       const currentWeekFileName = "mind-diet-current-week.json";
 
-      // Find or create the file in the cloud
-      const fileInfo = await this.provider.findOrCreateFile(
-        currentWeekFileName
-      );
-      console.log("Current week file info:", fileInfo);
-
-      // Get local current week data
+      // First, check if we have actual data to sync
       const localData = this.dataService.loadState();
+
+      // Force upload if this is a fresh install (to sync from cloud)
+      const isFreshInstall = localData.metadata?.isFreshInstall || false;
+      if (isFreshInstall) {
+        console.log("Fresh install detected - forcing sync");
+        forceUpload = true;
+      }
+
+      // Debug data state
+      await this.debugSyncState();
 
       // Ensure valid timestamps
       if (!localData.lastModified) {
@@ -138,9 +266,31 @@ export class CloudSyncManager {
         localData.lastModified = Date.now();
       }
 
+      // Initialize metadata if missing
+      if (!localData.metadata) {
+        console.log("Adding missing metadata");
+        localData.metadata = {
+          currentWeekDirty: true, // Force dirty for first sync
+          historyDirty: false,
+        };
+      }
+
+      // Find or create the file in the cloud
+      const fileInfo = await this.provider.findOrCreateFile(
+        currentWeekFileName
+      );
+      console.log("Current week file info:", fileInfo);
+
       // First, download remote data
       console.log("Downloading remote data...");
       let remoteData = await this.provider.downloadFile(fileInfo.id);
+
+      // Check if there's any data to sync (either counts or metadata)
+      const hasDataToSync =
+        Object.keys(localData.dailyCounts || {}).length > 0 ||
+        Object.keys(localData.weeklyCounts || {}).length > 0;
+
+      console.log("Has data to sync:", hasDataToSync);
 
       // If remote data exists and is valid, merge with local
       let dataToUpload = localData;
@@ -153,11 +303,36 @@ export class CloudSyncManager {
         this.dataService.saveState(dataToUpload);
       } else {
         console.log("No valid remote data, using local data only");
+
+        // Force dirty flag for initial upload
+        if (
+          hasDataToSync &&
+          (!dataToUpload.metadata || !dataToUpload.metadata.currentWeekDirty)
+        ) {
+          if (!dataToUpload.metadata) dataToUpload.metadata = {};
+          dataToUpload.metadata.currentWeekDirty = true;
+          console.log("Forcing dirty flag for initial data upload");
+        }
       }
 
-      // Upload the (possibly merged) data
-      await this.provider.uploadFile(fileInfo.id, dataToUpload);
-      console.log("Successfully uploaded data to server");
+      // Only upload if we have data or this is a forced upload
+      if (
+        forceUpload ||
+        hasDataToSync ||
+        dataToUpload.metadata?.currentWeekDirty
+      ) {
+        console.log("Uploading data to cloud");
+        await this.provider.uploadFile(fileInfo.id, dataToUpload);
+        console.log("Successfully uploaded data to server");
+
+        // Clear dirty flag after successful upload
+        if (dataToUpload.metadata) {
+          dataToUpload.metadata.currentWeekDirty = false;
+          this.dataService.saveState(dataToUpload);
+        }
+      } else {
+        console.log("No data changes detected, skipping upload");
+      }
 
       return dataToUpload;
     } catch (error) {
@@ -172,19 +347,183 @@ export class CloudSyncManager {
       dayDate: localData.currentDayDate,
       weekStartDate: localData.currentWeekStartDate,
       lastModified: localData.lastModified,
-      lastModifiedDate: new Date(localData.lastModified).toISOString(),
+      lastModifiedDate: localData.lastModified
+        ? new Date(localData.lastModified).toISOString()
+        : "none",
     });
     console.log("REMOTE data:", {
       dayDate: remoteData.currentDayDate,
       weekStartDate: remoteData.currentWeekStartDate,
       lastModified: remoteData.lastModified,
-      lastModifiedDate: new Date(remoteData.lastModified).toISOString(),
+      lastModifiedDate: remoteData.lastModified
+        ? new Date(remoteData.lastModified).toISOString()
+        : "none",
     });
 
-    // Simple merge strategy:
-    // 1. Use the more recent current day/week dates
-    // 2. For food counts, take the maximum value for each food group
+    // Special case for fresh installs - prefer remote data
+    if (localData.metadata && localData.metadata.isFreshInstall) {
+      console.log("Fresh install detected - using remote data and updating timestamp");
+      
+      // Check if remote data has actual content
+      const hasRemoteData = 
+        Object.keys(remoteData.dailyCounts || {}).length > 0 || 
+        Object.keys(remoteData.weeklyCounts || {}).length > 0;
+      
+      if (hasRemoteData) {
+        // Use remote data but with updated timestamps
+        const mergedData = {
+          ...remoteData,
+          lastModified: Date.now(), // Current timestamp
+          metadata: {
+            ...(remoteData.metadata || {}),
+            isFreshInstall: false, // Clear the fresh install flag
+            currentWeekDirty: false,
+            schemaVersion: localData.metadata.schemaVersion,
+            deviceId: localData.metadata.deviceId,
+          }
+        };
+        
+        return mergedData;
+      }
+    }
 
+    // Detect week transitions
+    const localWeekStart = new Date(
+      localData.currentWeekStartDate + "T00:00:00"
+    );
+    const remoteWeekStart = new Date(
+      remoteData.currentWeekStartDate + "T00:00:00"
+    );
+    const localIsNewer = localWeekStart > remoteWeekStart;
+    const remoteIsNewer = remoteWeekStart > localWeekStart;
+
+    // For multi-week gaps, calculate week difference
+    const weekDiff = Math.round(
+      Math.abs(localWeekStart - remoteWeekStart) / (7 * 24 * 60 * 60 * 1000)
+    );
+    const isMultiWeekGap = weekDiff > 1;
+
+    // Check if data was reset due to new day/week
+    const wasReset = localData.metadata?.dateResetPerformed || false;
+    const resetType = localData.metadata?.dateResetType || null;
+    const resetTimestamp = localData.metadata?.dateResetTimestamp || 0;
+
+    // Compare core timestamps
+    const localModified = localData.lastModified || 0;
+    const remoteModified = remoteData.lastModified || 0;
+
+    console.log("Analysis:", {
+      weekDiff,
+      isMultiWeekGap,
+      localIsNewer,
+      remoteIsNewer,
+      wasReset,
+      resetType,
+      localModified,
+      remoteModified,
+    });
+
+    // Handle multi-week gap scenarios
+    if (isMultiWeekGap) {
+      // If local week is newer and was reset, and remote hasn't been modified more recently
+      if (localIsNewer && wasReset && resetTimestamp > remoteModified) {
+        console.log("Multi-week gap with local reset: using local data");
+        return {
+          ...localData,
+          lastModified: Math.max(localModified, remoteModified) + 1,
+        };
+      }
+
+      // If remote week is newer than local week
+      if (remoteIsNewer) {
+        console.log("Multi-week gap with newer remote week: using remote data");
+
+        // But preserve certain local metadata
+        const preservedMetadata = {};
+        if (localData.metadata) {
+          if (localData.metadata.dateResetPerformed) {
+            preservedMetadata.dateResetPerformed = false; // Clear the reset flag
+          }
+        }
+
+        return {
+          ...remoteData,
+          metadata: {
+            ...(remoteData.metadata || {}),
+            ...preservedMetadata,
+            currentWeekDirty: false, // Reset dirty flag
+            historyDirty: localData.metadata?.historyDirty || false, // Preserve history dirty flag
+          },
+          lastModified: Math.max(localModified, remoteModified) + 1,
+        };
+      }
+
+      // If we have a multi-week gap but neither condition above matched,
+      // use the timestamp to determine which is more recent
+      if (remoteModified > localModified) {
+        console.log(
+          "Multi-week gap with more recent remote data: using remote"
+        );
+        return {
+          ...remoteData,
+          metadata: {
+            ...(remoteData.metadata || {}),
+            currentWeekDirty: false,
+            historyDirty: localData.metadata?.historyDirty || false,
+          },
+          lastModified: remoteModified + 1,
+        };
+      } else {
+        console.log("Multi-week gap with more recent local data: using local");
+        return {
+          ...localData,
+          lastModified: localModified + 1,
+        };
+      }
+    }
+
+    // For normal case (same week or single week difference)
+
+    // If local was reset more recently than remote was modified, use local data
+    if (wasReset && resetTimestamp > remoteModified) {
+      console.log(
+        "Local data was reset more recently than remote was modified - using local data"
+      );
+      return {
+        ...localData,
+        lastModified: Math.max(localModified, remoteModified) + 1,
+      };
+    }
+
+    // If remote modified time is more recent, use remote data
+    if (remoteModified > localModified) {
+      console.log("Remote data is more recent than local - using remote data");
+      return {
+        ...remoteData,
+        metadata: {
+          ...(remoteData.metadata || {}),
+          currentWeekDirty: false,
+          historyDirty: localData.metadata?.historyDirty || false,
+        },
+        lastModified: remoteModified + 1,
+      };
+    }
+
+    // If local modified time is more recent, use local data
+    if (localModified > remoteModified) {
+      console.log("Local data is more recent than remote - using local data");
+      return {
+        ...localData,
+        lastModified: localModified + 1,
+      };
+    }
+
+    // If timestamps are identical, merge with preference for higher counts
+    console.log(
+      "Timestamps are identical - merging with preference for higher counts"
+    );
+
+    // Standard merge for same week data with identical timestamps
     const mergedData = {
       ...remoteData,
       // Keep local day if it's more recent
@@ -196,26 +535,34 @@ export class CloudSyncManager {
         localData.currentWeekStartDate,
         remoteData.currentWeekStartDate
       ),
-      // Merge counts with a "max wins" strategy
+      // Merge counts with "max wins" strategy
       dailyCounts: {},
       weeklyCounts: {},
-      // Use the most recent timestamp + 1 to indicate it's been merged
+      // Merge metadata
+      metadata: {
+        ...(remoteData.metadata || {}),
+        ...(localData.metadata || {}),
+        currentWeekDirty: false, // Reset dirty flag
+        historyDirty: localData.metadata?.historyDirty || false, // Preserve history dirty flag
+      },
+      // Update timestamp
       lastModified:
         Math.max(localData.lastModified || 0, remoteData.lastModified || 0) + 1,
     };
 
-    // Merge all food groups using max value
+    // Delete reset flags from merged data as they've been handled
+    if (mergedData.metadata) {
+      delete mergedData.metadata.dateResetPerformed;
+      delete mergedData.metadata.dateResetType;
+      delete mergedData.metadata.dateResetTimestamp;
+    }
+
+    // Merge daily counts with max wins strategy
     const allDailyFoodGroups = new Set([
       ...Object.keys(localData.dailyCounts || {}),
       ...Object.keys(remoteData.dailyCounts || {}),
     ]);
 
-    const allWeeklyFoodGroups = new Set([
-      ...Object.keys(localData.weeklyCounts || {}),
-      ...Object.keys(remoteData.weeklyCounts || {}),
-    ]);
-
-    // Apply max value strategy for daily counts
     allDailyFoodGroups.forEach((groupId) => {
       const localCount = (localData.dailyCounts || {})[groupId] || 0;
       const remoteCount = (remoteData.dailyCounts || {})[groupId] || 0;
@@ -228,7 +575,12 @@ export class CloudSyncManager {
       }
     });
 
-    // Apply max value strategy for weekly counts
+    // Merge weekly counts with max wins strategy
+    const allWeeklyFoodGroups = new Set([
+      ...Object.keys(localData.weeklyCounts || {}),
+      ...Object.keys(remoteData.weeklyCounts || {}),
+    ]);
+
     allWeeklyFoodGroups.forEach((groupId) => {
       const localCount = (localData.weeklyCounts || {})[groupId] || 0;
       const remoteCount = (remoteData.weeklyCounts || {})[groupId] || 0;
@@ -719,6 +1071,49 @@ export class CloudSyncManager {
       }
     } catch (error) {
       console.warn("Failed to load sync state:", error);
+    }
+  }
+
+  // Add this to the CloudSyncManager class in cloudSync.js
+  async debugSyncState() {
+    try {
+      // Get local data
+      const currentState = this.dataService.loadState();
+
+      // Check metadata and dirty flags
+      const metadata = currentState.metadata || {};
+
+      console.log("=== Sync Debug Info ===");
+      console.log("Current State:", {
+        currentDayDate: currentState.currentDayDate,
+        currentWeekStartDate: currentState.currentWeekStartDate,
+        lastModified: currentState.lastModified,
+        hasMetadata: !!currentState.metadata,
+        dailyCountsSize: Object.keys(currentState.dailyCounts || {}).length,
+        weeklyCountsSize: Object.keys(currentState.weeklyCounts || {}).length,
+      });
+
+      console.log("Metadata:", {
+        ...metadata,
+        exists: !!metadata,
+      });
+
+      // Check data validity
+      const isValid = this.validateData(currentState, "current");
+      console.log("Data validity:", isValid);
+
+      return {
+        hasData: Object.keys(currentState.weeklyCounts || {}).length > 0,
+        hasMetadata: !!currentState.metadata,
+        dirtyFlags: {
+          currentWeekDirty: metadata.currentWeekDirty || false,
+          historyDirty: metadata.historyDirty || false,
+        },
+        isValid,
+      };
+    } catch (error) {
+      console.error("Error in sync debug:", error);
+      return { error: error.message };
     }
   }
 }

@@ -1438,12 +1438,13 @@ function handleSyncError(error) {
   }
 }
 
-async function syncData(silent = false) {
+async function syncData(silent = false, force = false) {
   console.log("syncData called", {
     cloudSync,
     syncEnabled,
     syncReady,
     online: navigator.onLine,
+    force,
   });
 
   if (!cloudSync || !syncEnabled || !syncReady) {
@@ -1453,6 +1454,14 @@ async function syncData(silent = false) {
       syncReady,
     });
     return;
+  }
+
+  // Add debugging of metadata to help trace the issue
+  try {
+    const state = dataService.loadState();
+    console.log("Current state metadata before sync:", state.metadata);
+  } catch (e) {
+    console.error("Error logging state metadata:", e);
   }
 
   if (!silent) {
@@ -2086,6 +2095,25 @@ async function saveEditedTotals() {
       // Update state weekly counts
       for (const [groupId, count] of Object.entries(finalTotals)) {
         stateManager.updateWeeklyCount(groupId, count);
+      }
+
+      // Force dirty flag explicitly after batch edit
+      // This is for safety in case updateWeeklyCount doesn't set it correctly during batch operations
+      const currentState = stateManager.getState();
+      if (currentState.metadata) {
+        // Use stateManager's updateMetadata function to ensure proper state updates
+        stateManager.dispatch({
+          type: stateManager.ACTION_TYPES.UPDATE_METADATA,
+          payload: {
+            metadata: {
+              currentWeekDirty: true,
+              lastModified: Date.now(),
+            },
+          },
+        });
+        console.log(
+          "Explicitly set currentWeekDirty flag after edit totals save"
+        );
       }
 
       uiRenderer.showToast("Current week totals updated.", "success");

@@ -794,11 +794,34 @@ async function getPendingSyncChanges(since = 0) {
  */
 function loadState() {
   try {
-    const savedState =
-      JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {};
+    const savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {};
     const today = getTodayDateString();
     const currentWeekStart = getWeekStartDate(getCurrentDate());
+    
+    // Check if this is a fresh install with no local data
+    const isFreshInstall = !localStorage.getItem(LOCAL_STORAGE_KEY);
+    
+    // Set timestamp - use a very old date (Jan 1, 2025) for fresh installs
+    // This ensures any cloud data will be considered newer
     const now = getCurrentTimestamp();
+    const oldTimestamp = new Date("2025-01-01T00:00:00").getTime();
+    const lastModified = isFreshInstall ? oldTimestamp : (savedState.lastModified || now);
+
+    // Start with metadata loaded from savedState, default to empty object if none exists
+    const loadedMetadata = savedState.metadata || {};
+
+    // For fresh installs, add a special flag to indicate this is initial data
+    if (isFreshInstall) {
+      console.log("Fresh install detected - using old timestamp:", new Date(oldTimestamp).toISOString());
+    }
+
+    // Merge loaded metadata with essential/default metadata properties
+    const normalizedMetadata = {
+      ...loadedMetadata, // Keep all existing metadata properties
+      schemaVersion: SCHEMA.VERSION,
+      deviceId: getDeviceId(),
+      isFreshInstall: isFreshInstall || loadedMetadata.isFreshInstall || false,
+    };
 
     // Apply schema validation and normalization
     const normalizedState = {
@@ -806,30 +829,32 @@ function loadState() {
       currentWeekStartDate: savedState.currentWeekStartDate || currentWeekStart,
       dailyCounts: savedState.dailyCounts || {},
       weeklyCounts: savedState.weeklyCounts || {},
-      lastModified: savedState.lastModified || now,
-      metadata: {
-        schemaVersion: SCHEMA.VERSION,
-        deviceId: getDeviceId(),
-      },
+      lastModified: lastModified, // Use old timestamp for fresh installs
+      metadata: normalizedMetadata,
     };
 
     console.log("Loaded state:", normalizedState);
     return normalizedState;
   } catch (error) {
     console.error("Error loading state from localStorage:", error);
-    // Return a default state if there's an error
+    // Return a default state with essential metadata on error
     const today = getTodayDateString();
     const currentWeekStart = getWeekStartDate(getCurrentDate());
+    const oldTimestamp = new Date("2025-01-01T00:00:00").getTime();
 
     return {
       currentDayDate: today,
       currentWeekStartDate: currentWeekStart,
       dailyCounts: {},
       weeklyCounts: {},
-      lastModified: getCurrentTimestamp(),
+      lastModified: oldTimestamp, // Very old timestamp for fresh installs
       metadata: {
         schemaVersion: SCHEMA.VERSION,
         deviceId: getDeviceId(),
+        currentWeekDirty: false,
+        historyDirty: false,
+        dateResetPerformed: false,
+        isFreshInstall: true,
       },
     };
   }
@@ -840,18 +865,22 @@ function loadState() {
  * @param {Object} state - The state object to save
  * @returns {boolean} Success status
  */
+// In dataService.js - Update saveState function
 function saveState(state) {
   try {
     // Ensure the state has a proper structure before saving
     const now = getCurrentTimestamp();
 
+    // Ensure we preserve the existing metadata
     const normalizedState = {
       currentDayDate: state.currentDayDate,
       currentWeekStartDate: state.currentWeekStartDate,
       dailyCounts: state.dailyCounts || {},
       weeklyCounts: state.weeklyCounts || {},
       lastModified: now,
+      // Properly preserve ALL metadata from the state object
       metadata: {
+        ...(state.metadata || {}), // Spread existing metadata to preserve all flags
         schemaVersion: SCHEMA.VERSION,
         deviceId: getDeviceId(),
       },
@@ -859,6 +888,11 @@ function saveState(state) {
 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedState));
     console.log("Saved state with timestamp:", now);
+
+    // Optional: log the metadata that's being saved for debugging
+    if (state.metadata) {
+      console.log("Saving state with metadata:", state.metadata);
+    }
 
     // Log the change for future sync (if sync becomes a feature)
     logSyncChange("currentState", "update", "current", {
