@@ -26,7 +26,7 @@ class DropboxProvider {
       console.warn("Dropbox API key not available");
       return false;
     }
-    
+
     // Load the Dropbox SDK
     return new Promise((resolve, reject) => {
       try {
@@ -80,7 +80,8 @@ class DropboxProvider {
   async checkAuth() {
     try {
       console.log("Checking Dropbox authentication");
-      // Check if we have a stored token
+
+      // Check for stored token
       const storedToken = localStorage.getItem("dropbox_access_token");
       if (storedToken) {
         try {
@@ -109,89 +110,53 @@ class DropboxProvider {
 
   async authenticate() {
     console.log("Starting Dropbox authentication");
-  
-    // Check for token in URL hash (OAuth 2.0 implicit flow)
-    if (window.location.hash.includes("access_token=")) {
+
+    // If we already have a token from redirect, use it
+    const storedToken = localStorage.getItem("dropbox_access_token");
+    if (storedToken) {
       try {
-        // Extract the token from the URL hash
-        const accessToken = window.location.hash.match(/access_token=([^&]*)/)[1];
-        console.log("Found access token in URL hash");
-        
-        this.ACCESS_TOKEN = accessToken;
-        this.dbx = new window.Dropbox.Dropbox({ accessToken });
-        localStorage.setItem("dropbox_access_token", accessToken);
-  
-        // Clear the hash so we don't process it again
-        window.history.replaceState(
-          null,
-          document.title,
-          window.location.pathname + window.location.search
-        );
-  
-        // Signal that sync is ready
-        if (window.setSyncReady) window.setSyncReady(true);
-  
-        console.log("Dropbox authentication successful");
-        
-        // CRITICAL: Restore pendingSync state that we saved before redirect
-        const pendingSyncStr = localStorage.getItem("pendingSync");
-        if (pendingSyncStr) {
-          try {
-            const pendingSync = JSON.parse(pendingSyncStr);
-            
-            // Only process if recently stored (within 5 minutes)
-            const pendingAge = Date.now() - pendingSync.timestamp;
-            if (pendingAge <= 5 * 60 * 1000) {
-              console.log("Processing valid pendingSync data", pendingSync);
-              localStorage.setItem("dropboxAuthComplete", "true");
-            }
-          } catch (e) {
-            console.error("Error processing pendingSync data:", e);
-          }
-          
-          // Clear the pending data regardless
-          localStorage.removeItem("pendingSync");
-        }
-        
+        this.ACCESS_TOKEN = storedToken;
+        this.dbx = new window.Dropbox.Dropbox({ accessToken: storedToken });
+
+        // Verify token is valid with a test call
+        await this.dbx.usersGetCurrentAccount();
+
+        console.log("Dropbox authentication successful with stored token");
         return true;
       } catch (error) {
-        console.error("Error processing Dropbox auth redirect:", error);
-        // Signal that sync is not ready
-        if (window.setSyncReady) window.setSyncReady(false);
-        return false;
+        console.warn("Stored token is invalid, will request new one:", error);
+        localStorage.removeItem("dropbox_access_token");
       }
     }
-  
-    // Otherwise, start a new auth flow
+
     console.log("Starting new Dropbox auth flow");
     try {
-      // Store pending provider information before redirecting
-      localStorage.setItem(
-        "pendingSync",
+      // Create state parameter to encode the current UI state
+      const stateParam = btoa(
         JSON.stringify({
-          provider: "dropbox",
+          context: "settings_dialog",
           timestamp: Date.now(),
         })
       );
-  
-      // Generate auth URL and redirect
+
+      // Generate auth URL with state parameter
       const authUrl = await this.dbx.auth.getAuthenticationUrl(
         this.REDIRECT_URI,
-        null,
+        stateParam, // Pass the state parameter
         "token"
       );
-  
+
       // Make sure we have a string URL, not a Promise
       if (typeof authUrl !== "string") {
         throw new Error("Invalid authorization URL: " + authUrl);
       }
-  
-      console.log("Generated auth URL:", authUrl);
+
+      console.log("Generated auth URL with state:", authUrl);
       window.location.href = authUrl;
-      return false;
+      return false; // We're redirecting, so auth is not complete yet
     } catch (error) {
       console.error("Failed to start Dropbox auth flow:", error);
-      
+
       // Try fallback method if the first approach failed
       try {
         console.log("Trying fallback authentication method");
@@ -200,7 +165,6 @@ class DropboxProvider {
         return false;
       } catch (fallbackError) {
         console.error("All authentication methods failed:", fallbackError);
-        if (window.setSyncReady) window.setSyncReady(false);
         throw new Error(
           "Failed to start Dropbox authentication: " + error.message
         );

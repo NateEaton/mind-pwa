@@ -16,6 +16,48 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// At the very beginning of app.js (similar to early token detection)
+(function detectOAuthRedirect() {
+  // Check for Dropbox token in URL hash
+  if (window.location.hash.includes("access_token=")) {
+    try {
+      // Extract the token
+      const accessToken = window.location.hash.match(/access_token=([^&]*)/)[1];
+
+      // Store the token for later use
+      localStorage.setItem("dropbox_access_token", accessToken);
+
+      // Try to extract state parameter
+      let appState = null;
+      const stateMatch = window.location.hash.match(/state=([^&]*)/);
+
+      if (stateMatch && stateMatch[1]) {
+        try {
+          // Decode the state parameter
+          appState = JSON.parse(atob(decodeURIComponent(stateMatch[1])));
+          console.log("Recovered app state from OAuth redirect:", appState);
+
+          // Store state for use after initialization
+          localStorage.setItem("dropbox_auth_state", JSON.stringify(appState));
+        } catch (e) {
+          console.error("Error decoding state parameter:", e);
+        }
+      }
+
+      console.log("Dropbox OAuth token detected and stored");
+
+      // Clear hash from URL to prevent reprocessing
+      window.history.replaceState(
+        null,
+        document.title,
+        window.location.pathname + window.location.search
+      );
+    } catch (error) {
+      console.error("Error extracting OAuth token:", error);
+    }
+  }
+})();
+
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import uiRenderer from "./uiRenderer.js";
@@ -399,63 +441,9 @@ async function initializeApp() {
   console.log("Initializing app...");
 
   try {
-    // Check for authentication completion flag
-    const dropboxAuthComplete = localStorage.getItem("dropboxAuthComplete");
-    console.log(
-      "State of dropboxAuthComplete in app initialization:",
-      dropboxAuthComplete
-    );
-    if (dropboxAuthComplete) {
-      // Clear the flag
-      localStorage.removeItem("dropboxAuthComplete");
-
-      // Update syncEnabled state
-      syncEnabled = true;
-
-      // Queue up opening settings after initialization
-      setTimeout(async () => {
-        await showSettings();
-      }, 500);
-    }
-
-    // Check for pending sync provider change from Dropbox auth
-    const pendingSyncStr = localStorage.getItem("pendingSync");
-    let pendingSync = null;
-
-    if (pendingSyncStr) {
-      try {
-        pendingSync = JSON.parse(pendingSyncStr);
-        // Only use if recent (within last 5 minutes)
-        const pendingAge = Date.now() - pendingSync.timestamp;
-        if (pendingAge > 5 * 60 * 1000) {
-          console.log("Pending sync settings expired, ignoring");
-          pendingSync = null;
-        } else {
-          console.log("Found pending sync settings:", pendingSync);
-        }
-
-        // Clear the pending sync data
-        localStorage.removeItem("pendingSync");
-      } catch (e) {
-        console.error("Error parsing pending sync settings:", e);
-      }
-    }
-
     // Initialize data service first
     await dataService.initialize();
     console.log("Data service initialized");
-
-    // Apply pending sync settings if available
-    if (pendingSync && pendingSync.provider) {
-      console.log("Applying pending sync provider:", pendingSync.provider);
-      await dataService.savePreference("cloudSyncEnabled", true);
-      await dataService.savePreference(
-        "cloudSyncProvider",
-        pendingSync.provider
-      );
-      // Force syncEnabled true in memory
-      syncEnabled = true;
-    }
 
     // Get user preference for cloud sync
     syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
@@ -577,6 +565,48 @@ async function initializeApp() {
 
     // Setup network listeners
     setupNetworkListeners();
+
+    // In the initializeApp function, add this near the end
+    // Check for stored auth state
+    const storedAuthState = localStorage.getItem("dropbox_auth_state");
+    if (storedAuthState) {
+      try {
+        const authState = JSON.parse(storedAuthState);
+
+        // Clear stored state immediately
+        localStorage.removeItem("dropbox_auth_state");
+
+        // Check if state is recent (within 10 minutes)
+        const stateAge = Date.now() - authState.timestamp;
+        if (stateAge <= 10 * 60 * 1000) {
+          // Process based on context
+          if (authState.context === "settings_dialog") {
+            console.log("Restoring settings dialog after auth");
+
+            // Update preferences since we now have a token
+            await dataService.savePreference("cloudSyncEnabled", true);
+            await dataService.savePreference("cloudSyncProvider", "dropbox");
+            syncEnabled = true;
+
+            // Reinitialize cloud sync with new settings
+            if (!cloudSync) {
+              await initializeCloudSync("dropbox");
+            }
+
+            // Show settings dialog after a short delay
+            setTimeout(() => {
+              showSettings();
+              // Show success toast
+              uiRenderer.showToast("Dropbox connected successfully", "success");
+            }, 500);
+          }
+        } else {
+          console.log("Stored auth state expired, ignoring");
+        }
+      } catch (e) {
+        console.error("Error processing stored auth state:", e);
+      }
+    }
 
     console.log("App initialization complete");
   } catch (error) {
@@ -1500,6 +1530,25 @@ async function syncData(silent = false, force = false) {
     return;
   }
 
+  // Check authentication status
+  if (!cloudSync.isAuthenticated) {
+    console.log("Authentication needed before sync");
+    try {
+      const authResult = await cloudSync.authenticate();
+      if (!authResult) {
+        console.log("Authentication failed or was canceled");
+        uiRenderer.showToast("Authentication required for sync", "warning");
+        return;
+      }
+      // Authentication succeeded
+      console.log("Authentication successful, proceeding with sync");
+    } catch (error) {
+      console.error("Authentication error:", error);
+      uiRenderer.showToast(`Authentication error: ${error.message}`, "error");
+      return;
+    }
+  }
+
   // Add debugging of metadata to help trace the issue
   try {
     const state = dataService.loadState();
@@ -1509,7 +1558,7 @@ async function syncData(silent = false, force = false) {
   }
 
   if (!silent) {
-    uiRenderer.showToast("Syncing data...", "info", 2000);
+    uiRenderer.showToast("Syncing data...", "info", 3000);
   }
 
   try {
