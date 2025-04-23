@@ -109,74 +109,50 @@ class DropboxProvider {
 
   async authenticate() {
     console.log("Starting Dropbox authentication");
-
-    // Check for authorization code in URL (OAuth 2.0 code flow)
-    const urlParams = new URLSearchParams(window.location.search);
-    const authCode = urlParams.get("code");
-
-    if (authCode) {
-      console.log("Authorization code detected in URL");
-      try {
-        // Store pending provider information before beginning auth
-        localStorage.setItem(
-          "pendingSync",
-          JSON.stringify({
-            provider: "dropbox",
-            timestamp: Date.now(),
-          })
-        );
-
-        // Exchange code for token (requires server-side proxy or PKCE flow)
-        // For PKCE, we'd need to store code_verifier from the original request
-        // Since this is complex without a server, we'll assume success for now
-        // and create a temporary access token (not ideal but works for demo)
-
-        // In a production app, you'd implement code exchange properly
-        const tempToken = `temp_${authCode.substring(0, 10)}`;
-        this.ACCESS_TOKEN = tempToken;
-        this.dbx = new window.Dropbox.Dropbox({ accessToken: tempToken });
-        localStorage.setItem("dropbox_access_token", tempToken);
-
-        // Clear the code parameter from URL
-        window.history.replaceState(
-          null,
-          document.title,
-          window.location.pathname
-        );
-
-        // Signal that sync is ready
-        if (window.setSyncReady) window.setSyncReady(true);
-
-        console.log("Dropbox authentication successful");
-        return true;
-      } catch (error) {
-        console.error("Error processing Dropbox auth code:", error);
-        // Signal that sync is not ready
-        if (window.setSyncReady) window.setSyncReady(false);
-        return false;
-      }
-    }
-
+  
     // Check for token in URL hash (OAuth 2.0 implicit flow)
     if (window.location.hash.includes("access_token=")) {
       try {
-        const accessToken =
-          window.location.hash.match(/access_token=([^&]*)/)[1];
+        // Extract the token from the URL hash
+        const accessToken = window.location.hash.match(/access_token=([^&]*)/)[1];
+        console.log("Found access token in URL hash");
+        
         this.ACCESS_TOKEN = accessToken;
         this.dbx = new window.Dropbox.Dropbox({ accessToken });
         localStorage.setItem("dropbox_access_token", accessToken);
-
+  
         // Clear the hash so we don't process it again
         window.history.replaceState(
           null,
           document.title,
           window.location.pathname + window.location.search
         );
-
+  
         // Signal that sync is ready
         if (window.setSyncReady) window.setSyncReady(true);
-
+  
         console.log("Dropbox authentication successful");
+        
+        // CRITICAL: Restore pendingSync state that we saved before redirect
+        const pendingSyncStr = localStorage.getItem("pendingSync");
+        if (pendingSyncStr) {
+          try {
+            const pendingSync = JSON.parse(pendingSyncStr);
+            
+            // Only process if recently stored (within 5 minutes)
+            const pendingAge = Date.now() - pendingSync.timestamp;
+            if (pendingAge <= 5 * 60 * 1000) {
+              console.log("Processing valid pendingSync data", pendingSync);
+              localStorage.setItem("dropboxAuthComplete", "true");
+            }
+          } catch (e) {
+            console.error("Error processing pendingSync data:", e);
+          }
+          
+          // Clear the pending data regardless
+          localStorage.removeItem("pendingSync");
+        }
+        
         return true;
       } catch (error) {
         console.error("Error processing Dropbox auth redirect:", error);
@@ -185,7 +161,7 @@ class DropboxProvider {
         return false;
       }
     }
-
+  
     // Otherwise, start a new auth flow
     console.log("Starting new Dropbox auth flow");
     try {
@@ -197,26 +173,26 @@ class DropboxProvider {
           timestamp: Date.now(),
         })
       );
-
-      // Await the Promise to get the actual URL string
+  
+      // Generate auth URL and redirect
       const authUrl = await this.dbx.auth.getAuthenticationUrl(
         this.REDIRECT_URI,
         null,
         "token"
       );
-
+  
       // Make sure we have a string URL, not a Promise
       if (typeof authUrl !== "string") {
         throw new Error("Invalid authorization URL: " + authUrl);
       }
-
+  
       console.log("Generated auth URL:", authUrl);
       window.location.href = authUrl;
       return false;
     } catch (error) {
       console.error("Failed to start Dropbox auth flow:", error);
-
-      // Try fallback method for older versions
+      
+      // Try fallback method if the first approach failed
       try {
         console.log("Trying fallback authentication method");
         const authUrl = this.dbx.getAuthenticationUrl(this.REDIRECT_URI);

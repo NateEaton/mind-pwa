@@ -230,9 +230,31 @@ const domElements = {
  * Update the sync UI elements based on current state
  */
 function updateSyncUIElements() {
+  // Check if online
   const isOnline = navigator.onLine;
+  
+  // Check if we have a cloud sync manager
   const hasSyncManager = !!cloudSync;
-  const isAuthenticated = hasSyncManager && cloudSync.isAuthenticated;
+  
+  // Check authentication status (provider-specific)
+  let isAuthenticated = false;
+  let providerName = "none";
+  
+  if (hasSyncManager && cloudSync.provider) {
+    // Get provider name for more detailed logging
+    providerName = cloudSync.provider.constructor.name;
+    
+    // Check if the current provider is authenticated
+    if (providerName.includes("Dropbox")) {
+      // For Dropbox, check if we have an access token
+      isAuthenticated = !!cloudSync.provider.ACCESS_TOKEN;
+    } else {
+      // For Google Drive, use the internal flag
+      isAuthenticated = cloudSync.isAuthenticated;
+    }
+  }
+  
+  // Get other sync state
   const isReady = syncReady;
   const syncInProgress = hasSyncManager && cloudSync.syncInProgress;
 
@@ -248,6 +270,7 @@ function updateSyncUIElements() {
   console.log("Updating sync UI elements with state:", {
     online: isOnline,
     cloudSyncExists: hasSyncManager,
+    providerName,
     isAuthenticated,
     syncReady: isReady,
     syncInProgress,
@@ -273,7 +296,7 @@ function updateSyncUIElements() {
   // Update settings dialog sync button
   const settingsSyncBtn = document.getElementById("sync-now-btn");
   if (settingsSyncBtn) {
-    settingsSyncBtn.disabled = !syncEnabled;
+    settingsSyncBtn.disabled = !syncButtonEnabled;
 
     // Optionally update button text here too
     if (syncInProgress) {
@@ -303,6 +326,8 @@ function updateSyncUIElements() {
     }
 
     syncStatusEl.textContent = statusText;
+    syncStatusEl.className = "status-value " + 
+      (isAuthenticated ? "connected" : "disconnected");
   }
 }
 
@@ -374,6 +399,22 @@ async function initializeApp() {
   console.log("Initializing app...");
 
   try {
+    // Check for authentication completion flag
+    // Check for authentication completion flag
+    const dropboxAuthComplete = localStorage.getItem("dropboxAuthComplete");
+    if (dropboxAuthComplete) {
+      // Clear the flag
+      localStorage.removeItem("dropboxAuthComplete");
+      
+      // Update syncEnabled state
+      syncEnabled = true;
+      
+      // Queue up opening settings after initialization
+      setTimeout(async () => {
+        await showSettings();
+      }, 500);
+    }
+    
     // Check for pending sync provider change from Dropbox auth
     const pendingSyncStr = localStorage.getItem("pendingSync");
     let pendingSync = null;
@@ -1775,6 +1816,35 @@ async function showSettings() {
           document.getElementById("sync-now-btn").disabled = true;
         }
       });
+      
+      // Add event listener for provider changes
+      const syncProviderSelect = document.getElementById("sync-provider");
+      if (syncProviderSelect) {
+        syncProviderSelect.addEventListener("change", (e) => {
+          const newProvider = e.target.value;
+          const currentProvider = cloudSync ? 
+            (cloudSync.provider.constructor.name.includes("Dropbox") ? "dropbox" : "gdrive") : 
+            "none";
+          
+          console.log(`Provider changing from ${currentProvider} to ${newProvider}`);
+          
+          // If provider changes, reset the connection status
+          if (newProvider !== currentProvider) {
+            // Update status to show not connected
+            const statusElement = document.getElementById("sync-status");
+            if (statusElement) {
+              statusElement.textContent = "Not connected";
+              statusElement.className = "status-value disconnected";
+            }
+            
+            // Disable sync button until authenticated with new provider
+            const syncNowBtn = document.getElementById("sync-now-btn");
+            if (syncNowBtn) {
+              syncNowBtn.disabled = true;
+            }
+          }
+        });
+      }
 
     // Event listeners for action buttons
     document.getElementById("sync-now-btn").addEventListener("click", () => {
@@ -1858,26 +1928,25 @@ function applySettingsWithoutClosing() {
   dataService.savePreference("cloudSyncProvider", syncProvider);
   dataService.savePreference("syncWifiOnly", syncWifiOnly);
 
-  // Set autoSyncInterval to default value (we no longer have this in the UI)
-  dataService.savePreference("autoSyncInterval", 15);
-
-  // Update global variables - ensure this directly modifies the global variable
-  window.syncEnabled = newSyncEnabled; // Use window to modify global scope
-  syncEnabled = newSyncEnabled; // Update local reference too
+  // Update global variables
+  window.syncEnabled = newSyncEnabled;
+  syncEnabled = newSyncEnabled;
 
   console.log("Applied sync settings, syncEnabled =", syncEnabled);
 
-  // Handle cloud sync initialization or cleanup based on enabled status
+  // Handle cloud sync changes based on new settings
   if (syncEnabled) {
     // Reset sync readiness until initialization completes
     setSyncReady(false);
 
-    // Initialize with new provider if needed
+    // Check if we need to initialize with a new provider
     if (
       !cloudSync ||
-      cloudSync.provider?.constructor.name !==
-        getProviderClassName(syncProvider)
+      (cloudSync.provider?.constructor.name.includes("GoogleDrive") && syncProvider === "dropbox") ||
+      (cloudSync.provider?.constructor.name.includes("Dropbox") && syncProvider === "gdrive")
     ) {
+      console.log("Initializing new cloud sync provider:", syncProvider);
+      
       cloudSync = new CloudSyncManager(
         dataService,
         handleSyncComplete,
@@ -1893,9 +1962,21 @@ function applySettingsWithoutClosing() {
           // Mark sync as ready
           setSyncReady(true);
 
-          // Try to sync after initialization if authenticated
-          if (cloudSync.isAuthenticated) {
-            syncData();
+          // Update status indicator
+          const statusElement = document.getElementById("sync-status");
+          if (statusElement) {
+            if (cloudSync.isAuthenticated) {
+              statusElement.textContent = "Connected";
+              statusElement.className = "status-value connected";
+              
+              // Try to sync after initialization if authenticated
+              if (cloudSync.isAuthenticated) {
+                syncData();
+              }
+            } else {
+              statusElement.textContent = "Not connected";
+              statusElement.className = "status-value disconnected";
+            }
           }
         })
         .catch((error) => {
