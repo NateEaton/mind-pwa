@@ -546,6 +546,9 @@ async function initializeApp() {
     await stateManager.initialize(foodGroups);
     console.log("State manager initialized");
 
+    // Make sure current date is correct
+    stateManager.ensureCurrentDate();
+
     // Check if current date requires counters reset
     await stateManager.checkDateAndReset();
 
@@ -1588,6 +1591,30 @@ async function syncData(silent = false, force = false) {
         type: stateManager.ACTION_TYPES.SET_HISTORY,
         payload: { history: historyData },
       });
+    }
+
+    // NEW ADDITION: Check if we need to perform a date reset after sync
+    const currentState = stateManager.getState();
+    const needsPostSyncReset = currentState.metadata?.pendingDateReset === true;
+
+    if (needsPostSyncReset) {
+      console.log("Performing post-sync date reset");
+
+      // Clear the pending flag first
+      delete currentState.metadata.pendingDateReset;
+      delete currentState.metadata.remoteDateWas;
+
+      // Save the cleared flag
+      dataService.saveState(currentState);
+
+      // Perform the date check and reset
+      const dateChanged = await stateManager.checkDateAndReset();
+
+      if (dateChanged) {
+        console.log("Post-sync date reset completed successfully");
+      } else {
+        console.warn("Post-sync date reset was flagged but no changes made");
+      }
     }
 
     // Now refresh the UI

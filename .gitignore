@@ -5,7 +5,7 @@ config.js
 manifest.json
 export*.json
 client_secret*
-mind-diet-tracker*.json
+mind-diet*.json
 *.diff
 *.log
 *.tmp

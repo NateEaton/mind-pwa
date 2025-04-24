@@ -730,6 +730,22 @@ function updateMetadata(metadataChanges) {
   });
 }
 
+function ensureCurrentDate() {
+  const state = getState();
+  const todayStr = dataService.getTodayDateString();
+
+  // If current date in state doesn't match today, update it
+  if (state.currentDayDate !== todayStr) {
+    console.log(
+      `Correcting currentDayDate from ${state.currentDayDate} to ${todayStr}`
+    );
+    setCurrentDay(todayStr);
+    return true;
+  }
+
+  return false;
+}
+
 // Export public API
 export default {
   // State management
@@ -749,6 +765,7 @@ export default {
   // Date check & reset
   checkDateAndReset,
   archiveCurrentWeek,
+  ensureCurrentDate,
 
   // Helper functions
   getFoodGroup,

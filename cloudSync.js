@@ -103,7 +103,7 @@ export class CloudSyncManager {
 
       // Update metadata
       metadata[flagName] = false;
-      
+
       // Clear the fresh install flag if this was a data sync
       if (flagName === "currentWeekDirty") {
         metadata.isFreshInstall = false;
@@ -360,29 +360,48 @@ export class CloudSyncManager {
         : "none",
     });
 
+    // Check system date vs remote date - NEW ADDITION
+    const todayStr = this.dataService.getTodayDateString();
+    const remoteDateStr = remoteData.currentDayDate;
+    const needsDateReset = todayStr !== remoteDateStr;
+
+    console.log(
+      `System date: ${todayStr}, Remote date: ${remoteDateStr}, Needs reset: ${needsDateReset}`
+    );
+
     // Special case for fresh installs - prefer remote data
     if (localData.metadata && localData.metadata.isFreshInstall) {
-      console.log("Fresh install detected - using remote data and updating timestamp");
-      
+      console.log(
+        "Fresh install detected - using remote data and updating timestamp"
+      );
+
       // Check if remote data has actual content
-      const hasRemoteData = 
-        Object.keys(remoteData.dailyCounts || {}).length > 0 || 
+      const hasRemoteData =
+        Object.keys(remoteData.dailyCounts || {}).length > 0 ||
         Object.keys(remoteData.weeklyCounts || {}).length > 0;
-      
+
       if (hasRemoteData) {
-        // Use remote data but with updated timestamps
-        const mergedData = {
+        let mergedData = {
           ...remoteData,
-          lastModified: Date.now(), // Current timestamp
+          // IMPORTANT FIX: Use system date, not remote date
+          currentDayDate: todayStr,
+          lastModified: Date.now(),
           metadata: {
             ...(remoteData.metadata || {}),
-            isFreshInstall: false, // Clear the fresh install flag
+            isFreshInstall: false,
             currentWeekDirty: false,
             schemaVersion: localData.metadata.schemaVersion,
             deviceId: localData.metadata.deviceId,
-          }
+          },
         };
-        
+
+        // If date has changed, mark for post-sync reset - NEW ADDITION
+        if (needsDateReset) {
+          mergedData.metadata.pendingDateReset = true;
+          mergedData.metadata.remoteDateWas = remoteDateStr;
+          console.log("Flagged for post-sync date reset");
+        }
+
         return mergedData;
       }
     }
@@ -498,8 +517,10 @@ export class CloudSyncManager {
     // If remote modified time is more recent, use remote data
     if (remoteModified > localModified) {
       console.log("Remote data is more recent than local - using remote data");
-      return {
+      const mergedData = {
         ...remoteData,
+        // IMPORTANT: Always preserve local current day date
+        currentDayDate: localData.currentDayDate || todayStr,
         metadata: {
           ...(remoteData.metadata || {}),
           currentWeekDirty: false,
@@ -507,6 +528,15 @@ export class CloudSyncManager {
         },
         lastModified: remoteModified + 1,
       };
+
+      // If remote date differs from system date, flag for reset - NEW ADDITION
+      if (needsDateReset) {
+        mergedData.metadata.pendingDateReset = true;
+        mergedData.metadata.remoteDateWas = remoteDateStr;
+        console.log("Flagged for post-sync date reset when using remote data");
+      }
+
+      return mergedData;
     }
 
     // If local modified time is more recent, use local data
@@ -527,10 +557,7 @@ export class CloudSyncManager {
     const mergedData = {
       ...remoteData,
       // Keep local day if it's more recent
-      currentDayDate: this.getMostRecentDate(
-        localData.currentDayDate,
-        remoteData.currentDayDate
-      ),
+      currentDayDate: todayStr,
       currentWeekStartDate: this.getMostRecentDate(
         localData.currentWeekStartDate,
         remoteData.currentWeekStartDate
@@ -599,6 +626,13 @@ export class CloudSyncManager {
       lastModified: mergedData.lastModified,
       lastModifiedDate: new Date(mergedData.lastModified).toISOString(),
     });
+
+    // Always check for date reset needs
+    if (needsDateReset) {
+      mergedData.metadata.pendingDateReset = true;
+      mergedData.metadata.remoteDateWas = remoteDateStr;
+      console.log("Flagged for post-sync date reset in standard merge");
+    }
 
     return mergedData;
   }
