@@ -46,8 +46,6 @@ export class CloudSyncManager {
     return this.isAuthenticated;
   }
 
-  // In cloudSync.js within CloudSyncManager class
-  // In cloudSync.js - Enhance determineWhatToSync function
   async determineWhatToSync() {
     try {
       // Get state to check dirty flags
@@ -60,6 +58,8 @@ export class CloudSyncManager {
         JSON.stringify(metadata, null, 2)
       );
 
+      // Always check if there's history on the server we don't have
+      const historyNeedsCheck = true; // Always check history on sync
       const currentWeekDirty = metadata.currentWeekDirty || false;
       const historyDirty = metadata.historyDirty || false;
 
@@ -70,18 +70,24 @@ export class CloudSyncManager {
       // Always sync current week if reset was performed or data is dirty
       const syncCurrent = currentWeekDirty || dateResetPerformed;
 
-      // Always sync history if weekly reset occurred or if history is dirty
+      // Always sync history if:
+      // 1. Weekly reset occurred
+      // 2. History is marked as dirty
+      // 3. We've decided to always check history
       const syncHistory =
-        historyDirty || (dateResetPerformed && dateResetType === "WEEKLY");
+        historyDirty ||
+        (dateResetPerformed && dateResetType === "WEEKLY") ||
+        historyNeedsCheck;
 
       console.log("Sync determination:", {
         syncCurrent,
         syncHistory,
         currentWeekDirty,
         historyDirty,
+        historyNeedsCheck,
         dateResetPerformed,
         dateResetType,
-        metadata: metadata, // Add full metadata object for debugging
+        metadata: metadata,
       });
 
       return { syncCurrent, syncHistory };
@@ -747,6 +753,8 @@ export class CloudSyncManager {
         remoteIndex.weeks &&
         Array.isArray(remoteIndex.weeks)
       ) {
+        console.log("Remote index found, comparing with local history");
+
         // Create a map of weeks by start date for easier lookup
         const localWeekMap = new Map();
         localIndex.weeks.forEach((week) => {
@@ -758,10 +766,23 @@ export class CloudSyncManager {
           remoteWeekMap.set(week.weekStartDate, week);
         });
 
-        // Find weeks that need downloading (remote is newer)
+        // Find weeks that need downloading (remote exists but local doesn't, or remote is newer)
         for (const [weekStart, remoteWeek] of remoteWeekMap.entries()) {
           const localWeek = localWeekMap.get(weekStart);
-          if (!localWeek || remoteWeek.updatedAt > localWeek.updatedAt) {
+          if (!localWeek) {
+            // Week exists in remote but not local - mark for download
+            console.log(
+              `Week ${weekStart} exists in cloud but not locally - adding to download queue`
+            );
+            weeksToSync.push({
+              weekStartDate: weekStart,
+              direction: "download",
+            });
+          } else if (remoteWeek.updatedAt > localWeek.updatedAt) {
+            // Remote is newer than local - mark for download
+            console.log(
+              `Remote week ${weekStart} is newer (${remoteWeek.updatedAt} > ${localWeek.updatedAt}) - adding to download queue`
+            );
             weeksToSync.push({
               weekStartDate: weekStart,
               direction: "download",
@@ -769,10 +790,23 @@ export class CloudSyncManager {
           }
         }
 
-        // Find weeks that need uploading (local is newer)
+        // Find weeks that need uploading (local exists but remote doesn't, or local is newer)
         for (const [weekStart, localWeek] of localWeekMap.entries()) {
           const remoteWeek = remoteWeekMap.get(weekStart);
-          if (!remoteWeek || localWeek.updatedAt > remoteWeek.updatedAt) {
+          if (!remoteWeek) {
+            // Week exists in local but not remote - mark for upload
+            console.log(
+              `Week ${weekStart} exists locally but not in cloud - adding to upload queue`
+            );
+            weeksToSync.push({
+              weekStartDate: weekStart,
+              direction: "upload",
+            });
+          } else if (localWeek.updatedAt > remoteWeek.updatedAt) {
+            // Local is newer than remote - mark for upload
+            console.log(
+              `Local week ${weekStart} is newer (${localWeek.updatedAt} > ${remoteWeek.updatedAt}) - adding to upload queue`
+            );
             weeksToSync.push({
               weekStartDate: weekStart,
               direction: "upload",
@@ -811,6 +845,17 @@ export class CloudSyncManager {
           lastUpdated: Date.now(),
           weeks: mergedWeeks,
         };
+      } else {
+        console.log(
+          "No remote index found or it's invalid - will create new index"
+        );
+        // Since we're creating a new index, mark all local weeks for upload
+        localIndex.weeks.forEach((week) => {
+          weeksToSync.push({
+            weekStartDate: week.weekStartDate,
+            direction: "upload",
+          });
+        });
       }
 
       // Upload the index
@@ -984,7 +1029,10 @@ export class CloudSyncManager {
       // Clear the history dirty flag after successful sync
       await this.clearDirtyFlag("historyDirty");
 
-      return syncSuccessCount > 0;
+      return {
+        success: true,
+        syncedCount: syncSuccessCount,
+      };
     } catch (error) {
       console.error("Error in history sync:", error);
       throw error;
