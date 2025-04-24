@@ -834,6 +834,8 @@ export class CloudSyncManager {
       // Find or create the week file
       const fileInfo = await this.provider.findOrCreateFile(weekFileName);
 
+      let syncSuccessful = false;
+
       if (direction === "upload") {
         // Get the local week data
         const localWeek = await this.dataService.getWeekHistory(weekStartDate);
@@ -846,7 +848,7 @@ export class CloudSyncManager {
         // Upload to cloud
         await this.provider.uploadFile(fileInfo.id, localWeek);
         console.log(`Week ${weekStartDate} uploaded successfully`);
-        return true;
+        syncSuccessful = true;
       } else {
         // download
         // Download the remote week data
@@ -865,13 +867,78 @@ export class CloudSyncManager {
 
         // Update local state if history data changed
         const historyData = await this.dataService.getAllWeekHistory();
-        this.stateManager.dispatch({
-          type: this.stateManager.ACTION_TYPES.SET_HISTORY,
-          payload: { history: historyData },
-        });
+        if (this.stateManager) {
+          this.stateManager.dispatch({
+            type: this.stateManager.ACTION_TYPES.SET_HISTORY,
+            payload: { history: historyData },
+          });
+        }
 
-        return true;
+        syncSuccessful = true;
       }
+
+      // If sync was successful, update the index file too
+      if (syncSuccessful) {
+        try {
+          // Get the index file
+          const indexFileName = "mind-diet-history-index.json";
+          const indexFileInfo = await this.provider.findOrCreateFile(
+            indexFileName
+          );
+
+          // Download current index
+          let indexData = await this.provider.downloadFile(indexFileInfo.id);
+
+          // If no valid index exists, create a new one
+          if (
+            !indexData ||
+            !indexData.weeks ||
+            !Array.isArray(indexData.weeks)
+          ) {
+            indexData = {
+              lastUpdated: Date.now(),
+              weeks: [],
+            };
+          }
+
+          // Get the week we just synced
+          const syncedWeek = await this.dataService.getWeekHistory(
+            weekStartDate
+          );
+
+          if (syncedWeek) {
+            // Find if this week is already in the index
+            const weekIndex = indexData.weeks.findIndex(
+              (w) => w.weekStartDate === weekStartDate
+            );
+
+            const weekEntry = {
+              weekStartDate: weekStartDate,
+              updatedAt: syncedWeek.metadata?.updatedAt || Date.now(),
+            };
+
+            if (weekIndex >= 0) {
+              // Update existing entry
+              indexData.weeks[weekIndex] = weekEntry;
+            } else {
+              // Add new entry
+              indexData.weeks.push(weekEntry);
+            }
+
+            // Update the index file
+            indexData.lastUpdated = Date.now();
+            await this.provider.uploadFile(indexFileInfo.id, indexData);
+            console.log(`Updated history index for week ${weekStartDate}`);
+          }
+        } catch (indexError) {
+          console.warn(
+            `Error updating index after week sync: ${indexError.message}`
+          );
+          // Don't fail the sync if index update fails
+        }
+      }
+
+      return syncSuccessful;
     } catch (error) {
       console.error(`Error syncing week ${weekStartDate}:`, error);
       return false;
