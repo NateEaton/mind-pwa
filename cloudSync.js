@@ -6,7 +6,7 @@ import DropboxProvider from "./cloudProviders/dropboxProvider.js";
 export class CloudSyncManager {
   constructor(dataService, stateManager, onSyncComplete, onSyncError) {
     this.dataService = dataService;
-    this.stateManager = stateManager; // Add this line
+    this.stateManager = stateManager;
     this.onSyncComplete = onSyncComplete || (() => {});
     this.onSyncError = onSyncError || console.error;
     this.provider = null;

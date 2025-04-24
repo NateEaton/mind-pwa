@@ -434,6 +434,17 @@ async function saveWeekHistory(weekData, options = {}) {
           normalizedRecord
         );
 
+        // Mark history as dirty in current state metadata
+        try {
+          const currentState = loadState();
+          if (currentState.metadata) {
+            currentState.metadata.historyDirty = true;
+            saveState(currentState);
+          }
+        } catch (e) {
+          console.warn("Could not update historyDirty flag:", e);
+        }
+
         resolve();
       };
       request.onerror = (event) =>

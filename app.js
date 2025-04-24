@@ -469,6 +469,7 @@ async function initializeApp() {
         console.log("Initializing cloud sync with provider:", syncProvider);
         cloudSync = new CloudSyncManager(
           dataService,
+          stateManager,
           handleSyncComplete,
           handleSyncError
         );
@@ -1503,12 +1504,17 @@ function getDateRelationship(importDate, todayDate) {
 function handleSyncComplete(result) {
   console.log("Sync completed:", result);
 
-  // Show toast notification
-  uiRenderer.showToast("Data synced successfully", "success");
+  // Only show success toast if there's a valid result
+  if (result) {
+    // Show toast notification
+    uiRenderer.showToast("Data synced successfully", "success");
 
-  // If history was synced, re-render history view
-  if (result && result.historySynced) {
-    uiRenderer.renderHistory();
+    // If history was synced, re-render history view
+    if (result.historySynced) {
+      uiRenderer.renderHistory();
+    }
+  } else {
+    console.warn("Sync completed with no result object");
   }
 }
 
@@ -1964,6 +1970,7 @@ async function showSettings() {
           // Initialize with new provider
           cloudSync = new CloudSyncManager(
             dataService,
+            stateManager,
             handleSyncComplete,
             handleSyncError
           );
@@ -2051,6 +2058,7 @@ function applySettingsWithoutClosing() {
 
       cloudSync = new CloudSyncManager(
         dataService,
+        stateManager,
         handleSyncComplete,
         handleSyncError
       );
@@ -2312,6 +2320,20 @@ async function saveEditedTotals() {
 
       // Save to database
       await dataService.saveWeekHistory(editingWeekDataRef);
+
+      // Also update current state metadata to flag history as dirty for sync
+      const currentState = stateManager.getState();
+      if (currentState.metadata) {
+        stateManager.dispatch({
+          type: stateManager.ACTION_TYPES.UPDATE_METADATA,
+          payload: {
+            metadata: {
+              historyDirty: true,
+              lastModified: Date.now(),
+            },
+          },
+        });
+      }
 
       // Refresh history data in state
       const historyData = await dataService.getAllWeekHistory();
