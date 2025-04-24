@@ -360,11 +360,11 @@ function normalizeWeekData(weekData, options = {}) {
   // Build metadata
   const metadata = {
     createdAt: existingRecord?.metadata?.createdAt || now,
-    updatedAt: now,
+    updatedAt: options.updatedAt || now, // Use provided timestamp or current time
     schemaVersion: SCHEMA.VERSION,
     deviceInfo: getDeviceInfo(),
     deviceId: getDeviceId(),
-    syncStatus: options.importInfo ? "imported" : "local",
+    syncStatus: options.importInfo ? "imported" : options.syncStatus || "local",
   };
 
   // Add import details if available
@@ -438,6 +438,24 @@ async function saveWeekHistory(weekData, options = {}) {
       };
       request.onerror = (event) =>
         reject(new Error(`Error saving week data: ${event.target.error}`));
+    }
+  );
+}
+
+/**
+ * Get a specific week's history by weekStartDate
+ * @param {string} weekStartDate - The week start date (YYYY-MM-DD)
+ * @returns {Promise<Object|null>} Promise resolving to the week data or null
+ */
+async function getWeekHistory(weekStartDate) {
+  return dbOperation(
+    STORES.HISTORY,
+    "readonly",
+    (store, transaction, resolve, reject) => {
+      const request = store.get(weekStartDate);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = (event) =>
+        reject(new Error(`Error fetching week: ${event.target.error}`));
     }
   );
 }
@@ -794,25 +812,31 @@ async function getPendingSyncChanges(since = 0) {
  */
 function loadState() {
   try {
-    const savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {};
+    const savedState =
+      JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {};
     const today = getTodayDateString();
     const currentWeekStart = getWeekStartDate(getCurrentDate());
-    
+
     // Check if this is a fresh install with no local data
     const isFreshInstall = !localStorage.getItem(LOCAL_STORAGE_KEY);
-    
+
     // Set timestamp - use a very old date (Jan 1, 2025) for fresh installs
     // This ensures any cloud data will be considered newer
     const now = getCurrentTimestamp();
     const oldTimestamp = new Date("2025-01-01T00:00:00").getTime();
-    const lastModified = isFreshInstall ? oldTimestamp : (savedState.lastModified || now);
+    const lastModified = isFreshInstall
+      ? oldTimestamp
+      : savedState.lastModified || now;
 
     // Start with metadata loaded from savedState, default to empty object if none exists
     const loadedMetadata = savedState.metadata || {};
 
     // For fresh installs, add a special flag to indicate this is initial data
     if (isFreshInstall) {
-      console.log("Fresh install detected - using old timestamp:", new Date(oldTimestamp).toISOString());
+      console.log(
+        "Fresh install detected - using old timestamp:",
+        new Date(oldTimestamp).toISOString()
+      );
     }
 
     // Merge loaded metadata with essential/default metadata properties
@@ -1266,6 +1290,7 @@ export default {
   saveWeekHistory,
   getAllWeekHistory,
   clearHistoryStore,
+  getWeekHistory,
 
   // User preferences
   savePreference,

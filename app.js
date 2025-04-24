@@ -999,8 +999,9 @@ function handleHistoryDatePick() {
   } else {
     uiRenderer.showToast(
       `No history found for the week starting ${targetWeekStart}`,
-      "error"
+      "info"
     );
+    // Future enhancement: Could offer to create data for this missing week
   }
 }
 
@@ -1392,6 +1393,7 @@ async function processImport(importedData, dateRelationship) {
           metadata: {
             schemaVersion: 1,
             partialImport: true,
+            historyDirty: true,
           },
         },
         history: combinedHistory,
@@ -1438,6 +1440,8 @@ async function processImport(importedData, dateRelationship) {
           metadata: {
             schemaVersion: 1,
             partialImport: true,
+            currentWeekDirty: true,
+            historyDirty: true,
           },
         },
         history: importedData.history,
@@ -1447,6 +1451,18 @@ async function processImport(importedData, dateRelationship) {
       await dataService.importData(mergedImport);
     } else {
       // For other import types (SAME_DAY or FUTURE_WEEK), proceed with normal full import
+      // Before importing, set metadata with dirty flags
+      if (!importedData.currentState.metadata) {
+        importedData.currentState.metadata = {};
+      }
+
+      // Set appropriate flags based on what is being imported
+      importedData.currentState.metadata.currentWeekDirty = true;
+
+      if (importedData.history && importedData.history.length > 0) {
+        importedData.currentState.metadata.historyDirty = true;
+      }
+
       await dataService.importData(importedData);
     }
 
@@ -1491,7 +1507,7 @@ function handleSyncComplete(result) {
   uiRenderer.showToast("Data synced successfully", "success");
 
   // If history was synced, re-render history view
-  if (result.historySynced) {
+  if (result && result.historySynced) {
     uiRenderer.renderHistory();
   }
 }
@@ -1864,6 +1880,7 @@ async function showSettings() {
               // Initialize the cloud sync
               cloudSync = new CloudSyncManager(
                 dataService,
+                stateManager,
                 handleSyncComplete,
                 handleSyncError
               );
@@ -2287,6 +2304,12 @@ async function saveEditedTotals() {
       // Update the totals in the history object
       editingWeekDataRef.totals = finalTotals;
 
+      // Ensure we have proper metadata with current timestamp
+      if (!editingWeekDataRef.metadata) {
+        editingWeekDataRef.metadata = {};
+      }
+      editingWeekDataRef.metadata.updatedAt = Date.now();
+
       // Save to database
       await dataService.saveWeekHistory(editingWeekDataRef);
 
@@ -2296,6 +2319,20 @@ async function saveEditedTotals() {
         type: stateManager.ACTION_TYPES.SET_HISTORY,
         payload: { history: historyData },
       });
+
+      // Trigger sync for just this week if sync is enabled
+      if (syncEnabled && cloudSync && syncReady) {
+        try {
+          // Only attempt sync if we have the week-level sync method
+          if (typeof cloudSync.syncWeek === "function") {
+            cloudSync
+              .syncWeek(editingWeekDataRef.weekStartDate, "upload")
+              .catch((err) => console.warn("Error syncing edited week:", err));
+          }
+        } catch (error) {
+          console.warn("Could not trigger week sync after edit:", error);
+        }
+      }
 
       uiRenderer.showToast(
         `Totals updated for week ${editingWeekDataRef.weekStartDate}.`,

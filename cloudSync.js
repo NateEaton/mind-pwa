@@ -4,8 +4,9 @@ import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
 import DropboxProvider from "./cloudProviders/dropboxProvider.js";
 
 export class CloudSyncManager {
-  constructor(dataService, onSyncComplete, onSyncError) {
+  constructor(dataService, stateManager, onSyncComplete, onSyncError) {
     this.dataService = dataService;
+    this.stateManager = stateManager; // Add this line
     this.onSyncComplete = onSyncComplete || (() => {});
     this.onSyncError = onSyncError || console.error;
     this.provider = null;
@@ -711,97 +712,212 @@ export class CloudSyncManager {
     return true;
   }
 
+  async syncHistoryIndex() {
+    console.log("=== Starting History Index Sync ===");
+
+    try {
+      const historyIndexFileName = "mind-diet-history-index.json";
+
+      // Find or create the index file
+      const fileInfo = await this.provider.findOrCreateFile(
+        historyIndexFileName
+      );
+
+      // Get local history data for index creation
+      const localHistory = await this.dataService.getAllWeekHistory();
+
+      // Create local index
+      const localIndex = {
+        lastUpdated: Date.now(),
+        weeks: localHistory.map((week) => ({
+          weekStartDate: week.weekStartDate,
+          updatedAt: week.metadata?.updatedAt || 0,
+        })),
+      };
+
+      // Download remote index if it exists
+      const remoteIndex = await this.provider.downloadFile(fileInfo.id);
+
+      let indexToUpload = localIndex;
+      let weeksToSync = [];
+
+      // If remote index exists, merge and determine which weeks need syncing
+      if (
+        remoteIndex &&
+        remoteIndex.weeks &&
+        Array.isArray(remoteIndex.weeks)
+      ) {
+        // Create a map of weeks by start date for easier lookup
+        const localWeekMap = new Map();
+        localIndex.weeks.forEach((week) => {
+          localWeekMap.set(week.weekStartDate, week);
+        });
+
+        const remoteWeekMap = new Map();
+        remoteIndex.weeks.forEach((week) => {
+          remoteWeekMap.set(week.weekStartDate, week);
+        });
+
+        // Find weeks that need downloading (remote is newer)
+        for (const [weekStart, remoteWeek] of remoteWeekMap.entries()) {
+          const localWeek = localWeekMap.get(weekStart);
+          if (!localWeek || remoteWeek.updatedAt > localWeek.updatedAt) {
+            weeksToSync.push({
+              weekStartDate: weekStart,
+              direction: "download",
+            });
+          }
+        }
+
+        // Find weeks that need uploading (local is newer)
+        for (const [weekStart, localWeek] of localWeekMap.entries()) {
+          const remoteWeek = remoteWeekMap.get(weekStart);
+          if (!remoteWeek || localWeek.updatedAt > remoteWeek.updatedAt) {
+            weeksToSync.push({
+              weekStartDate: weekStart,
+              direction: "upload",
+            });
+          }
+        }
+
+        // Merge the index data
+        const mergedWeeks = [];
+
+        // Include all weeks from both sources, using the more up-to-date information
+        const allWeekStarts = new Set([
+          ...localIndex.weeks.map((w) => w.weekStartDate),
+          ...remoteIndex.weeks.map((w) => w.weekStartDate),
+        ]);
+
+        allWeekStarts.forEach((weekStart) => {
+          const localWeek = localWeekMap.get(weekStart);
+          const remoteWeek = remoteWeekMap.get(weekStart);
+
+          if (localWeek && remoteWeek) {
+            // Both exist, use the newer one
+            mergedWeeks.push(
+              localWeek.updatedAt >= remoteWeek.updatedAt
+                ? localWeek
+                : remoteWeek
+            );
+          } else {
+            // Only one exists
+            mergedWeeks.push(localWeek || remoteWeek);
+          }
+        });
+
+        // Create the merged index
+        indexToUpload = {
+          lastUpdated: Date.now(),
+          weeks: mergedWeeks,
+        };
+      }
+
+      // Upload the index
+      await this.provider.uploadFile(fileInfo.id, indexToUpload);
+      console.log("History index synced successfully");
+
+      // Return the list of weeks that need syncing
+      return weeksToSync;
+    } catch (error) {
+      console.error("Error in history index sync:", error);
+      throw error;
+    }
+  }
+
+  async syncWeek(weekStartDate, direction) {
+    console.log(`=== Syncing week ${weekStartDate} (${direction}) ===`);
+
+    try {
+      const weekFileName = `mind-diet-week-${weekStartDate}.json`;
+
+      // Find or create the week file
+      const fileInfo = await this.provider.findOrCreateFile(weekFileName);
+
+      if (direction === "upload") {
+        // Get the local week data
+        const localWeek = await this.dataService.getWeekHistory(weekStartDate);
+
+        if (!localWeek) {
+          console.warn(`Local week ${weekStartDate} not found for upload`);
+          return false;
+        }
+
+        // Upload to cloud
+        await this.provider.uploadFile(fileInfo.id, localWeek);
+        console.log(`Week ${weekStartDate} uploaded successfully`);
+        return true;
+      } else {
+        // download
+        // Download the remote week data
+        const remoteWeek = await this.provider.downloadFile(fileInfo.id);
+
+        if (!remoteWeek || !remoteWeek.weekStartDate) {
+          console.warn(`Remote week ${weekStartDate} not found or invalid`);
+          return false;
+        }
+
+        // Save to local database
+        await this.dataService.saveWeekHistory(remoteWeek, {
+          syncStatus: "synced",
+        });
+        console.log(`Week ${weekStartDate} downloaded successfully`);
+
+        // Update local state if history data changed
+        const historyData = await this.dataService.getAllWeekHistory();
+        this.stateManager.dispatch({
+          type: this.stateManager.ACTION_TYPES.SET_HISTORY,
+          payload: { history: historyData },
+        });
+
+        return true;
+      }
+    } catch (error) {
+      console.error(`Error syncing week ${weekStartDate}:`, error);
+      return false;
+    }
+  }
+
   async syncHistory(forceUpload = false) {
     console.log("=== Starting History Sync ===");
 
     try {
-      const historyFileName = "mind-diet-history.json";
+      // First sync the index to determine which weeks need syncing
+      const weeksToSync = await this.syncHistoryIndex();
 
-      // Find or create the file in the cloud
-      const fileInfo = await this.provider.findOrCreateFile(historyFileName);
-      console.log("History file info:", fileInfo);
+      console.log(`Found ${weeksToSync.length} weeks that need syncing`);
 
-      // Get local history data
-      const localHistory = await this.dataService.getAllWeekHistory();
-      console.log("Local history for sync:", {
-        count: localHistory.length,
-        firstDate:
-          localHistory.length > 0 ? localHistory[0].weekStartDate : null,
-        lastDate:
-          localHistory.length > 0
-            ? localHistory[localHistory.length - 1].weekStartDate
-            : null,
-      });
-
-      // First, download remote history data to merge with local
-      console.log("Downloading remote history data...");
-      const remoteData = await this.provider.downloadFile(fileInfo.id);
-      let dataToUpload = { history: localHistory };
-
-      // If remote data exists and has history, merge with local
-      if (
-        remoteData &&
-        remoteData.history &&
-        Array.isArray(remoteData.history)
-      ) {
-        console.log("Remote history found, merging with local history:", {
-          count: remoteData.history.length,
-          firstDate:
-            remoteData.history.length > 0
-              ? remoteData.history[0].weekStartDate
-              : null,
-          lastDate:
-            remoteData.history.length > 0
-              ? remoteData.history[remoteData.history.length - 1].weekStartDate
-              : null,
-        });
-
-        const mergeResult = this.mergeHistoryData(
-          localHistory,
-          remoteData.history
-        );
-
-        if (mergeResult.changed) {
-          console.log("History merged with changes detected");
-          dataToUpload = { history: mergeResult.data };
-
-          // Save each history item individually to avoid key issues
-          console.log("Updating local store with merged history data");
-          try {
-            // Instead of bulk updating, save each week one by one
-            for (const weekData of mergeResult.data) {
-              // Ensure the week has a valid key
-              if (!weekData.weekStartDate) {
-                console.warn(
-                  "History item missing weekStartDate, skipping",
-                  weekData
-                );
-                continue;
-              }
-              // Save individual week to the database
-              await this.dataService.saveWeekHistory(weekData);
-            }
-          } catch (error) {
-            console.error("Error saving merged history:", error);
-            // Continue with the sync even if local save failed
-          }
-        } else {
-          console.log("No changes after merging history");
-        }
-      } else {
-        console.log("No valid remote history data, using local data only");
+      if (weeksToSync.length === 0) {
+        console.log("No history weeks need syncing");
+        return true;
       }
 
-      // Upload the (possibly merged) data
-      console.log("Uploading history data to cloud...");
-      await this.provider.uploadFile(fileInfo.id, dataToUpload);
-      this.lastHistorySyncTimestamp = Date.now();
-      console.log("Successfully uploaded history data to server");
+      // Sync each week
+      let syncSuccessCount = 0;
 
-      // Store last synced week in localStorage for persistence
+      for (const weekInfo of weeksToSync) {
+        const success = await this.syncWeek(
+          weekInfo.weekStartDate,
+          weekInfo.direction
+        );
+
+        if (success) {
+          syncSuccessCount++;
+        }
+      }
+
+      console.log(
+        `Synced ${syncSuccessCount} out of ${weeksToSync.length} weeks`
+      );
+
+      // Update the last sync timestamp
+      this.lastHistorySyncTimestamp = Date.now();
       this.storeLastSyncedState();
 
-      return dataToUpload.history;
+      // Clear the history dirty flag after successful sync
+      await this.clearDirtyFlag("historyDirty");
+
+      return syncSuccessCount > 0;
     } catch (error) {
       console.error("Error in history sync:", error);
       throw error;
