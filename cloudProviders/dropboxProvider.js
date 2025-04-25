@@ -262,6 +262,8 @@ class DropboxProvider {
   }
 
   // Update uploadFile method
+  // In dropboxProvider.js - update the uploadFile method
+  // In dropboxProvider.js
   async uploadFile(fileId, content) {
     console.log(`Uploading to Dropbox file ID: ${fileId}...`);
 
@@ -284,25 +286,43 @@ class DropboxProvider {
       });
 
       console.log(`Upload successful: ${response.result.name}`);
+      console.log("Upload response rev:", response.result.rev);
 
-      // Optionally verify immediately
-      try {
-        const verifyData = await this.downloadFile(fileId);
-        console.log(
-          "Verification data:",
-          verifyData ? "Valid data" : "No data"
-        );
-      } catch (e) {
-        console.warn("Verification after upload failed:", e);
-      }
-
+      // Return complete result info with rev - no need to download again for verification
       return {
         id: response.result.id,
         name: response.result.name,
+        rev: response.result.rev,
         modifiedTime: response.result.server_modified,
       };
     } catch (error) {
       console.error(`Error uploading to file ${fileId}:`, error);
+      throw error;
+    }
+  }
+
+  async getFileMetadata(fileId) {
+    try {
+      console.log(`Getting metadata for Dropbox file: ${fileId}`);
+      const response = await this.dbx.filesGetMetadata({ path: fileId });
+
+      // Log the full response to debug
+      console.log("Dropbox metadata response:", response.result);
+
+      // Return essential metadata including revision
+      return {
+        id: response.result.id,
+        name: response.result.name,
+        rev: response.result.rev, // Ensure this property exists in response
+        modifiedTime: response.result.server_modified,
+        size: response.result.size || 0,
+      };
+    } catch (error) {
+      if (error.status === 404) {
+        console.log(`File with ID ${fileId} not found`);
+        return null;
+      }
+      console.error(`Error getting metadata for file ${fileId}:`, error);
       throw error;
     }
   }

@@ -33,7 +33,7 @@ class GoogleDriveProvider {
         console.warn("Google Drive API keys not available");
         return false;
       }
-      
+
       // Load the Google API client library
       return new Promise((resolve, reject) => {
         const script = document.createElement("script");
@@ -265,12 +265,13 @@ class GoogleDriveProvider {
       throw new Error("Cannot upload empty or null content");
     }
 
-    const contentStr = JSON.stringify(content);
-    const accessToken = this.gapi.client.getToken().access_token;
-
     try {
+      const contentStr = JSON.stringify(content);
+      const accessToken = this.gapi.client.getToken().access_token;
+
+      // Upload the file
       const response = await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,name,etag,modifiedTime`,
         {
           method: "PATCH",
           headers: {
@@ -284,11 +285,15 @@ class GoogleDriveProvider {
 
       const result = await response.json();
       console.log("Upload result:", result);
+      console.log("Upload etag:", result.etag);
 
-      // Optionally verify immediately
-      const verifyData = await this.downloadFile(fileId);
-      console.log("Verification data:", verifyData);
-      return result;
+      // Return complete file info including ETag
+      return {
+        id: result.id,
+        name: result.name,
+        etag: result.etag, // Store this for future comparisons
+        modifiedTime: result.modifiedTime,
+      };
     } catch (error) {
       console.error("Upload failed:", error);
       throw error;
@@ -375,6 +380,38 @@ class GoogleDriveProvider {
         return null; // File not found, which is okay for first sync
       }
       console.error(`Error downloading file ${fileId}:`, error);
+      throw error;
+    }
+  }
+
+  async getFileMetadata(fileId) {
+    try {
+      console.log(`Getting metadata for Google Drive file: ${fileId}`);
+
+      // Request specific fields we need
+      const response = await this.gapi.client.drive.files.get({
+        fileId: fileId,
+        fields: "id,name,etag,modifiedTime,size,mimeType",
+      });
+
+      // Log the full response for debugging
+      console.log("Google Drive metadata response:", response.result);
+
+      // Return essential metadata including etag
+      return {
+        id: response.result.id,
+        name: response.result.name,
+        etag: response.result.etag, // Google Drive specific ETag
+        modifiedTime: response.result.modifiedTime,
+        size: response.result.size || 0,
+        mimeType: response.result.mimeType,
+      };
+    } catch (error) {
+      if (error.status === 404) {
+        console.log(`File with ID ${fileId} not found`);
+        return null;
+      }
+      console.error(`Error getting metadata for file ${fileId}:`, error);
       throw error;
     }
   }
