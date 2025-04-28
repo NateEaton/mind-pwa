@@ -547,11 +547,11 @@ async function initializeApp() {
     await stateManager.initialize(foodGroups);
     console.log("State manager initialized");
 
-    // Make sure current date is correct
-    stateManager.ensureCurrentDate();
-
-    // Check if current date requires counters reset
-    await stateManager.checkDateAndReset();
+    // Check for date/week changes and perform resets if needed
+    const dateChanged = await stateManager.checkDateAndReset();
+    if (dateChanged) {
+      console.log("Date or week changed and state was updated");
+    }
 
     // Setup event listeners
     setupEventListeners();
