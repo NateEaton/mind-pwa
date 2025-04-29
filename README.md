@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-A simple Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history, all stored locally on your device.
+A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
 
 [**View Wiki for Complete Documentation**](../../wiki)
 
@@ -23,6 +23,7 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
     <tr valign="top">
       <td><img src="./screenshots/food-info-modal.png" width="180" alt="Food Information Modal"/></td>
       <td><img src="./screenshots/edit-totals-modal.png" width="180" alt="Edit Weekly Totals"/></td>
+      <td><img src="./screenshots/settings-modal.png" width="180" alt="Settings Modal"/></td>
     </tr>
   </table>
 </div>
@@ -33,6 +34,7 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 2. Use the **Daily Tracker** to record servings for each food group
 3. Check the **Weekly** view to monitor your progress toward targets
 4. Browse past weeks in the **History** view
+5. (Optional) Enable **Cloud Sync** in Settings to synchronize data across devices
 
 ## Core Features
 
@@ -40,8 +42,9 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 - Weekly summary with color-coded progress indicators
 - Historical data archiving and review
 - Food information tooltips with serving size details
-- Edit functionality for weekly totals
-- Export/import data capabilities
+- Edit functionality for weekly totals (both current and historical)
+- Cloud synchronization with Google Drive or Dropbox
+- Import/export data capabilities
 - PWA features (offline use, installable)
 
 ## Technology Stack
@@ -52,23 +55,60 @@ A simple Progressive Web App (PWA) designed to help users track their daily and 
 - localStorage (for storing current daily/weekly state)
 - Service Workers (for PWA offline caching)
 - Manifest.json (for PWA installability)
+- Google Drive & Dropbox APIs (for cloud synchronization)
 - Node.js (for Git hook version generation during development)
 
 ## Installation / Deployment (Self-Hosting)
 
-1. **Prerequisites:** A web server capable of serving static files and Node.js (if using Git hooks)
+1. **Prerequisites:**
+
+   - A web server capable of serving static files
+   - Node.js (if using Git hooks)
+   - (Optional) Google Drive & Dropbox API keys for cloud sync functionality
+
 2. **Get the Code:** Clone this repository or download the source code files
-3. **Set Up:** If cloning, copy `pre-commit.example` to `.git/hooks/pre-commit`
+
+3. **Set Up:**
+
+   - If cloning, copy `pre-commit.example` to `.git/hooks/pre-commit`
+   - For cloud sync, create a `config.js` file with your API keys (use `scripts/generateConfig.js` as a template)
+
 4. **Generate Version:** Run `npm run generate-version` to create version.json
+
 5. **Deploy:** Place all files in a web-accessible directory on your server
-6. **Access:** Use an HTTPS connection to enable PWA features
+
+6. **Access:** Use an HTTPS connection to enable PWA features and cloud APIs
+
+## Cloud Synchronization
+
+This app supports optional cloud synchronization with two providers:
+
+- **Google Drive**: Data is stored in the app's private space, not visible in your Drive file listing
+- **Dropbox**: Similar to Google Drive, data is stored in the app's folder
+
+To enable cloud sync:
+
+1. Open the **Settings** from the app menu
+2. Check "Enable cloud sync"
+3. Select your preferred provider
+4. Click "Connect" to authenticate
+5. Your data will now automatically sync between devices
+
+Note: Cloud synchronization requires valid API keys to be configured in `config.js` during deployment.
+
+## Data Privacy
+
+- All data is stored locally on your device by default
+- If cloud sync is enabled, data is transferred to your personal Google Drive or Dropbox account
+- The app does not collect or transmit any data to third parties
+- Export functionality allows you to create backups of your data at any time
 
 ## Development Acknowledgments
 
 This project was developed with assistance from several AI tools:
 
-- **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro.
-- **Refactoring and Enhancement**: Major refactoring, code organization improvements, and UI enhancements were done with assistance from Anthropic's Claude Sonnet 3.7.
+- **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro Preview.
+- **Refactoring and Enhancement**: Major refactoring, code organization improvements, UI enhancements, and cloud synchronization features were developed with assistance from Anthropic's Claude Sonnet 3.7.
 - **Workflow and Code Review**: OpenAI's ChatGPT (GPT-4o) provided assistance with development workflow optimization and code review.
 
 AI assistance was used primarily for code generation, architecture suggestions, and debugging support. The underlying application concept, design decisions, and final implementation responsibility remained with the human developer.

@@ -1727,33 +1727,6 @@ async function showSettings() {
 
     let settingsContent = `
       <div class="settings-container">
-        <!-- Display Settings Section -->
-        <div class="settings-section">
-          <div class="section-header collapsible">
-            <h4>Display Settings</h4>
-            <span class="section-toggle">▼</span>
-          </div>
-          <div class="section-content">
-            <div class="settings-row">
-              <label for="theme-select">Theme:</label>
-              <select id="theme-select" disabled>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="system">System</option>
-              </select>
-              <span class="setting-note">(Coming soon)</span>
-            </div>
-            <div class="settings-row">
-              <label for="font-size-select">Font Size:</label>
-              <select id="font-size-select" disabled>
-                <option value="small">Small</option>
-                <option value="medium" selected>Medium</option>
-                <option value="large">Large</option>
-              </select>
-              <span class="setting-note">(Coming soon)</span>
-            </div>
-          </div>
-        </div>
 
         <!-- Cloud Synchronization Section -->
         <div class="settings-section">
@@ -2002,23 +1975,6 @@ async function showSettings() {
             "error"
           );
         }
-      });
-
-    // Add event listeners for theme and font size controls to show toast messages
-    document.getElementById("theme-select").addEventListener("change", () => {
-      uiRenderer.showToast(
-        "Theme settings will be available in a future update",
-        "info"
-      );
-    });
-
-    document
-      .getElementById("font-size-select")
-      .addEventListener("change", () => {
-        uiRenderer.showToast(
-          "Font size settings will be available in a future update",
-          "info"
-        );
       });
   } catch (err) {
     console.error("Error loading settings:", err);
