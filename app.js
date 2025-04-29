@@ -1301,7 +1301,7 @@ async function handleImportFileSelect(event) {
       }
 
       // Perform the import based on the data relationship
-      await processImport(importedData, dateRelationship);
+      const importResult = await processImport(importedData, dateRelationship);
 
       // Reload UI with new data
       uiRenderer.renderEverything();
@@ -1317,10 +1317,11 @@ async function handleImportFileSelect(event) {
           successMessage = `Import complete. Week totals updated for current week.`;
           break;
         case "PAST_WEEK":
-          // Use the count we stored in appInfo
+          // Use the count directly from the import result
           const importedCount =
+            importResult?.importedCount ||
             importedData.appInfo?.historyCount ||
-            importedData.history.length + 1; // Fallback
+            importedData.history.length;
           successMessage = `Import complete. ${importedCount} weeks added to history.`;
           break;
         case "FUTURE_WEEK":
@@ -1355,6 +1356,8 @@ async function handleImportFileSelect(event) {
  */
 async function processImport(importedData, dateRelationship) {
   try {
+    let importResult = { success: false };
+
     if (dateRelationship === "PAST_WEEK") {
       // Save the current app state
       const currentState = stateManager.getState();
@@ -1377,13 +1380,13 @@ async function processImport(importedData, dateRelationship) {
       // Create a combined history array with imported current week and history
       const combinedHistory = [importedCurrentWeek, ...importedData.history];
 
-      // Update the success message counter
-      const importedHistoryCount = importedData.history.length + 1; // +1 for the current week
+      // Calculate the actual count of weeks being imported
+      const importedHistoryCount = combinedHistory.length;
 
       const historyOnly = {
         appInfo: {
           ...importedData.appInfo,
-          historyCount: importedHistoryCount, // Store this for the success message
+          historyCount: importedHistoryCount, // Store the ACTUAL count
         },
         currentState: {
           currentDayDate: currentDayDate,
@@ -1402,6 +1405,7 @@ async function processImport(importedData, dateRelationship) {
       };
 
       await dataService.importData(historyOnly);
+      importResult = { success: true, importedCount: importedHistoryCount };
     } else if (dateRelationship === "SAME_WEEK") {
       // For same week, merge the weekly counts from the import with current counts
       const currentState = stateManager.getState();
@@ -1450,6 +1454,7 @@ async function processImport(importedData, dateRelationship) {
       };
 
       await dataService.importData(mergedImport);
+      importResult = { success: true };
     } else {
       // For other import types (SAME_DAY or FUTURE_WEEK), proceed with normal full import
       // Before importing, set metadata with dirty flags
@@ -1465,12 +1470,13 @@ async function processImport(importedData, dateRelationship) {
       }
 
       await dataService.importData(importedData);
+      importResult = { success: true };
     }
 
     // After import, reload application state
     await stateManager.initialize(foodGroups);
 
-    return true;
+    return importResult;
   } catch (error) {
     console.error("Error during import processing:", error);
     throw error;

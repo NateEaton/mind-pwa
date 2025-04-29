@@ -994,10 +994,12 @@ export class CloudSyncManager {
         // compare timestamps to determine if upload is needed
         if (!hasFileChanged) {
           const storedMetadata = await this.getStoredFileMetadata(weekFileName);
+          // Modified condition to ensure newly archived weeks are uploaded
           if (
             storedMetadata &&
             localWeek.metadata &&
-            storedMetadata.lastModified >= localWeek.metadata.updatedAt
+            storedMetadata.lastModified >= localWeek.metadata.updatedAt &&
+            !this.dataService.loadState().metadata.historyDirty // Add this check
           ) {
             console.log(
               `Week ${weekStartDate} has no changes, skipping upload`
