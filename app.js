@@ -16,6 +16,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Detect if we're running on the Vercel demo site
+const isDemoHost = window?.location?.hostname?.includes("vercel.app");
+
 // At the very beginning of app.js (similar to early token detection)
 (function detectOAuthRedirect() {
   // Check for Dropbox token in URL hash
@@ -1848,6 +1851,15 @@ async function showSettings() {
         const syncSettings = document.querySelector(".sync-settings");
 
         if (enabled) {
+          // Show warning for demo host when enabling
+          if (isDemoHost) {
+            uiRenderer.showToast(
+              "Cloud sync may not work unless your account has been registered for testing with Dropbox or Google Drive.",
+              "warning",
+              5000
+            );
+          }
+
           syncSettings.classList.remove("disabled-section");
           document.getElementById("sync-provider").disabled = false;
           document.getElementById("sync-wifi-only").disabled = false;
@@ -2002,6 +2014,15 @@ function applySettingsWithoutClosing() {
   syncEnabled = newSyncEnabled;
 
   console.log("Applied sync settings, syncEnabled =", syncEnabled);
+
+  // Add warning for demo host when enabling cloud sync
+  if (isDemoHost && newSyncEnabled) {
+    uiRenderer.showToast(
+      "Cloud sync may not work unless your account has been registered for testing with Dropbox or Google Drive.",
+      "warning",
+      5000
+    );
+  }
 
   // Handle cloud sync changes based on new settings
   if (syncEnabled) {

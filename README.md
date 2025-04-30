@@ -4,7 +4,15 @@
 
 A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
 
-[**View Wiki for Complete Documentation**](../../wiki)
+[**Live Demo**](https://mind-pwa-fawn.vercel.app/) | [**View Wiki for Complete Documentation**](../../wiki)
+
+## ⚠️ Cloud Sync Limitations in Demo
+
+The hosted demo app (on Vercel) **does not currently support cloud sync** via Google Drive or Dropbox for general users. This is due to testing restrictions imposed by the API providers.
+* **Google Drive sync**: Only available to registered test users added to the app's OAuth client.
+* **Dropbox sync**: Only available to the developer and any manually added testers.
+
+If you'd like to test these features, open an issue or contact me with the email address associated with your Google or Dropbox account so I can add you as a test user.
 
 ## App Screenshots
 
@@ -79,6 +87,8 @@ A Progressive Web App (PWA) designed to help users track their daily and weekly 
 
 6. **Access:** Use an HTTPS connection to enable PWA features and cloud APIs
 
+For detailed installation instructions, see the [Installation Guide](../../wiki/Installation-Guide) in the wiki.
+
 ## Cloud Synchronization
 
 This app supports optional cloud synchronization with two providers:
@@ -94,7 +104,7 @@ To enable cloud sync:
 4. Click "Connect" to authenticate
 5. Your data will now automatically sync between devices
 
-Note: Cloud synchronization requires valid API keys to be configured in `config.js` during deployment.
+For detailed cloud sync documentation, see the [Cloud Sync Guide](../../wiki/Cloud-Sync-Guide) in the wiki.
 
 ## Data Privacy
 
