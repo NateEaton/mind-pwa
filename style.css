@@ -751,6 +751,10 @@ h3:first-child {
     background-color: var(--primary-color);
 }
 
+#toast-message.toast.toast-warning {
+    background-color: var(--limit-color);
+}
+
 #toast-message.toast.toast-error {
     background-color: #d9534f;
 }
