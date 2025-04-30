@@ -11,13 +11,13 @@ assignees: []
 
 Thanks for your interest in helping test cloud sync features!
 
-Cloud sync is currently disabled for unregistered users in the demo app on Vercel. To enable it and help participate in testing cloud sync features:
+Cloud sync is currently **disabled for unregistered users** in the demo app on Vercel. If you'd like to enable it and participate in testing:
 
 - **Preferred**: Email me at `neatonjr@gmail.com` with the email address linked to your **Google Drive** or **Dropbox** account.
 - Or: Leave a comment below expressing interest, and I’ll reply with next steps.
 
-⚠️ Please do **not** post your personal email here unless you’re comfortable making it public.
+> ⚠️ **Privacy Note**: Please do **not** post your personal email here unless you're comfortable making it public.
 
-Let me know if you're interested in testing:
+Let me know which service(s) you'd like to help test:
 - [ ] Google Drive sync
 - [ ] Dropbox sync
