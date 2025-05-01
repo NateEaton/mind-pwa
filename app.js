@@ -696,16 +696,14 @@ function setupEventListeners() {
   domElements.userGuideBtn = document.getElementById("user-guide-btn");
   domElements.aboutBtn.addEventListener("click", handleAboutClick);
 
-  // Daily tracker view (using event delegation)
-  const dailyGoalsContainer = document.getElementById("daily-goals");
-  const weeklyGoalsContainer = document.getElementById("weekly-goals");
-
-  [dailyGoalsContainer, weeklyGoalsContainer].forEach((container) => {
-    container.addEventListener("click", handleCounterClick);
-    container.addEventListener("change", handleCounterInputChange);
-    container.addEventListener("input", handleCounterInputChange);
-    container.addEventListener("click", handleInfoClick);
-  });
+  // New single-container approach
+  const foodTrackerContainer = document.getElementById("food-tracker");
+  if (foodTrackerContainer) {
+    foodTrackerContainer.addEventListener("click", handleCounterClick);
+    foodTrackerContainer.addEventListener("change", handleCounterInputChange);
+    foodTrackerContainer.addEventListener("input", handleCounterInputChange);
+    foodTrackerContainer.addEventListener("click", handleInfoClick);
+  }
 
   // History navigation
   const prevWeekBtn = document.getElementById("prev-week-btn");
@@ -888,7 +886,7 @@ function handleCounterClick(event) {
 
   const groupId = item.dataset.id;
   const input = item.querySelector(".count-input");
-  const isDaily = input.dataset.frequency === "day";
+  const frequency = input.dataset.frequency; // 'day' or 'week'
   let currentValue = parseInt(input.value, 10) || 0;
   let valueChanged = false;
 
@@ -905,12 +903,11 @@ function handleCounterClick(event) {
     // Trigger haptic feedback
     appUtils.triggerHapticFeedback(30);
 
-    // Update the state
-    if (isDaily) {
-      stateManager.updateDailyCount(groupId, currentValue);
-    } else {
-      stateManager.updateWeeklyCount(groupId, currentValue);
-    }
+    // Always update the daily counts
+    stateManager.updateDailyCount(groupId, currentValue);
+
+    // Note: updateDailyCount will also update the weekly counts, so we don't
+    // need to call updateWeeklyCount separately
   }
 }
 
@@ -926,7 +923,6 @@ function handleCounterInputChange(event) {
   if (!item) return;
 
   const groupId = item.dataset.id;
-  const isDaily = input.dataset.frequency === "day";
   let newValue = parseInt(input.value, 10);
 
   // Validate input
@@ -935,12 +931,8 @@ function handleCounterInputChange(event) {
     input.value = newValue;
   }
 
-  // Update the state
-  if (isDaily) {
-    stateManager.updateDailyCount(groupId, newValue);
-  } else {
-    stateManager.updateWeeklyCount(groupId, newValue);
-  }
+  // Always update daily counts, which will also update weekly
+  stateManager.updateDailyCount(groupId, newValue);
 }
 
 /**

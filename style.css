@@ -206,12 +206,16 @@ h3:first-child {
 /* === Food Group Item Styling === */
 /* ================================== */
 
+/* === Unified Food Tracker Styling === */
+#food-tracker {
+    margin-bottom: var(--spacing-lg);
+}
+
 /* Improvement #2: More compact food items for reduced scrolling */
 .food-group-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    /* Change from flex-start to center for vertical alignment */
     padding: var(--spacing-md) 0;
     border-bottom: 1px solid var(--border-color);
     flex-wrap: nowrap;
@@ -302,8 +306,29 @@ h3:first-child {
     min-width: 16px;
     height: 18px;
     margin-right: var(--spacing-sm);
-    /* Changed from margin-left to margin-right */
     align-self: center;
+}
+
+/* Color variations for badges */
+.weekly-badge.badge-primary {
+    background-color: var(--primary-color);
+}
+
+.weekly-badge.badge-secondary {
+    background-color: var(--secondary-color);
+}
+
+.weekly-badge.badge-warning {
+    background-color: var(--limit-color);
+}
+
+.weekly-badge.badge-danger {
+    background-color: var(--error-color);
+}
+
+/* Ensure the weekly badge is always visible */
+.food-group-item .weekly-badge {
+    display: inline-flex !important;
 }
 
 /* For weekly items (that don't show the badge) ensure proper spacing */
@@ -1378,6 +1403,14 @@ footer {
         width: 28px;
         height: 28px;
         font-size: 1.1rem;
+    }
+
+    .weekly-badge {
+        padding: 1px 6px;
+        font-size: 0.7rem;
+        min-width: 14px;
+        height: 16px;
+        margin-right: var(--spacing-xs);
     }
 
     .modal-content {

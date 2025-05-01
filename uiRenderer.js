@@ -85,10 +85,8 @@ function initialize() {
 
   // Cache tracker view elements
   domElements.trackerElements = {
-    dailyGoalsList: document.getElementById("daily-goals-list"),
-    weeklyGoalsList: document.getElementById("weekly-goals-list"),
-    dailyGoalsDateEl: document.getElementById("daily-goals-date"),
-    weeklyGoalsDateEl: document.getElementById("weekly-goals-date"),
+    foodItemsList: document.getElementById("food-items-list"),
+    trackerDateEl: document.getElementById("tracker-date"),
     foodGroupTemplate: document.getElementById("food-group-item-template"),
   };
 
@@ -159,8 +157,7 @@ function allRequiredElementsCached() {
 
   // Check tracker elements
   if (
-    !domElements.trackerElements.dailyGoalsList ||
-    !domElements.trackerElements.weeklyGoalsList ||
+    !domElements.trackerElements.foodItemsList ||
     !domElements.trackerElements.foodGroupTemplate
   ) {
     console.warn("Missing tracker elements");
@@ -256,8 +253,8 @@ function renderDateElements() {
     const displayDate = new Date(`${state.currentDayDate}T00:00:00`);
 
     // Update daily goals date element
-    if (domElements.trackerElements.dailyGoalsDateEl) {
-      domElements.trackerElements.dailyGoalsDateEl.textContent =
+    if (domElements.trackerElements.trackerDateEl) {
+      domElements.trackerElements.trackerDateEl.textContent =
         `${displayDate.toLocaleDateString(undefined, { weekday: "short" })}, ` +
         `${displayDate.toLocaleDateString(undefined, {
           month: "short",
@@ -269,18 +266,6 @@ function renderDateElements() {
     const weekStartDateDisplay = new Date(
       `${state.currentWeekStartDate}T00:00:00`
     );
-
-    // Update weekly goals date element
-    if (domElements.trackerElements.weeklyGoalsDateEl) {
-      domElements.trackerElements.weeklyGoalsDateEl.textContent =
-        `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, {
-          weekday: "short",
-        })}, ` +
-        `${weekStartDateDisplay.toLocaleDateString(undefined, {
-          month: "short",
-          day: "numeric",
-        })}`;
-    }
 
     // Update current week start date element
     if (domElements.currentWeekElements.currentWeekStartDateEl) {
@@ -297,32 +282,40 @@ function renderDateElements() {
     console.error("Error rendering date elements:", error);
 
     // Handle error display
-    if (domElements.trackerElements.dailyGoalsDateEl) {
-      domElements.trackerElements.dailyGoalsDateEl.textContent = "(Error)";
-    }
-    if (domElements.trackerElements.weeklyGoalsDateEl) {
-      domElements.trackerElements.weeklyGoalsDateEl.textContent = "(Error)";
+    if (domElements.trackerElements.trackerDateEl) {
+      domElements.trackerElements.trackerDateEl.textContent = "(Error)";
     }
   }
 }
 
 /**
- * Render the tracker items in the daily tracker view
+ * Render the tracker items in the unified food tracker view
  */
 function renderTrackerItems() {
   const state = stateManager.getState();
-  const { dailyGoalsList, weeklyGoalsList, foodGroupTemplate } =
-    domElements.trackerElements;
+  const foodItemsList = document.getElementById("food-items-list");
+  const foodGroupTemplate = document.getElementById("food-group-item-template");
+  const dateElement = document.getElementById("tracker-date");
 
   // Ensure we have the required elements
-  if (!dailyGoalsList || !weeklyGoalsList || !foodGroupTemplate) {
+  if (!foodItemsList || !foodGroupTemplate) {
     console.error("Missing required elements for renderTrackerItems");
     return;
   }
 
-  // Clear the lists
-  dailyGoalsList.innerHTML = "";
-  weeklyGoalsList.innerHTML = "";
+  // Update date display
+  if (dateElement) {
+    const displayDate = new Date(`${state.currentDayDate}T00:00:00`);
+    dateElement.textContent =
+      `${displayDate.toLocaleDateString(undefined, { weekday: "short" })}, ` +
+      `${displayDate.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      })}`;
+  }
+
+  // Clear the list
+  foodItemsList.innerHTML = "";
 
   // Render each food group
   state.foodGroups.forEach((group) => {
@@ -334,7 +327,7 @@ function renderTrackerItems() {
     // Set basic properties
     item.dataset.id = group.id;
 
-    // Get elements for the name-row structure
+    // Get elements
     const nameElement = item.querySelector(".name");
     const weeklyBadge = item.querySelector(".weekly-badge");
     const weeklyBadgeValue = item.querySelector(".weekly-badge .wk-val");
@@ -365,36 +358,91 @@ function renderTrackerItems() {
 
     // Set up count input
     const countInput = item.querySelector(".count-input");
+    const frequency = group.frequency; // 'day' or 'week'
 
-    // Daily vs weekly food group handling
-    if (group.frequency === "day") {
-      countInput.value = state.dailyCounts[group.id] || 0;
-      countInput.dataset.frequency = "day";
-
-      // Show weekly badge for daily items
-      if (weeklyBadge) {
-        weeklyBadge.style.display = "inline-flex";
-        weeklyBadgeValue.textContent = state.weeklyCounts[group.id] || 0;
-      }
-    } else {
-      countInput.value = state.weeklyCounts[group.id] || 0;
-      countInput.dataset.frequency = "week";
-
-      // Hide badge for weekly items
-      if (weeklyBadge) {
-        weeklyBadge.style.display = "none";
-      }
-    }
-
+    // Always show today's count (daily) in the input
+    countInput.value = state.dailyCounts[group.id] || 0;
+    countInput.dataset.frequency = frequency;
     countInput.dataset.groupid = group.id;
 
-    // Add item to the appropriate list
-    if (group.frequency === "day") {
-      dailyGoalsList.appendChild(item);
-    } else if (group.frequency === "week") {
-      weeklyGoalsList.appendChild(item);
+    // Always show weekly badge for all items
+    if (weeklyBadge) {
+      const weeklyCount = state.weeklyCounts[group.id] || 0;
+      weeklyBadgeValue.textContent = weeklyCount;
+      weeklyBadge.style.display = "inline-flex";
+
+      // Apply color coding to the badge based on progress
+      updateBadgeColor(weeklyBadge, group, weeklyCount);
     }
+
+    // Add the item to the list
+    foodItemsList.appendChild(item);
   });
+}
+
+/**
+ * Update the badge color based on the progress
+ * @param {HTMLElement} badge - The badge element
+ * @param {Object} group - The food group data
+ * @param {number} count - The current count
+ */
+function updateBadgeColor(badge, group, count) {
+  // Remove existing color classes
+  badge.classList.remove(
+    "badge-primary",
+    "badge-secondary",
+    "badge-warning",
+    "badge-danger"
+  );
+
+  // Get current day of the week (0-6, where 0 is Sunday)
+  const state = stateManager.getState();
+  const currentDate = new Date(`${state.currentDayDate}T00:00:00`);
+  const weekStartDate = new Date(`${state.currentWeekStartDate}T00:00:00`);
+  const daysSinceWeekStart = Math.floor(
+    (currentDate - weekStartDate) / (24 * 60 * 60 * 1000)
+  );
+  const daysIntoWeek = Math.max(0, daysSinceWeekStart) + 1; // Add 1 to include current day
+
+  // Determine which color to use based on progress
+  if (group.type === "positive") {
+    // Target-based item
+    if (
+      count >=
+      group.target * (group.frequency === "day" ? daysIntoWeek : 1)
+    ) {
+      // Target met or exceeded for current point in week
+      badge.classList.add("badge-primary");
+    } else {
+      // Target in progress
+      badge.classList.add("badge-secondary");
+    }
+  } else {
+    // Limit-based item
+
+    // Special case: if count is 0, always use secondary color (not warning)
+    if (count === 0) {
+      badge.classList.add("badge-secondary");
+      return;
+    }
+
+    // Calculate the prorated max for daily items
+    const maxAllowed =
+      group.frequency === "day"
+        ? group.target * daysIntoWeek // Daily limit × days into week
+        : group.target; // Weekly limit as is
+
+    if (count > maxAllowed) {
+      // Limit exceeded for current point in week
+      badge.classList.add("badge-danger");
+    } else if (count >= maxAllowed - 1) {
+      // Within 1 of limit
+      badge.classList.add("badge-warning");
+    } else {
+      // Well below limit
+      badge.classList.add("badge-secondary");
+    }
+  }
 }
 
 /**
