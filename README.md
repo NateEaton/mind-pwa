@@ -32,6 +32,7 @@ If you'd like to test these features, open an issue or contact me with the email
       <td><img src="./screenshots/food-info-modal.png" width="180" alt="Food Information Modal"/></td>
       <td><img src="./screenshots/edit-totals-modal.png" width="180" alt="Edit Weekly Totals"/></td>
       <td><img src="./screenshots/settings-modal.png" width="180" alt="Settings Modal"/></td>
+      <td><img src="./screenshots/import-modal.png" width="180" alt="Import Modal"/></td>
     </tr>
   </table>
 </div>
