@@ -1030,6 +1030,19 @@ function handleUserGuideClick() {
  */
 async function handleAboutClick() {
   closeMenu();
+
+  // Import config to check DEV_MODE
+  let isDevMode = false;
+  try {
+    const config = await import("./config.js");
+    isDevMode = config.CONFIG.DEV_MODE || false;
+  } catch (error) {
+    console.warn(
+      "Could not load config.js, defaulting to production mode:",
+      error
+    );
+  }
+
   const aboutTitle = "About MIND Diet Tracker";
 
   let aboutContent = `
@@ -1040,78 +1053,78 @@ async function handleAboutClick() {
     <p>Version: <span id="modal-app-version">(unknown)</span></p>
   `;
 
-  // Add development controls
-  const currentSyncProvider = await dataService.getPreference(
-    "cloudSyncProvider",
-    "gdrive"
-  );
+  // Only add dev controls if in dev mode
+  if (isDevMode) {
+    // Add development controls
+    const currentSyncProvider = await dataService.getPreference(
+      "cloudSyncProvider",
+      "gdrive"
+    );
 
-  aboutContent += `
-  <!-- Developer Testing Controls -->
-  <div id="dev-controls" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc;">
-    <h4 style="margin: 5px 0;">Developer Controls</h4>
-    
-    <!-- Existing test date controls -->
-    <div style="display: flex; align-items: center; margin-bottom: 10px;">
-      <label for="test-date" style="margin-right: 10px;">Test Date:</label>
-      <input type="date" id="test-date" ${
-        dataService.isTestModeEnabled()
-          ? `value="${
-              dataService.getCurrentDate().toISOString().split("T")[0]
-            }"`
-          : ""
-      }>
-      <button id="apply-test-date" style="margin-left: 5px;">Apply</button>
-      <button id="reset-test-date" style="margin-left: 5px;" ${
-        !dataService.isTestModeEnabled() ? "disabled" : ""
-      }>Reset</button>
+    aboutContent += `
+    <!-- Developer Testing Controls -->
+    <div id="dev-controls" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc;">
+      <h4 style="margin: 5px 0;">Developer Controls</h4>
+      
+      <!-- Existing test date controls -->
+      <div style="display: flex; align-items: center; margin-bottom: 10px;">
+        <label for="test-date" style="margin-right: 10px;">Test Date:</label>
+        <input type="date" id="test-date" ${
+          dataService.isTestModeEnabled()
+            ? `value="${
+                dataService.getCurrentDate().toISOString().split("T")[0]
+              }"`
+            : ""
+        }>
+        <button id="apply-test-date" style="margin-left: 5px;">Apply</button>
+        <button id="reset-test-date" style="margin-left: 5px;" ${
+          !dataService.isTestModeEnabled() ? "disabled" : ""
+        }>Reset</button>
+      </div>
+      
+      <!-- Cloud data reset controls -->
+      <div style="display: flex; align-items: center; margin-bottom: 10px;">
+        <label style="margin-right: 10px;">Cloud Data:</label>
+        <select id="cloud-provider-select" style="margin-right: 5px;">
+          <option value="gdrive" ${
+            currentSyncProvider === "gdrive" ? "selected" : ""
+          }>Google Drive</option>
+          <option value="dropbox" ${
+            currentSyncProvider === "dropbox" ? "selected" : ""
+          }>Dropbox</option>
+        </select>
+        <button id="clear-cloud-data" style="margin-left: 5px;" ${
+          !syncEnabled ? "disabled" : ""
+        }>Clear Files</button>
+      </div>
+      
+      <div id="test-date-status" style="font-size: 12px; color: ${
+        dataService.isTestModeEnabled() ? "#ff0000" : "#888"
+      };">
+        ${
+          dataService.isTestModeEnabled()
+            ? `TEST MODE ACTIVE: Using date ${dataService
+                .getCurrentDate()
+                .toLocaleDateString()}`
+            : "Test mode inactive (using real system date)"
+        }
+      </div>
+      <div id="cloud-clear-status" style="font-size: 12px; color: #888;">
+        ${
+          syncEnabled
+            ? "Will disable cloud sync after clearing files"
+            : "Cloud sync is not enabled"
+        }
+      </div>
     </div>
     
-    <!-- Cloud data reset controls -->
-    <div style="display: flex; align-items: center; margin-bottom: 10px;">
-      <label style="margin-right: 10px;">Cloud Data:</label>
-      <select id="cloud-provider-select" style="margin-right: 5px;">
-        <option value="gdrive" ${
-          currentSyncProvider === "gdrive" ? "selected" : ""
-        }>Google Drive</option>
-        <option value="dropbox" ${
-          currentSyncProvider === "dropbox" ? "selected" : ""
-        }>Dropbox</option>
-      </select>
-      <button id="clear-cloud-data" style="margin-left: 5px;" ${
-        !syncEnabled ? "disabled" : ""
-      }>Clear Files</button>
-    </div>
-    
-    <div id="test-date-status" style="font-size: 12px; color: ${
-      dataService.isTestModeEnabled() ? "#ff0000" : "#888"
-    };">
-      ${
-        dataService.isTestModeEnabled()
-          ? `TEST MODE ACTIVE: Using date ${dataService
-              .getCurrentDate()
-              .toLocaleDateString()}`
-          : "Test mode inactive (using real system date)"
-      }
-    </div>
-    <div id="cloud-clear-status" style="font-size: 12px; color: #888;">
-      ${
-        syncEnabled
-          ? "Will disable cloud sync after clearing files"
-          : "Cloud sync is not enabled"
-      }
-    </div>
-  </div>
-`;
-
-  // Add development information
-  aboutContent += `
     <!-- Development information section -->
     <div id="dev-info" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; font-family: monospace; font-size: 12px;">
       <h4 style="margin: 5px 0;">Development Information</h4>
       <div id="dev-info-content">Loading device info...</div>
     </div>
-  `;
+    `;
+  }
 
   // Use the new modal format with footer
   uiRenderer.openModal(aboutTitle, aboutContent, {
@@ -1135,17 +1148,26 @@ async function handleAboutClick() {
       : "(unknown)";
   }
 
-  // Update device info
-  const devInfo = appUtils.getDeviceInfo();
-  const devInfoContent = document.getElementById("dev-info-content");
-  if (devInfoContent) {
-    let infoHtml = "";
-    for (const [key, value] of Object.entries(devInfo)) {
-      infoHtml += `<div>${key}: <span>${value}</span></div>`;
+  // Only set up dev controls if in dev mode
+  if (isDevMode) {
+    // Update device info
+    const devInfo = appUtils.getDeviceInfo();
+    const devInfoContent = document.getElementById("dev-info-content");
+    if (devInfoContent) {
+      let infoHtml = "";
+      for (const [key, value] of Object.entries(devInfo)) {
+        infoHtml += `<div>${key}: <span>${value}</span></div>`;
+      }
+      devInfoContent.innerHTML = infoHtml;
     }
-    devInfoContent.innerHTML = infoHtml;
-  }
 
+    // Set up event listeners for dev controls
+    setupDevControlEventListeners();
+  }
+}
+
+// Separate function for dev control event listeners
+function setupDevControlEventListeners() {
   // Add event listeners for test date controls
   const testDateInput = document.getElementById("test-date");
   const applyTestDateBtn = document.getElementById("apply-test-date");
@@ -1208,6 +1230,7 @@ async function handleAboutClick() {
   const cloudClearStatus = document.getElementById("cloud-clear-status");
 
   // Event handler for the clear cloud data button
+  // Event handler for the clear cloud data button
   if (clearCloudDataBtn) {
     clearCloudDataBtn.addEventListener("click", async () => {
       // Don't proceed if sync isn't enabled
@@ -1225,16 +1248,93 @@ async function handleAboutClick() {
         // Disable the button while operation is in progress
         clearCloudDataBtn.disabled = true;
 
-        // Show confirmation dialog with note about disabling sync
+        // Get file list first
+        const provider = cloudSync.provider;
+
+        // Show a temporary toast while gathering files
+        uiRenderer.showToast(`Gathering ${providerType} files...`, "info");
+
+        // Step 1: Get file list without deleting them
+        let files = [];
+
+        if (providerType === "gdrive") {
+          // For Google Drive, list files
+          const listResponse = await provider.gapi.client.drive.files.list({
+            spaces: "appDataFolder",
+            fields: "files(id, name, mimeType, modifiedTime, size)",
+            pageSize: 100, // Get up to 100 files
+          });
+          files = listResponse.result.files || [];
+        } else if (providerType === "dropbox") {
+          // For Dropbox, list files in the app folder
+          const listResponse = await provider.dbx.filesListFolder({
+            path: "", // Root of app folder
+          });
+          files = listResponse.result.entries || [];
+        }
+
+        // Generate file list HTML - limit to showing a reasonable number
+        const MAX_FILES_TO_SHOW = 20;
+        let fileListHtml = "";
+
+        if (files.length === 0) {
+          fileListHtml = "<p>No files found to delete.</p>";
+        } else {
+          fileListHtml = `<p><strong>${files.length} file${
+            files.length !== 1 ? "s" : ""
+          } found:</strong></p>`;
+          fileListHtml +=
+            '<div style="max-height: 200px; overflow-y: auto; margin: 8px 0; padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 12px;">';
+
+          // Sort files by name for consistent display
+          files.sort((a, b) => {
+            const nameA = a.name || a.path_display || "";
+            const nameB = b.name || b.path_display || "";
+            return nameA.localeCompare(nameB);
+          });
+
+          const filesToShow =
+            files.length > MAX_FILES_TO_SHOW
+              ? files.slice(0, MAX_FILES_TO_SHOW)
+              : files;
+
+          filesToShow.forEach((file) => {
+            // Get file name based on provider
+            const fileName = file.name || file.path_display || "Unknown file";
+            // Format modified date if available
+            const modifiedDate =
+              file.modifiedTime || file.server_modified || "";
+            const modifiedStr = modifiedDate
+              ? ` (modified: ${new Date(modifiedDate).toLocaleString()})`
+              : "";
+
+            fileListHtml += `<div>${fileName}${modifiedStr}</div>`;
+          });
+
+          // Add indication if more files exist
+          if (files.length > MAX_FILES_TO_SHOW) {
+            fileListHtml += `<div>... and ${
+              files.length - MAX_FILES_TO_SHOW
+            } more files</div>`;
+          }
+
+          fileListHtml += "</div>";
+        }
+
+        // Show confirmation dialog with file list information
         const confirmAction = await uiRenderer.showConfirmDialog({
           title: "Confirm Cloud Data Clear",
-          message:
-            "This will delete all app data files from the cloud provider and disable cloud sync.\n\nDo you want to continue?",
+          message: `This will delete ${files.length} app data file${
+            files.length !== 1 ? "s" : ""
+          } from ${
+            providerType === "gdrive" ? "Google Drive" : "Dropbox"
+          } and disable cloud sync.\n\nDo you want to continue?`,
           confirmText: "Clear Files",
           cancelText: "Cancel",
-          details: `<p>Provider: ${
-            providerType === "gdrive" ? "Google Drive" : "Dropbox"
-          }</p>
+          details: `${fileListHtml}
+                 <p>Provider: ${
+                   providerType === "gdrive" ? "Google Drive" : "Dropbox"
+                 }</p>
                  <p>Note: You'll need to manually re-enable cloud sync in Settings after this operation.</p>`,
         });
 
@@ -1244,19 +1344,13 @@ async function handleAboutClick() {
           return;
         }
 
-        // Use the existing provider if available
-        let provider = cloudSync.provider;
-
         // Close the About dialog before the background operation starts
         uiRenderer.closeModal();
 
-        // Show a progress toast
-        uiRenderer.showToast(
-          `Clearing cloud files from ${providerType}...`,
-          "info"
-        );
+        // Show a progress toast for the deletion
+        uiRenderer.showToast(`Deleting ${files.length} cloud files...`, "info");
 
-        // Clear the cloud data
+        // Step 2: Actually clear the files
         const deletedCount = await provider.clearAllAppDataFiles();
 
         // Disable cloud sync
@@ -1275,7 +1369,7 @@ async function handleAboutClick() {
         // Update UI elements to reflect disabled sync
         updateSyncUIElements();
 
-        // Show success toast with longer duration so user can see it
+        // Show success toast with longer duration
         uiRenderer.showToast(
           `Success! Deleted ${deletedCount} cloud files and disabled sync.`,
           "success",
@@ -1288,6 +1382,8 @@ async function handleAboutClick() {
           "error",
           5000
         );
+      } finally {
+        clearCloudDataBtn.disabled = false;
       }
     });
   }

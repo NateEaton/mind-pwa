@@ -13,6 +13,7 @@ const config = {
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   DROPBOX_APP_KEY: process.env.DROPBOX_APP_KEY,
+  DEV_MODE: process.env.DEV_MODE === "true" || false, // Default to false (production)
 };
 
 const content = `export const CONFIG = ${JSON.stringify(config, null, 2)};\n`;
