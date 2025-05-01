@@ -47,9 +47,10 @@ If you'd like to test these features, open an issue or contact me with the email
 ## Core Features
 
 - Daily tracking of MIND Diet food groups
-- Weekly summary with color-coded progress indicators
+- Weekly summary by food group
 - Historical data archiving and review
 - Food information tooltips with serving size details
+- Color coding to highlight when targets met or limits exceeded
 - Edit functionality for weekly totals (both current and historical)
 - Cloud synchronization with Google Drive or Dropbox
 - Import/export data capabilities
