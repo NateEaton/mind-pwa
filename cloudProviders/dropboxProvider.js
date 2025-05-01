@@ -326,6 +326,50 @@ class DropboxProvider {
       throw error;
     }
   }
+
+  // Add this method to the DropboxProvider class
+  async clearAllAppDataFiles() {
+    let deletedCount = 0;
+
+    try {
+      // List files in the app folder
+      const listResponse = await this.dbx.filesListFolder({
+        path: "", // Empty string refers to the app folder root
+      });
+
+      const files = listResponse.result.entries || [];
+
+      if (files.length === 0) {
+        console.log("No Dropbox files found to delete.");
+        return 0;
+      }
+
+      // Delete each file
+      for (const file of files) {
+        try {
+          console.log(
+            `Deleting Dropbox file: ${file.name} (Path: ${file.path_display})`
+          );
+          await this.dbx.filesDelete({ path: file.path_lower });
+          deletedCount++;
+        } catch (deleteError) {
+          console.error(
+            `Error deleting Dropbox file ${file.name}:`,
+            deleteError
+          );
+          // Continue with other files
+        }
+      }
+
+      console.log(
+        `Successfully deleted ${deletedCount} files from Dropbox app folder`
+      );
+      return deletedCount;
+    } catch (error) {
+      console.error("Error clearing Dropbox app folder files:", error);
+      throw error;
+    }
+  }
 }
 
 export default DropboxProvider;

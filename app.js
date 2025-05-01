@@ -645,10 +645,18 @@ function setupSyncButton() {
     const syncLi = document.createElement("li");
     syncLi.appendChild(syncBtn);
 
-    // Insert before the about button
-    const aboutLi = document.querySelector("#main-menu ul li:last-child");
-    if (aboutLi) {
-      aboutLi.parentNode.insertBefore(syncLi, aboutLi);
+    // Find the Settings button's parent li element
+    const settingsLi = document.getElementById("settings-btn").closest("li");
+
+    // Insert sync button after the Settings button
+    if (settingsLi && settingsLi.nextSibling) {
+      settingsLi.parentNode.insertBefore(syncLi, settingsLi.nextSibling);
+    } else {
+      // Fallback: just append to the list
+      const menuList = document.querySelector("#main-menu ul");
+      if (menuList) {
+        menuList.appendChild(syncLi);
+      }
     }
   }
 
@@ -685,6 +693,7 @@ function setupEventListeners() {
     handleImportFileSelect
   );
   domElements.settingsBtn.addEventListener("click", handleSettings);
+  domElements.userGuideBtn = document.getElementById("user-guide-btn");
   domElements.aboutBtn.addEventListener("click", handleAboutClick);
 
   // Daily tracker view (using event delegation)
@@ -754,6 +763,11 @@ function setupEventListeners() {
       "click",
       handleEditTotalsItemClick
     );
+  }
+
+  // User Guide button
+  if (domElements.userGuideBtn) {
+    domElements.userGuideBtn.addEventListener("click", handleUserGuideClick);
   }
 
   // Add sync event listeners
@@ -1010,9 +1024,19 @@ function handleHistoryDatePick() {
 }
 
 /**
+ * Handle User Guide button click
+ */
+function handleUserGuideClick() {
+  closeMenu();
+  // Open the GitHub wiki in a new tab
+  const wikiUrl = "https://github.com/NateEaton/mind-pwa/wiki/User-Guide";
+  window.open(wikiUrl, "_blank", "noopener,noreferrer");
+}
+
+/**
  * Handle About button click
  */
-function handleAboutClick() {
+async function handleAboutClick() {
   closeMenu();
   const aboutTitle = "About MIND Diet Tracker";
 
@@ -1024,38 +1048,69 @@ function handleAboutClick() {
     <p>Version: <span id="modal-app-version">(unknown)</span></p>
   `;
 
-  // Add test date controls
+  // Add development controls
+  const currentSyncProvider = await dataService.getPreference(
+    "cloudSyncProvider",
+    "gdrive"
+  );
+
   aboutContent += `
-    <!-- Developer Testing Controls -->
-    <div id="dev-controls" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc;">
-      <h4 style="margin: 5px 0;">Developer Controls</h4>
-      <div style="display: flex; align-items: center; margin-bottom: 10px;">
-        <label for="test-date" style="margin-right: 10px;">Test Date:</label>
-        <input type="date" id="test-date" ${
-          dataService.isTestModeEnabled()
-            ? `value="${
-                dataService.getCurrentDate().toISOString().split("T")[0]
-              }"`
-            : ""
-        }>
-        <button id="apply-test-date" style="margin-left: 5px;">Apply</button>
-        <button id="reset-test-date" style="margin-left: 5px;" ${
-          !dataService.isTestModeEnabled() ? "disabled" : ""
-        }>Reset</button>
-      </div>
-      <div id="test-date-status" style="font-size: 12px; color: ${
-        dataService.isTestModeEnabled() ? "#ff0000" : "#888"
-      };">
-        ${
-          dataService.isTestModeEnabled()
-            ? `TEST MODE ACTIVE: Using date ${dataService
-                .getCurrentDate()
-                .toLocaleDateString()}`
-            : "Test mode inactive (using real system date)"
-        }
-      </div>
+  <!-- Developer Testing Controls -->
+  <div id="dev-controls" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc;">
+    <h4 style="margin: 5px 0;">Developer Controls</h4>
+    
+    <!-- Existing test date controls -->
+    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+      <label for="test-date" style="margin-right: 10px;">Test Date:</label>
+      <input type="date" id="test-date" ${
+        dataService.isTestModeEnabled()
+          ? `value="${
+              dataService.getCurrentDate().toISOString().split("T")[0]
+            }"`
+          : ""
+      }>
+      <button id="apply-test-date" style="margin-left: 5px;">Apply</button>
+      <button id="reset-test-date" style="margin-left: 5px;" ${
+        !dataService.isTestModeEnabled() ? "disabled" : ""
+      }>Reset</button>
     </div>
-  `;
+    
+    <!-- Cloud data reset controls -->
+    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+      <label style="margin-right: 10px;">Cloud Data:</label>
+      <select id="cloud-provider-select" style="margin-right: 5px;">
+        <option value="gdrive" ${
+          currentSyncProvider === "gdrive" ? "selected" : ""
+        }>Google Drive</option>
+        <option value="dropbox" ${
+          currentSyncProvider === "dropbox" ? "selected" : ""
+        }>Dropbox</option>
+      </select>
+      <button id="clear-cloud-data" style="margin-left: 5px;" ${
+        !syncEnabled ? "disabled" : ""
+      }>Clear Files</button>
+    </div>
+    
+    <div id="test-date-status" style="font-size: 12px; color: ${
+      dataService.isTestModeEnabled() ? "#ff0000" : "#888"
+    };">
+      ${
+        dataService.isTestModeEnabled()
+          ? `TEST MODE ACTIVE: Using date ${dataService
+              .getCurrentDate()
+              .toLocaleDateString()}`
+          : "Test mode inactive (using real system date)"
+      }
+    </div>
+    <div id="cloud-clear-status" style="font-size: 12px; color: #888;">
+      ${
+        syncEnabled
+          ? "Will disable cloud sync after clearing files"
+          : "Cloud sync is not enabled"
+      }
+    </div>
+  </div>
+`;
 
   // Add development information
   aboutContent += `
@@ -1153,6 +1208,95 @@ function handleAboutClick() {
         "Test mode disabled. Using real system date.",
         "success"
       );
+    });
+  }
+
+  const cloudProviderSelect = document.getElementById("cloud-provider-select");
+  const clearCloudDataBtn = document.getElementById("clear-cloud-data");
+  const cloudClearStatus = document.getElementById("cloud-clear-status");
+
+  // Event handler for the clear cloud data button
+  if (clearCloudDataBtn) {
+    clearCloudDataBtn.addEventListener("click", async () => {
+      // Don't proceed if sync isn't enabled
+      if (!syncEnabled) {
+        uiRenderer.showToast(
+          "Cloud sync must be enabled to clear files",
+          "error"
+        );
+        return;
+      }
+
+      const providerType = cloudProviderSelect.value;
+
+      try {
+        // Disable the button while operation is in progress
+        clearCloudDataBtn.disabled = true;
+
+        // Show confirmation dialog with note about disabling sync
+        const confirmAction = await uiRenderer.showConfirmDialog({
+          title: "Confirm Cloud Data Clear",
+          message:
+            "This will delete all app data files from the cloud provider and disable cloud sync.\n\nDo you want to continue?",
+          confirmText: "Clear Files",
+          cancelText: "Cancel",
+          details: `<p>Provider: ${
+            providerType === "gdrive" ? "Google Drive" : "Dropbox"
+          }</p>
+                 <p>Note: You'll need to manually re-enable cloud sync in Settings after this operation.</p>`,
+        });
+
+        if (!confirmAction) {
+          uiRenderer.showToast("Operation cancelled", "info");
+          clearCloudDataBtn.disabled = false;
+          return;
+        }
+
+        // Use the existing provider if available
+        let provider = cloudSync.provider;
+
+        // Close the About dialog before the background operation starts
+        uiRenderer.closeModal();
+
+        // Show a progress toast
+        uiRenderer.showToast(
+          `Clearing cloud files from ${providerType}...`,
+          "info"
+        );
+
+        // Clear the cloud data
+        const deletedCount = await provider.clearAllAppDataFiles();
+
+        // Disable cloud sync
+        syncEnabled = false;
+        await dataService.savePreference("cloudSyncEnabled", false);
+
+        // If we have an active cloudSync object, clean it up
+        if (cloudSync) {
+          if (cloudSync.autoSyncTimer) {
+            cloudSync.stopAutoSync();
+          }
+          // Set to null to fully release it
+          cloudSync = null;
+        }
+
+        // Update UI elements to reflect disabled sync
+        updateSyncUIElements();
+
+        // Show success toast with longer duration so user can see it
+        uiRenderer.showToast(
+          `Success! Deleted ${deletedCount} cloud files and disabled sync.`,
+          "success",
+          5000
+        );
+      } catch (error) {
+        console.error("Error clearing cloud data:", error);
+        uiRenderer.showToast(
+          `Error clearing cloud files: ${error.message}`,
+          "error",
+          5000
+        );
+      }
     });
   }
 }

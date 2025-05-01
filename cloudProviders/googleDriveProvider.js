@@ -415,6 +415,52 @@ class GoogleDriveProvider {
       throw error;
     }
   }
+
+  // Add this method to the GoogleDriveProvider class
+  async clearAllAppDataFiles() {
+    let deletedCount = 0;
+    let pageToken = null;
+
+    try {
+      do {
+        // Get files with pagination
+        const listResponse = await this.gapi.client.drive.files.list({
+          spaces: "appDataFolder",
+          fields: "nextPageToken, files(id, name)",
+          pageSize: 100, // Get up to 100 files per request
+          pageToken: pageToken || undefined,
+        });
+
+        const files = listResponse.result.files || [];
+        pageToken = listResponse.result.nextPageToken;
+
+        if (files.length === 0 && deletedCount === 0) {
+          console.log("No files found to delete.");
+          return 0;
+        }
+
+        // Delete each file
+        for (const file of files) {
+          try {
+            console.log(`Deleting file: ${file.name} (ID: ${file.id})`);
+            await this.gapi.client.drive.files.delete({ fileId: file.id });
+            deletedCount++;
+          } catch (deleteError) {
+            console.error(`Error deleting file ${file.name}:`, deleteError);
+            // Continue with other files
+          }
+        }
+      } while (pageToken); // Continue if there are more pages
+
+      console.log(
+        `Successfully deleted ${deletedCount} files from appDataFolder`
+      );
+      return deletedCount;
+    } catch (error) {
+      console.error("Error clearing appDataFolder files:", error);
+      throw error;
+    }
+  }
 }
 
 export default GoogleDriveProvider;
