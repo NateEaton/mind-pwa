@@ -6,7 +6,7 @@ A Progressive Web App (PWA) designed to help users track their daily and weekly 
 
 [**Live Demo**](https://mind-pwa-fawn.vercel.app/) | [**View Wiki for Complete Documentation**](../../wiki)
 
-## ⚠️ Cloud Sync Limitations in Demo
+### ⚠️ Cloud Sync Limitations in Demo
 
 The hosted demo app (on Vercel) **does not currently support cloud sync** via Google Drive or Dropbox for general users. This is due to testing restrictions imposed by the API providers.
 * **Google Drive sync**: Only available to registered test users added to the app's OAuth client.
