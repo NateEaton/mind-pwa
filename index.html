@@ -40,11 +40,18 @@
       scroll-snap-type: x mandatory;
       gap: 1rem;
       padding: 1rem 0;
+      -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
     }
-    .carousel img {
+    .carousel > div {
       flex: 0 0 auto;
       scroll-snap-align: start;
-      max-width: 100%;
+      width: 300px; /* Fixed width for each slide */
+    }
+    .carousel img {
+      width: 100%;
+      height: auto;
+      min-height: 400px; /* Minimum height to ensure visibility */
+      object-fit: cover; /* Maintains aspect ratio */
       border: 1px solid #ccc;
       border-radius: 8px;
     }
