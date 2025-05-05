@@ -265,67 +265,100 @@ export class CloudSyncManager {
       const hasLocalChanges = localData.metadata?.currentWeekDirty || false;
 
       // Find or create the file in the cloud
-      const fileInfo = await this.provider.findOrCreateFile(
-        currentWeekFileName
-      );
-      console.log("Current week file info:", fileInfo);
+      let fileInfo;
+      try {
+        fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
+        console.log("Current week file info:", fileInfo);
+      } catch (error) {
+        console.error("Error finding/creating file:", error);
+        return { error: error.message, noChanges: false };
+      }
+
+      if (!fileInfo || !fileInfo.id) {
+        console.error("Failed to get a valid file ID");
+        return { error: "Invalid file info", noChanges: false };
+      }
 
       // Check if file has changed in cloud if we're not forcing upload
       if (!forceUpload && !hasLocalChanges) {
-        const hasFileChanged = await this.checkIfFileChanged(
-          currentWeekFileName,
-          fileInfo.id
-        );
-        if (!hasFileChanged) {
-          console.log(
-            "Current week file hasn't changed in cloud, skipping sync entirely"
+        try {
+          const hasFileChanged = await this.checkIfFileChanged(
+            currentWeekFileName,
+            fileInfo.id
           );
-          // Store successful check time in metadata
-          await this.storeFileMetadata(currentWeekFileName, fileInfo);
-          return { noChanges: true };
+          if (!hasFileChanged) {
+            console.log(
+              "Current week file hasn't changed in cloud, skipping sync entirely"
+            );
+            // Store successful check time in metadata
+            await this.storeFileMetadata(currentWeekFileName, fileInfo);
+            return { noChanges: true };
+          }
+        } catch (error) {
+          console.warn("Error checking if file changed:", error);
+          // Continue with sync to be safe
         }
       }
 
       // If we have local changes but no remote changes, just upload without downloading first
       if (!forceUpload && hasLocalChanges) {
-        const hasFileChanged = await this.checkIfFileChanged(
-          currentWeekFileName,
-          fileInfo.id
-        );
-        if (!hasFileChanged) {
-          console.log(
-            "Local changes detected but no cloud changes - uploading without merging"
+        try {
+          const hasFileChanged = await this.checkIfFileChanged(
+            currentWeekFileName,
+            fileInfo.id
           );
+          if (!hasFileChanged) {
+            console.log(
+              "Local changes detected but no cloud changes - uploading without merging"
+            );
 
-          // Update lastModified to ensure it's newer
-          localData.lastModified = Date.now();
+            // Update lastModified to ensure it's newer
+            localData.lastModified = Date.now();
 
-          // Upload data to cloud
-          console.log("Uploading data to cloud");
-          const uploadResult = await this.provider.uploadFile(
-            fileInfo.id,
-            localData
-          );
-          console.log("Successfully uploaded data to server");
+            // Upload data to cloud
+            console.log("Uploading data to cloud");
+            try {
+              const uploadResult = await this.provider.uploadFile(
+                fileInfo.id,
+                localData
+              );
+              console.log("Successfully uploaded data to server");
 
-          // Store file metadata after upload
-          await this.storeFileMetadata(currentWeekFileName, uploadResult);
+              // Store file metadata after upload
+              await this.storeFileMetadata(currentWeekFileName, uploadResult);
 
-          // Clear dirty flag after successful upload
-          if (localData.metadata) {
-            localData.metadata.currentWeekDirty = false;
-            this.dataService.saveState(localData);
+              // Clear dirty flag after successful upload
+              if (localData.metadata) {
+                localData.metadata.currentWeekDirty = false;
+                this.dataService.saveState(localData);
+              }
+
+              return { uploaded: true };
+            } catch (uploadError) {
+              console.error("Error uploading data:", uploadError);
+              return {
+                error: uploadError.message,
+                noChanges: false,
+                uploaded: false,
+              };
+            }
           }
-
-          return { uploaded: true };
+        } catch (error) {
+          console.warn("Error checking for file changes:", error);
+          // Continue with sync to be safe
         }
       }
 
       // If we reach here, we need to download and potentially merge
-
-      // Download remote data
-      console.log("Downloading remote data...");
-      let remoteData = await this.provider.downloadFile(fileInfo.id);
+      let remoteData = null;
+      try {
+        // Download remote data
+        console.log("Downloading remote data...");
+        remoteData = await this.provider.downloadFile(fileInfo.id);
+      } catch (error) {
+        console.error("Error downloading data:", error);
+        // Continue with using local data only
+      }
 
       // Check if there's any data to sync
       const hasDataToSync =
@@ -365,29 +398,40 @@ export class CloudSyncManager {
         forceUpload || hasDataToSync || dataToUpload.metadata?.currentWeekDirty;
 
       if (needsUpload) {
-        console.log("Uploading data to cloud");
-        const uploadResult = await this.provider.uploadFile(
-          fileInfo.id,
-          dataToUpload
-        );
-        console.log("Successfully uploaded data to server");
+        try {
+          console.log("Uploading data to cloud");
+          const uploadResult = await this.provider.uploadFile(
+            fileInfo.id,
+            dataToUpload
+          );
+          console.log("Successfully uploaded data to server");
 
-        // Store file metadata after upload
-        await this.storeFileMetadata(currentWeekFileName, uploadResult);
+          // Store file metadata after upload
+          await this.storeFileMetadata(currentWeekFileName, uploadResult);
 
-        // Clear dirty flag after successful upload
-        if (dataToUpload.metadata) {
-          dataToUpload.metadata.currentWeekDirty = false;
-          this.dataService.saveState(dataToUpload);
+          // Clear dirty flag after successful upload
+          if (dataToUpload.metadata) {
+            dataToUpload.metadata.currentWeekDirty = false;
+            this.dataService.saveState(dataToUpload);
+          }
+
+          return { downloaded: true, uploaded: true };
+        } catch (uploadError) {
+          console.error("Error uploading data:", uploadError);
+          return {
+            error: uploadError.message,
+            downloaded: remoteData != null,
+            uploaded: false,
+          };
         }
       } else {
         console.log("No data changes detected, skipping upload");
       }
 
-      return { downloaded: true, uploaded: needsUpload };
+      return { downloaded: true, uploaded: false };
     } catch (error) {
       console.error("Error in current week sync:", error);
-      throw error;
+      return { error: error.message, noChanges: false };
     }
   }
 
@@ -410,14 +454,62 @@ export class CloudSyncManager {
         : "none",
     });
 
-    // Check system date vs remote date - NEW ADDITION
+    // Check system date vs remote date
     const todayStr = this.dataService.getTodayDateString();
+    const localDateStr = localData.currentDayDate;
     const remoteDateStr = remoteData.currentDayDate;
+
+    // Compare actual dates for logical sequence, not just timestamps
+    const todayDate = new Date(`${todayStr}T00:00:00`).getTime();
+    const localDate = new Date(`${localDateStr}T00:00:00`).getTime();
+    const remoteDate = new Date(`${remoteDateStr}T00:00:00`).getTime();
+
+    // Determine logical date relationships
     const needsDateReset = todayStr !== remoteDateStr;
+    const remoteIsOlderDate = remoteDate < localDate;
+    const remoteIsNewerDate = remoteDate > localDate;
+    const sameDate = remoteDate === localDate;
 
     console.log(
-      `System date: ${todayStr}, Remote date: ${remoteDateStr}, Needs reset: ${needsDateReset}`
+      `Date comparison: local=${localDateStr}, remote=${remoteDateStr}, today=${todayStr}`
     );
+    console.log(
+      `Date relationships: remoteIsOlderDate=${remoteIsOlderDate}, remoteIsNewerDate=${remoteIsNewerDate}, sameDate=${sameDate}`
+    );
+
+    // Check if local data indicates a reset was performed
+    const localHadReset = localData.metadata?.dateResetPerformed === true;
+    const localResetType = localData.metadata?.dateResetType;
+    const localResetTime = localData.metadata?.dateResetTimestamp || 0;
+
+    console.log(
+      `Reset info: localHadReset=${localHadReset}, type=${localResetType}, time=${new Date(
+        localResetTime
+      ).toISOString()}`
+    );
+
+    // CRITICAL: If local date is current system date AND local had a reset, preserve local data
+    // This handles the case where a reset just happened and we don't want sync to revert it
+    if (localDateStr === todayStr && localHadReset) {
+      console.log(
+        `Preserving local reset data - reset type was ${localResetType}`
+      );
+      return {
+        ...localData,
+        lastModified: Date.now(), // Update timestamp to ensure it's newer
+      };
+    }
+
+    // If remote data is from an older date than local, prefer local data
+    if (remoteIsOlderDate) {
+      console.log("Remote data is from an older date - using local data");
+      return {
+        ...localData,
+        lastModified:
+          Math.max(localData.lastModified || 0, remoteData.lastModified || 0) +
+          1,
+      };
+    }
 
     // Special case for fresh installs - prefer remote data
     if (localData.metadata && localData.metadata.isFreshInstall) {
@@ -433,7 +525,7 @@ export class CloudSyncManager {
       if (hasRemoteData) {
         let mergedData = {
           ...remoteData,
-          // IMPORTANT FIX: Use system date, not remote date
+          // Important: Use current date, not remote date
           currentDayDate: todayStr,
           lastModified: Date.now(),
           metadata: {
@@ -445,7 +537,7 @@ export class CloudSyncManager {
           },
         };
 
-        // If date has changed, mark for post-sync reset - NEW ADDITION
+        // If date needs to be updated, flag it
         if (needsDateReset) {
           mergedData.metadata.pendingDateReset = true;
           mergedData.metadata.remoteDateWas = remoteDateStr;
@@ -463,29 +555,29 @@ export class CloudSyncManager {
     const remoteWeekStart = new Date(
       remoteData.currentWeekStartDate + "T00:00:00"
     );
-    const localIsNewer = localWeekStart > remoteWeekStart;
-    const remoteIsNewer = remoteWeekStart > localWeekStart;
+    const localIsNewerWeek = localWeekStart > remoteWeekStart;
+    const remoteIsNewerWeek = remoteWeekStart > localWeekStart;
 
-    // For multi-week gaps, calculate week difference
+    // Multi-week gap detection
     const weekDiff = Math.round(
       Math.abs(localWeekStart - remoteWeekStart) / (7 * 24 * 60 * 60 * 1000)
     );
     const isMultiWeekGap = weekDiff > 1;
 
-    // Check if data was reset due to new day/week
+    // Check reset flags
     const wasReset = localData.metadata?.dateResetPerformed || false;
     const resetType = localData.metadata?.dateResetType || null;
     const resetTimestamp = localData.metadata?.dateResetTimestamp || 0;
 
-    // Compare core timestamps
+    // Compare timestamps
     const localModified = localData.lastModified || 0;
     const remoteModified = remoteData.lastModified || 0;
 
     console.log("Analysis:", {
       weekDiff,
       isMultiWeekGap,
-      localIsNewer,
-      remoteIsNewer,
+      localIsNewerWeek,
+      remoteIsNewerWeek,
       wasReset,
       resetType,
       localModified,
@@ -495,7 +587,7 @@ export class CloudSyncManager {
     // Handle multi-week gap scenarios
     if (isMultiWeekGap) {
       // If local week is newer and was reset, and remote hasn't been modified more recently
-      if (localIsNewer && wasReset && resetTimestamp > remoteModified) {
+      if (localIsNewerWeek && wasReset && resetTimestamp > remoteModified) {
         console.log("Multi-week gap with local reset: using local data");
         return {
           ...localData,
@@ -504,7 +596,7 @@ export class CloudSyncManager {
       }
 
       // If remote week is newer than local week
-      if (remoteIsNewer) {
+      if (remoteIsNewerWeek) {
         console.log("Multi-week gap with newer remote week: using remote data");
 
         // But preserve certain local metadata
@@ -517,6 +609,8 @@ export class CloudSyncManager {
 
         return {
           ...remoteData,
+          // Always use current day from device
+          currentDayDate: todayStr,
           metadata: {
             ...(remoteData.metadata || {}),
             ...preservedMetadata,
@@ -535,6 +629,8 @@ export class CloudSyncManager {
         );
         return {
           ...remoteData,
+          // Always use current day from device
+          currentDayDate: todayStr,
           metadata: {
             ...(remoteData.metadata || {}),
             currentWeekDirty: false,
@@ -564,8 +660,30 @@ export class CloudSyncManager {
       };
     }
 
+    // If we're on the same date, and remote is more recent, use remote for weekly counts
+    // but preserve local daily counts if they exist
+    if (sameDate && remoteModified > localModified) {
+      console.log(
+        "Same date, but remote is more recent - using remote weekly counts but preserving local daily"
+      );
+
+      // Start with remote data
+      const mergedData = {
+        ...remoteData,
+        lastModified: remoteModified + 1,
+      };
+
+      // If local has non-empty daily counts, preserve them
+      if (Object.keys(localData.dailyCounts || {}).length > 0) {
+        console.log("Preserving local daily counts");
+        mergedData.dailyCounts = { ...localData.dailyCounts };
+      }
+
+      return mergedData;
+    }
+
     // If remote modified time is more recent, use remote data
-    if (remoteModified > localModified) {
+    if (remoteModified > localModified && !localHadReset) {
       console.log("Remote data is more recent than local - using remote data");
       const mergedData = {
         ...remoteData,
@@ -1595,9 +1713,18 @@ export class CloudSyncManager {
         hasChanged = fileInfo.rev !== storedMetadata.rev;
         revisionInfo = `rev ${fileInfo.rev} vs stored ${storedMetadata.rev}`;
       } else {
-        // Google Drive uses etag
-        hasChanged = fileInfo.etag !== storedMetadata.etag;
-        revisionInfo = `etag ${fileInfo.etag} vs stored ${storedMetadata.etag}`;
+        // Google Drive - use modifiedTime instead of etag
+        if (fileInfo.modifiedTime && storedMetadata.modifiedTime) {
+          // Compare modification timestamps
+          const cloudTime = new Date(fileInfo.modifiedTime).getTime();
+          const storedTime = new Date(storedMetadata.modifiedTime).getTime();
+          hasChanged = cloudTime > storedTime;
+          revisionInfo = `modified ${fileInfo.modifiedTime} vs stored ${storedMetadata.modifiedTime}`;
+        } else {
+          // If we can't compare timestamps, assume changed
+          hasChanged = true;
+          revisionInfo = "missing timestamps, assuming changed";
+        }
       }
 
       console.log(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
@@ -1656,11 +1783,12 @@ export class CloudSyncManager {
 
         console.log(`Storing Dropbox rev for ${fileName}: ${metadata.rev}`);
       } else {
-        // For Google Drive
-        const etag = fileInfo.etag || fileInfo.result?.etag;
-        metadata.etag = etag;
+        // For Google Drive - Store modifiedTime instead of etag
+        const modifiedTime =
+          fileInfo.modifiedTime || fileInfo.result?.modifiedTime;
+        metadata.modifiedTime = modifiedTime;
         console.log(
-          `Storing Google Drive etag for ${fileName}: ${metadata.etag}`
+          `Storing Google Drive modifiedTime for ${fileName}: ${metadata.modifiedTime}`
         );
       }
 

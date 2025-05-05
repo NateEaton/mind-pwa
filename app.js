@@ -1815,6 +1815,20 @@ async function syncData(silent = false, force = false) {
     }
   }
 
+  // Check for date reset metadata before sync
+  const preSync = dataService.loadState();
+  const hadDateReset = preSync.metadata?.dateResetPerformed === true;
+  const resetType = preSync.metadata?.dateResetType;
+  const currentDay = preSync.currentDayDate;
+  const currentWeekStart = preSync.currentWeekStartDate;
+
+  console.log("Pre-sync state check:", {
+    hadDateReset,
+    resetType,
+    currentDay,
+    currentWeekStart,
+  });
+
   // Add debugging of metadata to help trace the issue
   try {
     const state = dataService.loadState();
@@ -1832,56 +1846,31 @@ async function syncData(silent = false, force = false) {
     // Update UI to show sync in progress
     updateSyncUIElements();
 
-    const result = await cloudSync.sync();
+    const result = await cloudSync.sync(silent, force);
     console.log("Sync completed:", result);
 
-    // Force a complete reload of state from dataService
-    console.log("Reloading state after sync");
-    if (typeof stateManager.reload === "function") {
-      console.log("stateManager.reload is typeof function, calling reload");
-      await stateManager.reload();
-    } else {
-      console.warn("stateManager.reload not found, manually reloading state");
-      // Fallback if reload method doesn't exist
-      const freshData = dataService.loadState();
-      stateManager.dispatch({
-        type: stateManager.ACTION_TYPES.SET_STATE,
-        payload: freshData,
-      });
-
-      const historyData = await dataService.getAllWeekHistory();
-      stateManager.dispatch({
-        type: stateManager.ACTION_TYPES.SET_HISTORY,
-        payload: { history: historyData },
-      });
-    }
-
-    // NEW ADDITION: Check if we need to perform a date reset after sync
-    const currentState = stateManager.getState();
-    const needsPostSyncReset = currentState.metadata?.pendingDateReset === true;
-
-    if (needsPostSyncReset) {
-      console.log("Performing post-sync date reset");
-
-      // Clear the pending flag first
-      delete currentState.metadata.pendingDateReset;
-      delete currentState.metadata.remoteDateWas;
-
-      // Save the cleared flag
-      dataService.saveState(currentState);
-
-      // Perform the date check and reset
-      const dateChanged = await stateManager.checkDateAndReset();
-
-      if (dateChanged) {
-        console.log("Post-sync date reset completed successfully");
+    // CRITICAL CHANGE: Never reload state after a date reset occurred
+    if (!hadDateReset) {
+      console.log("No date reset occurred - safe to reload state from storage");
+      if (typeof stateManager.reload === "function") {
+        await stateManager.reload();
       } else {
-        console.warn("Post-sync date reset was flagged but no changes made");
+        console.warn("stateManager.reload not found, manually reloading state");
+        // Fallback if reload method doesn't exist
+        const freshData = dataService.loadState();
+        stateManager.dispatch({
+          type: stateManager.ACTION_TYPES.SET_STATE,
+          payload: freshData,
+        });
       }
+    } else {
+      console.log(
+        `Date reset detected (${resetType}) - preserving current state and skipping reload`
+      );
     }
 
     // Now refresh the UI
-    console.log("Refreshing UI after state reload");
+    console.log("Refreshing UI after sync");
     uiRenderer.renderEverything();
 
     if (!silent) {
@@ -1890,6 +1879,7 @@ async function syncData(silent = false, force = false) {
   } catch (error) {
     console.error("Sync error:", error);
     handleSyncError(error);
+    // Don't reload state on error
   } finally {
     // Make sure syncInProgress is set to false if the cloudSync object exists
     if (cloudSync) {
