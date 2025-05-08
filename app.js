@@ -444,97 +444,29 @@ async function initializeApp() {
   console.log("Initializing app...");
 
   try {
-    // Initialize data service first
+    // 1. Initialize data service first
     await dataService.initialize();
     console.log("Data service initialized");
 
-    // Get user preference for cloud sync
-    syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
-    console.log("Initial syncEnabled value:", syncEnabled);
-    const syncProvider = await dataService.getPreference(
-      "cloudSyncProvider",
-      "gdrive"
-    );
+    // 2. Initialize state manager with food groups configuration
+    await stateManager.initialize(foodGroups);
+    console.log("State manager initialized");
 
-    // After getting sync preferences
-    const autoSyncInterval = await dataService.getPreference(
-      "autoSyncInterval",
-      15
-    );
-    const syncWifiOnly = await dataService.getPreference("syncWifiOnly", false);
-
-    // Initialize cloud sync if enabled
-    if (syncEnabled) {
-      // Set sync readiness to false initially
-      setSyncReady(false);
-
-      try {
-        console.log("Initializing cloud sync with provider:", syncProvider);
-        cloudSync = new CloudSyncManager(
-          dataService,
-          stateManager,
-          handleSyncComplete,
-          handleSyncError
-        );
-
-        // Set network constraints
-        cloudSync.syncWifiOnly = syncWifiOnly;
-
-        // Initialize provider
-        const initResult = await cloudSync.initialize(syncProvider);
-
-        // Check if initialization failed due to missing config
-        if (!initResult) {
-          console.warn(
-            "Cloud sync initialization failed: Config missing or invalid"
-          );
-          // Show a user-friendly toast
-          uiRenderer.showToast(
-            "Cloud sync is disabled: API keys not configured",
-            "warning",
-            5000
-          );
-
-          // Update preferences to disable sync
-          await dataService.savePreference("cloudSyncEnabled", false);
-          syncEnabled = false;
-
-          // Update UI to reflect sync is disabled
-          updateSyncUIElements();
-        } else {
-          console.log("Cloud sync initialized successfully");
-
-          // Configure auto-sync
-          if (autoSyncInterval > 0) {
-            cloudSync.startAutoSync(autoSyncInterval);
-            console.log(
-              `Auto-sync configured for every ${autoSyncInterval} minutes`
-            );
-          }
-
-          // Mark sync as ready
-          setSyncReady(true);
-
-          // Update UI elements
-          updateSyncUIElements();
-
-          // Attempt initial sync
-          syncData(true);
-        }
-      } catch (error) {
-        console.error("Failed to initialize cloud sync:", error);
-        // Keep sync disabled but don't interrupt app initialization
-        setSyncReady(false);
-        updateSyncUIElements();
-
-        // Show error to user
-        uiRenderer.showToast(
-          `Cloud sync initialization failed: ${error.message}`,
-          "error",
-          5000
-        );
-      }
+    // 3. Check for date/week changes and perform resets if needed
+    const dateChanged = await stateManager.checkDateAndReset();
+    if (dateChanged) {
+      console.log("Date or week changed and state was updated");
     }
+
+    // 4. Initialize UI renderer
+    uiRenderer.initialize();
+    console.log("UI renderer initialized");
+
+    // Render all UI components after initialization
+    uiRenderer.renderEverything();
+
+    // Set initial active view
+    uiRenderer.setActiveView("tracker");
 
     // Register service worker
     appUtils.registerServiceWorker();
@@ -542,25 +474,8 @@ async function initializeApp() {
     // Display app version in footer
     await appUtils.loadAppVersion(domElements.appVersionElement);
 
-    // Initialize UI renderer
-    uiRenderer.initialize();
-    console.log("UI renderer initialized");
-
-    // Initialize state manager with food groups configuration
-    await stateManager.initialize(foodGroups);
-    console.log("State manager initialized");
-
-    // Check for date/week changes and perform resets if needed
-    const dateChanged = await stateManager.checkDateAndReset();
-    if (dateChanged) {
-      console.log("Date or week changed and state was updated");
-    }
-
     // Setup event listeners
     setupEventListeners();
-
-    // Set initial active view
-    uiRenderer.setActiveView("tracker");
 
     // Check if test mode is active and add banner if needed
     if (dataService.isTestModeEnabled()) {
@@ -570,49 +485,16 @@ async function initializeApp() {
       );
     }
 
-    // Setup network listeners
+    // 5. Setup network listeners
     setupNetworkListeners();
 
-    // In the initializeApp function, add this near the end
-    // Check for stored auth state
-    const storedAuthState = localStorage.getItem("dropbox_auth_state");
-    if (storedAuthState) {
-      try {
-        const authState = JSON.parse(storedAuthState);
+    // 6. Initialize cloud sync capabilities
+    const syncInitialized = await initializeCloudSync();
 
-        // Clear stored state immediately
-        localStorage.removeItem("dropbox_auth_state");
-
-        // Check if state is recent (within 10 minutes)
-        const stateAge = Date.now() - authState.timestamp;
-        if (stateAge <= 10 * 60 * 1000) {
-          // Process based on context
-          if (authState.context === "settings_dialog") {
-            console.log("Restoring settings dialog after auth");
-
-            // Update preferences since we now have a token
-            await dataService.savePreference("cloudSyncEnabled", true);
-            await dataService.savePreference("cloudSyncProvider", "dropbox");
-            syncEnabled = true;
-
-            // Reinitialize cloud sync with new settings
-            if (!cloudSync) {
-              await initializeCloudSync("dropbox");
-            }
-
-            // Show settings dialog after a short delay
-            setTimeout(() => {
-              showSettings();
-              // Show success toast
-              uiRenderer.showToast("Dropbox connected successfully", "success");
-            }, 500);
-          }
-        } else {
-          console.log("Stored auth state expired, ignoring");
-        }
-      } catch (e) {
-        console.error("Error processing stored auth state:", e);
-      }
+    // 7. Perform initial sync if enabled and initialized
+    if (syncEnabled && syncReady) {
+      console.log("Performing initial sync");
+      await syncData(true); // Silent sync
     }
 
     console.log("App initialization complete");
@@ -623,6 +505,154 @@ async function initializeApp() {
       "error",
       5000
     );
+  }
+}
+
+/**
+ * Initialize cloud sync based on user preferences and stored auth state
+ * @returns {Promise<boolean>} Whether sync was successfully initialized
+ */
+async function initializeCloudSync() {
+  // First, check if sync is enabled - exit early if not
+  syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
+  console.log("Initial syncEnabled value:", syncEnabled);
+
+  if (!syncEnabled) {
+    console.log("Cloud sync is disabled in preferences");
+    return false;
+  }
+
+  // Set sync readiness to false initially
+  setSyncReady(false);
+
+  try {
+    // Load all sync preferences at once
+    const [syncProvider, autoSyncInterval, syncWifiOnly] = await Promise.all([
+      dataService.getPreference("cloudSyncProvider", "gdrive"),
+      dataService.getPreference("autoSyncInterval", 15),
+      dataService.getPreference("syncWifiOnly", false),
+    ]);
+
+    // Determine effective provider based on configuration and auth state
+    let effectiveProvider = syncProvider;
+    let hasDropboxAuthRedirect = false;
+
+    // Only process Dropbox-specific elements if Dropbox is the configured provider
+    // or we explicitly detect a Dropbox redirect in URL
+    const hasDropboxTokenInUrl = window.location.hash.includes("access_token=");
+
+    if (syncProvider === "dropbox" || hasDropboxTokenInUrl) {
+      // Check for stored auth state
+      const storedAuthState = localStorage.getItem("dropbox_auth_state");
+      if (storedAuthState) {
+        try {
+          const authState = JSON.parse(storedAuthState);
+
+          // Clear stored state immediately
+          localStorage.removeItem("dropbox_auth_state");
+
+          // Check if state is recent (within 10 minutes)
+          const stateAge = Date.now() - authState.timestamp;
+          if (stateAge <= 10 * 60 * 1000) {
+            console.log("Found recent Dropbox auth state");
+            effectiveProvider = "dropbox";
+            hasDropboxAuthRedirect = true;
+          } else {
+            console.log("Stored auth state expired, ignoring");
+          }
+        } catch (e) {
+          console.error("Error processing stored auth state:", e);
+        }
+      }
+
+      // Force provider to dropbox if token is in URL
+      if (hasDropboxTokenInUrl) {
+        console.log("Detected Dropbox token in URL hash");
+        effectiveProvider = "dropbox";
+      }
+    }
+
+    console.log(`Initializing cloud sync with provider: ${effectiveProvider}`);
+
+    // Create and initialize cloud sync manager
+    cloudSync = new CloudSyncManager(
+      dataService,
+      stateManager,
+      handleSyncComplete,
+      handleSyncError
+    );
+
+    // Set network constraints
+    cloudSync.syncWifiOnly = syncWifiOnly;
+
+    // Initialize provider
+    const initResult = await cloudSync.initialize(effectiveProvider);
+
+    // Check if initialization failed due to missing config
+    if (!initResult) {
+      console.warn(
+        "Cloud sync initialization failed: Config missing or invalid"
+      );
+
+      // Show a user-friendly toast
+      uiRenderer.showToast(
+        "Cloud sync is disabled: API keys not configured",
+        "warning",
+        5000
+      );
+
+      // Update preferences to disable sync
+      await dataService.savePreference("cloudSyncEnabled", false);
+      syncEnabled = false;
+
+      // Update UI to reflect sync is disabled
+      updateSyncUIElements();
+      return false;
+    }
+
+    console.log("Cloud sync initialized successfully");
+
+    // Configure auto-sync
+    if (autoSyncInterval > 0) {
+      cloudSync.startAutoSync(autoSyncInterval);
+      console.log(`Auto-sync configured for every ${autoSyncInterval} minutes`);
+    }
+
+    // Handle Dropbox auth redirect case - only relevant for Dropbox
+    if (effectiveProvider === "dropbox" && hasDropboxAuthRedirect) {
+      // Update preferences since we now have a token
+      await dataService.savePreference("cloudSyncEnabled", true);
+      await dataService.savePreference("cloudSyncProvider", "dropbox");
+
+      // Show settings dialog after a short delay to provide feedback
+      setTimeout(() => {
+        showSettings();
+        // Show success toast
+        uiRenderer.showToast("Dropbox connected successfully", "success");
+      }, 500);
+    }
+
+    // Mark sync as ready
+    setSyncReady(true);
+
+    // Update UI elements
+    updateSyncUIElements();
+
+    return true;
+  } catch (error) {
+    console.error("Failed to initialize cloud sync:", error);
+    // Keep sync disabled but don't interrupt app initialization
+    setSyncReady(false);
+    updateSyncUIElements();
+
+    // Show error to user
+    uiRenderer.showToast(
+      `Cloud sync initialization failed: ${error.message}`,
+      "error",
+      5000
+    );
+
+    return false;
   }
 }
 

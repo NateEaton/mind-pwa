@@ -210,24 +210,34 @@ export class CloudSyncManager {
       try {
         // 1. Sync current week data if needed
         if (syncCurrent || force) {
-          const currentWeekResult = await this.syncCurrentWeek(force);
-          syncResults.currentWeekSynced = !currentWeekResult.noChanges;
+          try {
+            const currentWeekResult = (await this.syncCurrentWeek(force)) || {};
+            syncResults.currentWeekSynced = !currentWeekResult.noChanges;
 
-          // Clear the current week dirty flag
-          await this.clearDirtyFlag("currentWeekDirty");
+            // Clear the current week dirty flag
+            await this.clearDirtyFlag("currentWeekDirty");
 
-          // Clear date reset flags if they were set
-          await this.clearDateResetFlags();
+            // Clear date reset flags if they were set
+            await this.clearDateResetFlags();
+          } catch (weekError) {
+            console.error("Error syncing current week:", weekError);
+            syncResults.currentWeekError = weekError.message;
+          }
         }
 
         // 2. Sync history data if needed
         if (syncHistory || force) {
-          const historyResult = await this.syncHistory(force);
-          syncResults.historySynced =
-            historyResult && historyResult.syncedCount > 0;
+          try {
+            const historyResult = (await this.syncHistory(force)) || {};
+            syncResults.historySynced =
+              historyResult && historyResult.syncedCount > 0;
 
-          // Clear the history dirty flag
-          await this.clearDirtyFlag("historyDirty");
+            // Clear the history dirty flag
+            await this.clearDirtyFlag("historyDirty");
+          } catch (historyError) {
+            console.error("Error syncing history:", historyError);
+            syncResults.historyError = historyError.message;
+          }
         }
 
         this.lastSyncTimestamp = Date.now();
@@ -263,71 +273,76 @@ export class CloudSyncManager {
       // First, check if we have actual data to sync
       const localData = this.dataService.loadState();
       const hasLocalChanges = localData.metadata?.currentWeekDirty || false;
+      const isFreshInstall = localData.metadata?.isFreshInstall || false;
 
       // Find or create the file in the cloud
-      const fileInfo = await this.provider.findOrCreateFile(
-        currentWeekFileName
-      );
-      console.log("Current week file info:", fileInfo);
+      let fileInfo;
+      try {
+        fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
+        console.log("Current week file info:", fileInfo);
+      } catch (fileError) {
+        console.error("Error finding/creating cloud file:", fileError);
+        throw new Error(`Failed to access cloud file: ${fileError.message}`);
+      }
+
+      // Check if we have a valid file ID
+      if (!fileInfo || !fileInfo.id) {
+        console.error("Invalid file info returned from cloud provider");
+        return {
+          error: "Invalid file info",
+          uploaded: false,
+          downloaded: false,
+        };
+      }
 
       // Check if file has changed in cloud if we're not forcing upload
+      let cloudFileAccessible = true;
+      let cloudFileExists = false;
+      let hasFileChanged = true;
+
       if (!forceUpload && !hasLocalChanges) {
-        const hasFileChanged = await this.checkIfFileChanged(
-          currentWeekFileName,
-          fileInfo.id
-        );
-        if (!hasFileChanged) {
-          console.log(
-            "Current week file hasn't changed in cloud, skipping sync entirely"
-          );
-          // Store successful check time in metadata
-          await this.storeFileMetadata(currentWeekFileName, fileInfo);
-          return { noChanges: true };
-        }
-      }
-
-      // If we have local changes but no remote changes, just upload without downloading first
-      if (!forceUpload && hasLocalChanges) {
-        const hasFileChanged = await this.checkIfFileChanged(
-          currentWeekFileName,
-          fileInfo.id
-        );
-        if (!hasFileChanged) {
-          console.log(
-            "Local changes detected but no cloud changes - uploading without merging"
+        try {
+          hasFileChanged = await this.checkIfFileChanged(
+            currentWeekFileName,
+            fileInfo.id
           );
 
-          // Update lastModified to ensure it's newer
-          localData.lastModified = Date.now();
+          // If we got here, the file is accessible
+          cloudFileAccessible = true;
+          cloudFileExists = true;
 
-          // Upload data to cloud
-          console.log("Uploading data to cloud");
-          const uploadResult = await this.provider.uploadFile(
-            fileInfo.id,
-            localData
-          );
-          console.log("Successfully uploaded data to server");
-
-          // Store file metadata after upload
-          await this.storeFileMetadata(currentWeekFileName, uploadResult);
-
-          // Clear dirty flag after successful upload
-          if (localData.metadata) {
-            localData.metadata.currentWeekDirty = false;
-            this.dataService.saveState(localData);
+          if (!hasFileChanged) {
+            console.log(
+              "Current week file hasn't changed in cloud, skipping sync entirely"
+            );
+            // Store successful check time in metadata
+            await this.storeFileMetadata(currentWeekFileName, fileInfo);
+            return { noChanges: true };
           }
-
-          return { uploaded: true };
+        } catch (metadataError) {
+          console.warn("Error checking file metadata:", metadataError);
+          cloudFileAccessible = false;
+          // We'll continue the process but note we couldn't check metadata
         }
       }
 
-      // If we reach here, we need to download and potentially merge
+      // Download remote data only if cloud file is accessible
+      let remoteData = null;
+      if (cloudFileAccessible) {
+        try {
+          console.log("Downloading remote data...");
+          remoteData = await this.provider.downloadFile(fileInfo.id);
 
-      // Download remote data
-      console.log("Downloading remote data...");
-      let remoteData = await this.provider.downloadFile(fileInfo.id);
+          if (remoteData) {
+            cloudFileExists = true;
+          }
+        } catch (downloadError) {
+          console.warn("Error downloading remote data:", downloadError);
+          // Continue with local data
+        }
+      }
 
-      // Check if there's any data to sync
+      // Check if there's any local data to sync
       const hasDataToSync =
         Object.keys(localData.dailyCounts || {}).length > 0 ||
         Object.keys(localData.weeklyCounts || {}).length > 0;
@@ -336,6 +351,7 @@ export class CloudSyncManager {
 
       // If remote data exists and is valid, merge with local
       let dataToUpload = localData;
+
       if (remoteData && this.validateData(remoteData, "current")) {
         console.log("Remote data found, merging with local data");
         dataToUpload = this.mergeCurrentWeekData(localData, remoteData);
@@ -347,47 +363,86 @@ export class CloudSyncManager {
         // Store file metadata after download
         await this.storeFileMetadata(currentWeekFileName, fileInfo);
       } else {
-        console.log("No valid remote data, using local data only");
+        console.log("No valid remote data available");
 
-        // Force dirty flag for initial upload
-        if (
-          hasDataToSync &&
-          (!dataToUpload.metadata || !dataToUpload.metadata.currentWeekDirty)
-        ) {
+        // IMPORTANT CHANGE: Only force dirty flag if this is not a fresh install
+        // or if we're certain the cloud file doesn't exist
+        if (hasDataToSync && (!isFreshInstall || !cloudFileExists)) {
           if (!dataToUpload.metadata) dataToUpload.metadata = {};
-          dataToUpload.metadata.currentWeekDirty = true;
-          console.log("Forcing dirty flag for initial data upload");
+
+          // If it's a fresh install, only set dirty if we're certain the cloud file doesn't exist
+          if (isFreshInstall) {
+            if (!cloudFileExists) {
+              dataToUpload.metadata.currentWeekDirty = true;
+              console.log(
+                "Forcing dirty flag - fresh install with no cloud data"
+              );
+            } else {
+              console.log(
+                "Fresh install with possible cloud data - not forcing dirty flag"
+              );
+            }
+          } else {
+            dataToUpload.metadata.currentWeekDirty = true;
+            console.log(
+              "Forcing dirty flag for data upload - not fresh install"
+            );
+          }
         }
       }
 
-      // Only upload if we have data or this is a forced upload
+      // Determine whether to upload
       const needsUpload =
-        forceUpload || hasDataToSync || dataToUpload.metadata?.currentWeekDirty;
+        forceUpload ||
+        hasLocalChanges ||
+        dataToUpload.metadata?.currentWeekDirty;
+
+      // For fresh installs, we should be more cautious about uploading
+      const shouldSkipUploadForFreshInstall =
+        isFreshInstall &&
+        !forceUpload &&
+        cloudFileAccessible &&
+        cloudFileExists;
+
+      if (shouldSkipUploadForFreshInstall) {
+        console.log("Fresh install with existing cloud data - skipping upload");
+        return { downloaded: true, uploaded: false, freshInstallSkipped: true };
+      }
 
       if (needsUpload) {
-        console.log("Uploading data to cloud");
-        const uploadResult = await this.provider.uploadFile(
-          fileInfo.id,
-          dataToUpload
-        );
-        console.log("Successfully uploaded data to server");
+        try {
+          console.log("Uploading data to cloud");
+          const uploadResult = await this.provider.uploadFile(
+            fileInfo.id,
+            dataToUpload
+          );
+          console.log("Successfully uploaded data to server");
 
-        // Store file metadata after upload
-        await this.storeFileMetadata(currentWeekFileName, uploadResult);
+          // Store file metadata after upload
+          await this.storeFileMetadata(currentWeekFileName, uploadResult);
 
-        // Clear dirty flag after successful upload
-        if (dataToUpload.metadata) {
-          dataToUpload.metadata.currentWeekDirty = false;
-          this.dataService.saveState(dataToUpload);
+          // Clear dirty flag after successful upload
+          if (dataToUpload.metadata) {
+            dataToUpload.metadata.currentWeekDirty = false;
+            this.dataService.saveState(dataToUpload);
+          }
+
+          return { downloaded: !!remoteData, uploaded: true };
+        } catch (uploadError) {
+          console.error("Error uploading to cloud:", uploadError);
+          return {
+            error: uploadError.message,
+            downloaded: !!remoteData,
+            uploaded: false,
+          };
         }
       } else {
         console.log("No data changes detected, skipping upload");
+        return { downloaded: !!remoteData, uploaded: false };
       }
-
-      return { downloaded: true, uploaded: needsUpload };
     } catch (error) {
       console.error("Error in current week sync:", error);
-      throw error;
+      return { error: error.message, uploaded: false, downloaded: false };
     }
   }
 
@@ -1571,10 +1626,10 @@ export class CloudSyncManager {
       // Get file info from the cloud
       const fileInfo = await this.provider.getFileMetadata(fileId);
 
-      // If file doesn't exist in the cloud, it hasn't changed
+      // If file doesn't exist or we couldn't get metadata, assume changed
       if (!fileInfo) {
-        console.log(`File ${fileName} not found in cloud`);
-        return false;
+        console.log(`File ${fileName} not found or metadata unavailable`);
+        return true;
       }
 
       // Get locally stored metadata
@@ -1595,9 +1650,25 @@ export class CloudSyncManager {
         hasChanged = fileInfo.rev !== storedMetadata.rev;
         revisionInfo = `rev ${fileInfo.rev} vs stored ${storedMetadata.rev}`;
       } else {
-        // Google Drive uses etag
-        hasChanged = fileInfo.etag !== storedMetadata.etag;
-        revisionInfo = `etag ${fileInfo.etag} vs stored ${storedMetadata.etag}`;
+        // Google Drive - try different ways to detect changes in priority order
+        if (fileInfo.headRevisionId && storedMetadata.headRevisionId) {
+          // Best - compare head revision IDs
+          hasChanged =
+            fileInfo.headRevisionId !== storedMetadata.headRevisionId;
+          revisionInfo = `headRevisionId ${fileInfo.headRevisionId} vs stored ${storedMetadata.headRevisionId}`;
+        } else if (fileInfo.version && storedMetadata.version) {
+          // Next best - compare version numbers
+          hasChanged = fileInfo.version !== storedMetadata.version;
+          revisionInfo = `version ${fileInfo.version} vs stored ${storedMetadata.version}`;
+        } else if (fileInfo.md5Checksum && storedMetadata.md5Checksum) {
+          // Fallback - compare content checksums
+          hasChanged = fileInfo.md5Checksum !== storedMetadata.md5Checksum;
+          revisionInfo = `md5Checksum ${fileInfo.md5Checksum} vs stored ${storedMetadata.md5Checksum}`;
+        } else {
+          // If no reliable indicators, assume changed
+          hasChanged = true;
+          revisionInfo = "no reliable revision indicators available";
+        }
       }
 
       console.log(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
@@ -1629,38 +1700,30 @@ export class CloudSyncManager {
 
       // Store provider-specific revision info
       if (this.provider.constructor.name.includes("Dropbox")) {
-        // Try to get rev from different possible locations
+        // Dropbox uses rev
         const rev =
           fileInfo.rev ||
           fileInfo.result?.rev ||
           (fileInfo[".tag"] === "file" && fileInfo.rev);
 
-        // If still no rev, try to fetch it again
-        if (!rev && fileInfo.id) {
-          try {
-            const freshMetadata = await this.provider.getFileMetadata(
-              fileInfo.id
-            );
-            if (freshMetadata && freshMetadata.rev) {
-              metadata.rev = freshMetadata.rev;
-              console.log(
-                `Retrieved fresh rev for ${fileName}: ${freshMetadata.rev}`
-              );
-            }
-          } catch (e) {
-            console.warn(`Could not get fresh metadata for ${fileName}:`, e);
-          }
-        } else {
-          metadata.rev = rev;
-        }
-
+        metadata.rev = rev;
         console.log(`Storing Dropbox rev for ${fileName}: ${metadata.rev}`);
       } else {
-        // For Google Drive
-        const etag = fileInfo.etag || fileInfo.result?.etag;
-        metadata.etag = etag;
+        // For Google Drive - store all available revision indicators
+        metadata.headRevisionId =
+          fileInfo.headRevisionId || fileInfo.result?.headRevisionId;
+        metadata.version = fileInfo.version || fileInfo.result?.version;
+        metadata.md5Checksum =
+          fileInfo.md5Checksum || fileInfo.result?.md5Checksum;
+
         console.log(
-          `Storing Google Drive etag for ${fileName}: ${metadata.etag}`
+          `Storing Google Drive headRevisionId for ${fileName}: ${metadata.headRevisionId}`
+        );
+        console.log(
+          `Storing Google Drive version for ${fileName}: ${metadata.version}`
+        );
+        console.log(
+          `Storing Google Drive md5Checksum for ${fileName}: ${metadata.md5Checksum}`
         );
       }
 
