@@ -1829,6 +1829,30 @@ async function syncData(silent = false, force = false) {
     currentWeekStart,
   });
 
+  // Enhanced date reset detection - check if current date is different from remote
+  if (!hadDateReset && preSync.metadata) {
+    // Get current system date
+    const todayStr = dataService.getTodayDateString();
+    const systemDateMatches = currentDay === todayStr;
+
+    // If system date matches local date but likely different from cloud,
+    // flag as potential reset scenario
+    if (systemDateMatches) {
+      console.log(
+        "Enhanced detection: Current date matches system date - potential reset scenario"
+      );
+      preSync.metadata.potentialReset = true;
+      // Save this flag back to state
+      dataService.saveState(preSync);
+    }
+
+    console.log("Enhanced pre-sync check:", {
+      systemDate: todayStr,
+      matchesLocalDate: systemDateMatches,
+      potentialReset: preSync.metadata.potentialReset,
+    });
+  }
+
   // Add debugging of metadata to help trace the issue
   try {
     const state = dataService.loadState();

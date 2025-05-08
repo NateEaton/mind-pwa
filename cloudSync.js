@@ -360,6 +360,16 @@ export class CloudSyncManager {
         // Continue with using local data only
       }
 
+      if (remoteData) {
+        console.log("Downloaded remote data successfully");
+        console.log(
+          "Remote daily counts before merge:",
+          JSON.stringify(remoteData.dailyCounts || {})
+        );
+      } else {
+        console.log("No remote data downloaded or invalid remote data");
+      }
+
       // Check if there's any data to sync
       const hasDataToSync =
         Object.keys(localData.dailyCounts || {}).length > 0 ||
@@ -379,6 +389,11 @@ export class CloudSyncManager {
 
         // Store file metadata after download
         await this.storeFileMetadata(currentWeekFileName, fileInfo);
+
+        console.log(
+          "Data to save to local store daily counts:",
+          JSON.stringify(dataToUpload.dailyCounts || {})
+        );
       } else {
         console.log("No valid remote data, using local data only");
 
@@ -453,6 +468,8 @@ export class CloudSyncManager {
         ? new Date(remoteData.lastModified).toISOString()
         : "none",
     });
+    console.log("LOCAL daily counts:", JSON.stringify(localData.dailyCounts));
+    console.log("REMOTE daily counts:", JSON.stringify(remoteData.dailyCounts));
 
     // Check system date vs remote date
     const todayStr = this.dataService.getTodayDateString();
@@ -488,16 +505,47 @@ export class CloudSyncManager {
       ).toISOString()}`
     );
 
-    // CRITICAL: If local date is current system date AND local had a reset, preserve local data
-    // This handles the case where a reset just happened and we don't want sync to revert it
-    if (localDateStr === todayStr && localHadReset) {
+    // ENHANCED reset detection - more reliable even if metadata is inconsistent
+    const currentDay = this.dataService.getTodayDateString();
+    const resetDetected =
+      localHadReset ||
+      // Also detect reset by date comparison
+      (localData.currentDayDate === currentDay &&
+        remoteData.currentDayDate !== currentDay);
+
+    console.log(`Enhanced reset detection: ${
+      resetDetected ? "RESET DETECTED" : "no reset"
+    }, 
+             currentDay=${currentDay}, 
+             localDay=${localData.currentDayDate}, 
+             remoteDay=${remoteData.currentDayDate}`);
+
+    // CRITICAL: Use enhanced reset detection to preserve local reset data
+    if ((localDateStr === todayStr && localHadReset) || resetDetected) {
       console.log(
-        `Preserving local reset data - reset type was ${localResetType}`
+        `Preserving local reset data - reset detected: ${resetDetected}, type=${localResetType}`
       );
-      return {
+
+      // Create a copy with updated timestamp to ensure it's newer than remote
+      const preservedData = {
         ...localData,
-        lastModified: Date.now(), // Update timestamp to ensure it's newer
+        lastModified: Date.now() + 1000, // Add extra time to ensure it's newer
       };
+
+      // Make sure reset flags stay in the metadata to prevent future overwrites
+      if (!preservedData.metadata) preservedData.metadata = {};
+      preservedData.metadata.dateResetPerformed = true;
+      preservedData.metadata.dateResetType = localResetType || "DAILY"; // Default to DAILY if undefined
+      preservedData.metadata.dateResetTimestamp = localResetTime || Date.now();
+
+      console.log("Preserved data to return:", {
+        day: preservedData.currentDayDate,
+        week: preservedData.currentWeekStartDate,
+        hasDailyCounts: Object.keys(preservedData.dailyCounts || {}).length > 0,
+        resetFlagsIntact: !!preservedData.metadata.dateResetPerformed,
+      });
+
+      return preservedData;
     }
 
     // If remote data is from an older date than local, prefer local data
@@ -660,24 +708,29 @@ export class CloudSyncManager {
       };
     }
 
-    // If we're on the same date, and remote is more recent, use remote for weekly counts
-    // but preserve local daily counts if they exist
+    console.log("Checking same date condition:", {
+      sameDate,
+      remoteModified,
+      localModified,
+      remoteIsMoreRecent: remoteModified > localModified,
+    });
+
+    // If we're on the same date, and remote is more recent, use all remote data
     if (sameDate && remoteModified > localModified) {
       console.log(
-        "Same date, but remote is more recent - using remote weekly counts but preserving local daily"
+        "Same date, but remote is more recent - using complete remote data (including daily counts)"
       );
 
-      // Start with remote data
+      // Use all remote data since it's more recent
       const mergedData = {
         ...remoteData,
         lastModified: remoteModified + 1,
       };
 
-      // If local has non-empty daily counts, preserve them
-      if (Object.keys(localData.dailyCounts || {}).length > 0) {
-        console.log("Preserving local daily counts");
-        mergedData.dailyCounts = { ...localData.dailyCounts };
-      }
+      console.log(
+        "MERGED data daily counts:",
+        JSON.stringify(mergedData.dailyCounts)
+      );
 
       return mergedData;
     }
@@ -1683,6 +1736,7 @@ export class CloudSyncManager {
     try {
       // Skip check if no provider or not authenticated
       if (!this.provider || !this.isAuthenticated) {
+        console.log(`${fileName}: Skipping change check - provider not ready`);
         return true; // Assume changed if we can't check
       }
 
@@ -1697,6 +1751,9 @@ export class CloudSyncManager {
 
       // Get locally stored metadata
       const storedMetadata = await this.getStoredFileMetadata(fileName);
+
+      console.log(`${fileName} stored metadata:`, storedMetadata);
+      console.log(`${fileName} cloud metadata:`, fileInfo);
 
       if (!storedMetadata) {
         // No stored metadata, assume file has changed
@@ -1744,7 +1801,10 @@ export class CloudSyncManager {
    */
   async storeFileMetadata(fileName, fileInfo) {
     try {
-      if (!fileInfo) return;
+      if (!fileInfo) {
+        console.log(`Cannot store null metadata for ${fileName}`);
+        return;
+      }
 
       // Log the full fileInfo to debug
       console.log(`Full fileInfo for ${fileName}:`, fileInfo);
@@ -1753,6 +1813,8 @@ export class CloudSyncManager {
         fileName,
         lastChecked: Date.now(),
       };
+
+      console.log(`${fileName} metadata being stored:`, metadata);
 
       // Store provider-specific revision info
       if (this.provider.constructor.name.includes("Dropbox")) {
@@ -1797,7 +1859,7 @@ export class CloudSyncManager {
         `file_metadata_${fileName}`,
         metadata
       );
-      console.log(`Stored metadata for ${fileName}:`, metadata);
+      console.log(`Successfully stored metadata for ${fileName}`);
     } catch (error) {
       console.warn(`Error storing file metadata for ${fileName}:`, error);
     }
