@@ -629,7 +629,16 @@ async function initializeCloudSync() {
         showSettings();
         // Show success toast
         uiRenderer.showToast("Dropbox connected successfully", "success");
+
+        // Set sync ready AFTER the settings dialog is shown
+        // This delay ensures the auto-sync doesn't happen immediately
+        setTimeout(() => {
+          setSyncReady(true);
+        }, 1000);
       }, 500);
+
+      // Return early WITHOUT setting syncReady=true
+      return true;
     }
 
     // Mark sync as ready
