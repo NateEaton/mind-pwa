@@ -355,10 +355,20 @@ function updateDailyCount(groupId, count) {
     payload: { groupId, count },
   });
 
-  // Set dirty flag and update lastModified timestamp
+  // Update timestamps and set dirty flags for daily totals
+  const updateTime = Date.now();
   updateMetadata({
+    // Daily totals metadata
+    dailyTotalsUpdatedAt: updateTime,
+    dailyTotalsDirty: true,
+
+    // Weekly totals metadata (since daily changes affect weekly too)
+    weeklyTotalsUpdatedAt: updateTime,
+    weeklyTotalsDirty: true,
+
+    // Legacy flag for backward compatibility
     currentWeekDirty: true,
-    lastModified: Date.now(),
+    lastModified: updateTime,
   });
 
   return result;
@@ -376,17 +386,24 @@ function updateWeeklyCount(groupId, count) {
     payload: { groupId, count },
   });
 
-  // Set dirty flag and update lastModified timestamp
+  // Update only weekly totals metadata
+  const updateTime = Date.now();
   updateMetadata({
+    weeklyTotalsUpdatedAt: updateTime,
+    weeklyTotalsDirty: true,
+
+    // Legacy flag for backward compatibility
     currentWeekDirty: true,
-    lastModified: Date.now(),
+    lastModified: updateTime,
   });
 
   return result;
 }
 
 /**
- * Add debug logging to resetDailyCounts to verify it's working
+ * Action creator for resetting daily counts
+ * @param {number} [resetTimestamp] - Optional timestamp for the reset
+ * @returns {Object} The action object
  */
 function resetDailyCounts(resetTimestamp = null) {
   console.log(`==== resetDailyCounts called ====`);
@@ -395,10 +412,25 @@ function resetDailyCounts(resetTimestamp = null) {
     `Daily counts before reset: ${JSON.stringify(state.dailyCounts)}`
   );
 
+  // Ensure we have a valid timestamp
+  const timestamp =
+    resetTimestamp || getMidnightTimestamp(dataService.getCurrentDate());
+
   // Original dispatch call
   const result = dispatch({
     type: ACTION_TYPES.RESET_DAILY_COUNTS,
-    payload: { resetTimestamp },
+    payload: { resetTimestamp: timestamp },
+  });
+
+  // Update metadata with reset timestamp - important: don't update the dailyTotalsUpdatedAt
+  // because we want to preserve when totals were last changed by user
+  updateMetadata({
+    dailyResetTimestamp: timestamp,
+    dailyTotalsDirty: true,
+
+    // Legacy flag for backward compatibility
+    currentWeekDirty: true,
+    lastModified: timestamp,
   });
 
   // Verify the reset worked
@@ -417,10 +449,40 @@ function resetDailyCounts(resetTimestamp = null) {
  * @returns {Object} The action object
  */
 function resetWeeklyCounts(resetTimestamp = null) {
-  return dispatch({
+  console.log(`==== resetWeeklyCounts called ====`);
+  const state = getState();
+  console.log(
+    `Weekly counts before reset: ${JSON.stringify(state.weeklyCounts)}`
+  );
+
+  // Ensure we have a valid timestamp
+  const timestamp =
+    resetTimestamp || getMidnightTimestamp(dataService.getCurrentDate());
+
+  const result = dispatch({
     type: ACTION_TYPES.RESET_WEEKLY_COUNTS,
-    payload: { resetTimestamp },
+    payload: { resetTimestamp: timestamp },
   });
+
+  // Update metadata with reset timestamp - important: don't update the weeklyTotalsUpdatedAt
+  // because we want to preserve when totals were last changed by user
+  updateMetadata({
+    weeklyResetTimestamp: timestamp,
+    weeklyTotalsDirty: true,
+
+    // Legacy flag for backward compatibility
+    currentWeekDirty: true,
+    lastModified: timestamp,
+  });
+
+  // Verify the reset worked
+  const afterState = getState();
+  console.log(
+    `Weekly counts after reset: ${JSON.stringify(afterState.weeklyCounts)}`
+  );
+  console.log(`==== resetWeeklyCounts completed ====`);
+
+  return result;
 }
 
 /**
@@ -478,26 +540,13 @@ async function checkDateAndReset() {
   console.log(`Calculated week start for today: ${currentWeekStartStr}`);
   console.log(`Day difference: ${daysDiff}`);
   console.log(`Week difference: ${weeksDiff}`);
-  console.log(
-    `FoodGroups available: ${!!(
-      state.foodGroups &&
-      Array.isArray(state.foodGroups) &&
-      state.foodGroups.length > 0
-    )}`
-  );
-  console.log(
-    `Testing week change condition: ${
-      state.currentWeekStartDate !== currentWeekStartStr
-    }`
-  );
-  console.log(
-    `Testing day change condition: ${state.currentDayDate !== todayStr}`
-  );
-  console.log(`Daily counts: ${JSON.stringify(state.dailyCounts)}`);
 
   // Check for week change
   if (state.currentWeekStartDate !== currentWeekStartStr) {
     console.log(`Entering WEEK RESET logic`);
+
+    // Save the previous week start date for use in sync
+    const previousWeekStartDate = state.currentWeekStartDate;
 
     // Handle multi-week gap case
     if (weeksDiff > 1) {
@@ -580,6 +629,14 @@ async function checkDateAndReset() {
     stateChanged = true;
     weekResetOccurred = true;
     dateResetType = "WEEKLY";
+
+    // Update metadata with previous week start date for use in sync
+    updateMetadata({
+      dateResetPerformed: true,
+      dateResetType: dateResetType,
+      dateResetTimestamp: Date.now(),
+      previousWeekStartDate: previousWeekStartDate,
+    });
   }
 
   // Check for day change (if week didn't already reset)
@@ -606,6 +663,13 @@ async function checkDateAndReset() {
     stateChanged = true;
     dateResetType = "DAILY";
 
+    // Update metadata
+    updateMetadata({
+      dateResetPerformed: true,
+      dateResetType: dateResetType,
+      dateResetTimestamp: Date.now(),
+    });
+
     // Verify the reset was successful
     const afterState = getState();
     console.log(
@@ -618,43 +682,7 @@ async function checkDateAndReset() {
     console.log(
       `======= NO DATE RESET REQUIRED: Condition checks failed =======`
     );
-    console.log(
-      `This suggests the current date in state (${state.currentDayDate}) already matches system date (${todayStr})`
-    );
-    console.log(
-      `and the current week start (${state.currentWeekStartDate}) matches calculated week start (${currentWeekStartStr})`
-    );
-
-    // Special check: Are dates equal but in different formats?
-    try {
-      const stateDate = new Date(state.currentDayDate)
-        .toISOString()
-        .split("T")[0];
-      const systemDate = new Date(todayStr).toISOString().split("T")[0];
-      console.log(`State date normalized: ${stateDate}`);
-      console.log(`System date normalized: ${systemDate}`);
-      console.log(`Normalized comparison: ${stateDate === systemDate}`);
-    } catch (e) {
-      console.log(`Error in date normalization: ${e}`);
-    }
   }
-
-  // If a reset occurred, update metadata
-  if (stateChanged) {
-    console.log(
-      `Updating metadata with dateResetPerformed=true, type=${dateResetType}`
-    );
-    updateMetadata({
-      dateResetPerformed: true,
-      dateResetType: dateResetType,
-      dateResetTimestamp: Date.now(),
-      lastModified: Date.now(),
-    });
-  }
-
-  console.log(
-    `====== checkDateAndReset: FINISHED (stateChanged=${stateChanged}) ======`
-  );
 
   // Add a final verification
   if (stateChanged) {
@@ -665,6 +693,10 @@ async function checkDateAndReset() {
     console.log(`- Daily counts: ${JSON.stringify(afterState.dailyCounts)}`);
     console.log(`- Weekly counts: ${JSON.stringify(afterState.weeklyCounts)}`);
   }
+
+  console.log(
+    `====== checkDateAndReset: FINISHED (stateChanged=${stateChanged}) ======`
+  );
 
   return stateChanged;
 }
@@ -711,7 +743,9 @@ function getNextWeekStartDate(weekStartDateStr) {
 }
 
 /**
- * Also ensure that the archiveCurrentWeek function can handle missing foodGroups
+ * Archive the current week data to history
+ * @param {number} [archiveTimestamp] - Optional timestamp for the archive
+ * @returns {Promise<void>} Promise that resolves when archive is complete
  */
 async function archiveCurrentWeek(archiveTimestamp = null) {
   const state = getState();
@@ -763,10 +797,12 @@ async function archiveCurrentWeek(archiveTimestamp = null) {
       payload: { history: historyData },
     });
 
-    // Set history dirty flag
+    // Set history dirty flag and mark weekly totals as archived (no longer dirty)
     updateMetadata({
       historyDirty: true,
       lastHistoryUpdate: timestamp,
+      weeklyTotalsDirty: false, // Weekly data is now archived
+      // Don't clear the weeklyResetTimestamp since it's still needed for sync
     });
 
     // Reset history index to show most recent

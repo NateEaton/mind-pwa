@@ -39,14 +39,42 @@ const STORES = {
 const LOCAL_STORAGE_KEY = "mindTrackerState";
 
 // Schema version and structure
+// In dataService.js - Update the SCHEMA object with correct structure
+// Find this section near the top of the file
+
+// Schema version and structure
 const SCHEMA = {
-  VERSION: 1,
+  VERSION: 2, // Increment from 1 to 2
   CURRENT_STATE: {
     currentDayDate: String,
     currentWeekStartDate: String,
     dailyCounts: Object,
     weeklyCounts: Object,
     lastModified: Number, // Timestamp
+    // Add metadata structure here as a nested object
+    metadata: {
+      // Existing fields
+      schemaVersion: Number,
+      deviceId: String,
+      currentWeekDirty: Boolean, // Legacy field for backward compatibility
+      historyDirty: Boolean,
+      dateResetPerformed: Boolean,
+      dateResetType: String, // "DAILY" or "WEEKLY"
+      dateResetTimestamp: Number,
+      // New fields for separate tracking
+      dailyTotalsUpdatedAt: Number,
+      dailyTotalsDirty: Boolean,
+      dailyResetTimestamp: Number,
+      weeklyTotalsUpdatedAt: Number,
+      weeklyTotalsDirty: Boolean,
+      weeklyResetTimestamp: Number,
+      previousWeekStartDate: String,
+      // For sync after reset
+      pendingDateReset: Boolean,
+      remoteDateWas: String,
+      // Fresh install detection
+      isFreshInstall: Boolean,
+    },
   },
   HISTORY: {
     id: String, // uuid
@@ -60,6 +88,7 @@ const SCHEMA = {
       schemaVersion: Number,
       deviceInfo: String,
       syncStatus: String, // 'local', 'synced', 'conflict'
+      mergedAfterReset: Boolean, // New field to track post-reset merges
     },
   },
   PREFERENCES: {
@@ -900,7 +929,6 @@ function loadState() {
  * @param {Object} state - The state object to save
  * @returns {boolean} Success status
  */
-// In dataService.js - Update saveState function
 function saveState(state) {
   try {
     // Ensure the state has a proper structure before saving
@@ -912,12 +940,22 @@ function saveState(state) {
       currentWeekStartDate: state.currentWeekStartDate,
       dailyCounts: state.dailyCounts || {},
       weeklyCounts: state.weeklyCounts || {},
-      lastModified: now,
-      // Properly preserve ALL metadata from the state object
+      lastModified: now, // Keep this for backward compatibility
+      // Enhanced metadata with separate timestamps
       metadata: {
         ...(state.metadata || {}), // Spread existing metadata to preserve all flags
         schemaVersion: SCHEMA.VERSION,
         deviceId: getDeviceId(),
+        // Daily totals timestamps
+        dailyTotalsUpdatedAt: state.metadata?.dailyTotalsUpdatedAt || now,
+        dailyTotalsDirty: state.metadata?.dailyTotalsDirty || false,
+        dailyResetTimestamp: state.metadata?.dailyResetTimestamp || 0,
+        // Weekly totals timestamps
+        weeklyTotalsUpdatedAt: state.metadata?.weeklyTotalsUpdatedAt || now,
+        weeklyTotalsDirty: state.metadata?.weeklyTotalsDirty || false,
+        weeklyResetTimestamp: state.metadata?.weeklyResetTimestamp || 0,
+        // Previous week data (for weekly reset handling)
+        previousWeekStartDate: state.metadata?.previousWeekStartDate || null,
       },
     };
 
