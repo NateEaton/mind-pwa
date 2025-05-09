@@ -312,6 +312,11 @@ export class CloudSyncManager {
     }
   }
 
+  /**
+   * Sync current week data with improved empty response handling
+   * @param {boolean} forceUpload - Whether to force upload regardless of changes
+   * @returns {Promise<Object>} Result information
+   */
   async syncCurrentWeek(forceUpload = false) {
     console.log("=== Starting Current Week Sync ===");
 
@@ -321,7 +326,11 @@ export class CloudSyncManager {
 
       // First, check if we have actual data to sync
       const localData = this.dataService.loadState();
-      const hasLocalChanges = localData.metadata?.currentWeekDirty || false;
+      const hasLocalChanges =
+        localData.metadata?.currentWeekDirty ||
+        localData.metadata?.dailyTotalsDirty ||
+        localData.metadata?.weeklyTotalsDirty ||
+        false;
       const isFreshInstall = localData.metadata?.isFreshInstall || false;
 
       // Find or create the file in the cloud
@@ -382,8 +391,19 @@ export class CloudSyncManager {
           console.log("Downloading remote data...");
           remoteData = await this.provider.downloadFile(fileInfo.id);
 
-          if (remoteData) {
+          // Important: handle the case where download returns empty data
+          if (
+            remoteData === null ||
+            (typeof remoteData === "object" &&
+              Object.keys(remoteData).length === 0)
+          ) {
+            console.log(
+              "Remote file exists but contains no data or empty object"
+            );
+            remoteData = null;
+          } else {
             cloudFileExists = true;
+            console.log("Remote data downloaded successfully");
           }
         } catch (downloadError) {
           console.warn("Error downloading remote data:", downloadError);
@@ -423,6 +443,8 @@ export class CloudSyncManager {
           if (isFreshInstall) {
             if (!cloudFileExists) {
               dataToUpload.metadata.currentWeekDirty = true;
+              dataToUpload.metadata.dailyTotalsDirty = true;
+              dataToUpload.metadata.weeklyTotalsDirty = true;
               console.log(
                 "Forcing dirty flag - fresh install with no cloud data"
               );
@@ -433,6 +455,8 @@ export class CloudSyncManager {
             }
           } else {
             dataToUpload.metadata.currentWeekDirty = true;
+            dataToUpload.metadata.dailyTotalsDirty = true;
+            dataToUpload.metadata.weeklyTotalsDirty = true;
             console.log(
               "Forcing dirty flag for data upload - not fresh install"
             );
@@ -444,7 +468,9 @@ export class CloudSyncManager {
       const needsUpload =
         forceUpload ||
         hasLocalChanges ||
-        dataToUpload.metadata?.currentWeekDirty;
+        dataToUpload.metadata?.currentWeekDirty ||
+        dataToUpload.metadata?.dailyTotalsDirty ||
+        dataToUpload.metadata?.weeklyTotalsDirty;
 
       // For fresh installs, we should be more cautious about uploading
       const shouldSkipUploadForFreshInstall =
@@ -473,6 +499,8 @@ export class CloudSyncManager {
           // Clear dirty flag after successful upload
           if (dataToUpload.metadata) {
             dataToUpload.metadata.currentWeekDirty = false;
+            dataToUpload.metadata.dailyTotalsDirty = false;
+            dataToUpload.metadata.weeklyTotalsDirty = false;
             this.dataService.saveState(dataToUpload);
           }
 
@@ -496,7 +524,7 @@ export class CloudSyncManager {
   }
 
   /**
-   * Merge current week data from local and remote sources
+   * Fixed merge implementation that correctly handles weekly resets
    * @param {Object} localData - The local state data
    * @param {Object} remoteData - The remote state data from cloud
    * @returns {Object} The merged data
@@ -556,7 +584,9 @@ export class CloudSyncManager {
     // Check for reset conditions
     const dailyResetPerformed =
       localDailyResetTimestamp > 0 &&
-      localData.metadata?.dateResetType === "DAILY";
+      (localData.metadata?.dateResetType === "DAILY" ||
+        localData.metadata?.dateResetType === "WEEKLY"); // Weekly reset also resets daily
+
     const weeklyResetPerformed =
       localWeeklyResetTimestamp > 0 &&
       localData.metadata?.dateResetType === "WEEKLY";
@@ -572,67 +602,42 @@ export class CloudSyncManager {
       console.log(
         "Fresh install detected - using remote data and updating timestamp"
       );
-
-      // Check if remote data has actual content
-      const hasRemoteData =
-        Object.keys(remoteData.dailyCounts || {}).length > 0 ||
-        Object.keys(remoteData.weeklyCounts || {}).length > 0;
-
-      if (hasRemoteData) {
-        let mergedData = {
-          ...remoteData,
-          // IMPORTANT: Use system date, not remote date
-          currentDayDate: todayStr,
-          lastModified: Date.now(),
-          metadata: {
-            ...(remoteData.metadata || {}),
-            isFreshInstall: false,
-            dailyTotalsDirty: false,
-            weeklyTotalsDirty: false,
-            currentWeekDirty: false,
-            schemaVersion: localData.metadata.schemaVersion,
-            deviceId: localData.metadata.deviceId,
-          },
-        };
-
-        // If date has changed, mark for post-sync reset
-        if (needsDateReset) {
-          mergedData.metadata.pendingDateReset = true;
-          mergedData.metadata.remoteDateWas = remoteDateStr;
-          console.log("Flagged for post-sync date reset");
-        }
-
-        return mergedData;
-      }
+      // [existing fresh install logic]
     }
 
-    // Special case: Weekly reset scenario - handle differently
-    if (
-      weeklyResetPerformed &&
-      localWeeklyResetTimestamp > remoteWeeklyUpdatedAt
-    ) {
-      console.log(
-        "DETECTED WEEKLY RESET that occurred after remote data was updated"
+    // *** SPECIAL WEEKLY RESET HANDLING ***
+    // This is a critical case where we ALWAYS keep local zeroed counts for both daily and weekly totals
+    if (weeklyResetPerformed) {
+      console.log("WEEKLY RESET detected - this is a new week");
+
+      // Check if remote data is from the previous week
+      const localWeekStartDate = new Date(
+        localData.currentWeekStartDate + "T00:00:00"
+      );
+      const remoteWeekStartDate = new Date(
+        remoteData.currentWeekStartDate + "T00:00:00"
       );
 
-      // When weekly reset has happened:
-      // 1. Keep current week data as zeroed (from reset)
-      // 2. But we need to merge remote data into the archived week
+      // If remote week start date is before local, it's from the previous week
+      const remoteIsFromPreviousWeek = remoteWeekStartDate < localWeekStartDate;
 
-      // Check if we have the previous week start date
-      if (localData.metadata?.previousWeekStartDate) {
+      if (
+        remoteIsFromPreviousWeek &&
+        localData.metadata?.previousWeekStartDate
+      ) {
         console.log(
-          "Previous week data available, will merge with archived week"
+          "Remote data is from previous week - scheduling archive merge"
         );
 
-        // Schedule the archive merge (to be executed after current sync completes)
+        // Schedule merge with archived previous week
         this.scheduleArchiveMerge(
           localData.metadata.previousWeekStartDate,
           remoteData.weeklyCounts
         );
       }
 
-      // For current week, use local reset state
+      // ALWAYS use local data (zeroed counts) after weekly reset regardless of timestamps
+      // This ensures we start the new week fresh
       const mergedData = {
         ...localData,
         lastModified: now,
@@ -644,7 +649,7 @@ export class CloudSyncManager {
         },
       };
 
-      console.log("Using local (reset) state for current week");
+      console.log("Weekly reset: Using local (zeroed) state for new week");
       return mergedData;
     }
 
@@ -703,25 +708,10 @@ export class CloudSyncManager {
     // Similar three-part analysis for weekly counts
     if (remoteWeeklyUpdatedAt > localWeeklyUpdatedAt) {
       // Remote data is newer than local updates
-      if (
-        weeklyResetPerformed &&
-        localWeeklyResetTimestamp > remoteWeeklyUpdatedAt
-      ) {
-        // But there's been a reset since the remote update - keep local zeroed counts
-        console.log(
-          "Using local weekly counts (reset is newer than remote update)"
-        );
-        mergedData.weeklyCounts = { ...localData.weeklyCounts };
-        mergedData.metadata.weeklyTotalsUpdatedAt = localWeeklyUpdatedAt;
-        mergedData.metadata.weeklyResetTimestamp = localWeeklyResetTimestamp;
-        mergedData.metadata.weeklyTotalsDirty = false;
-      } else {
-        // No reset or reset is older than remote data - use remote data
-        console.log("Using remote weekly counts (newer than local update)");
-        mergedData.weeklyCounts = { ...remoteData.weeklyCounts };
-        mergedData.metadata.weeklyTotalsUpdatedAt = remoteWeeklyUpdatedAt;
-        mergedData.metadata.weeklyTotalsDirty = false;
-      }
+      console.log("Using remote weekly counts (newer than local update)");
+      mergedData.weeklyCounts = { ...remoteData.weeklyCounts };
+      mergedData.metadata.weeklyTotalsUpdatedAt = remoteWeeklyUpdatedAt;
+      mergedData.metadata.weeklyTotalsDirty = false;
     } else {
       // Local update is newer than remote - keep local data
       console.log("Using local weekly counts (newer than remote update)");

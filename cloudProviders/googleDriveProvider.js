@@ -210,6 +210,12 @@ class GoogleDriveProvider {
     });
   }
 
+  /**
+   * Find or create a file in Google Drive with better error handling
+   * @param {string} filename - The filename to find or create
+   * @param {string} [mimeType="application/json"] - The MIME type for new files
+   * @returns {Promise<Object>} File information object
+   */
   async findOrCreateFile(filename, mimeType = "application/json") {
     try {
       // Search for the file in the app data folder
@@ -218,54 +224,122 @@ class GoogleDriveProvider {
       );
       const response = await this.gapi.client.drive.files.list({
         spaces: "appDataFolder",
-        fields: "files(id, name, modifiedTime)",
+        fields: "files(id, name, modifiedTime, size)",
         q: `name='${filename}'`,
       });
 
-      console.log(`Search results for '${filename}':`, response.result.files);
-
+      // Check if we got any results
       if (response.result.files && response.result.files.length > 0) {
         const file = response.result.files[0];
         console.log(
-          `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${file.modifiedTime})`
+          `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${
+            file.modifiedTime
+          }, Size: ${file.size || "unknown"} bytes)`
         );
         return file;
       }
 
-      // If file not found, create it
+      // If file not found, create it with an empty JSON object
       console.log(`File '${filename}' not found, creating new file...`);
       const fileMetadata = {
         name: filename,
         parents: ["appDataFolder"],
+        mimeType: mimeType,
       };
 
-      const createResponse = await this.gapi.client.drive.files.create({
-        resource: fileMetadata,
-        fields: "id, name, modifiedTime",
-      });
+      try {
+        const createResponse = await this.gapi.client.drive.files.create({
+          resource: fileMetadata,
+          fields: "id, name, modifiedTime, size",
+        });
 
-      console.log(
-        `Created new file: ${createResponse.result.name} (ID: ${createResponse.result.id})`
-      );
-      return createResponse.result;
+        const newFile = createResponse.result;
+        console.log(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
+
+        // Upload empty JSON content to initialize the file
+        try {
+          await this.uploadFile(newFile.id, {});
+          console.log(`Initialized new file ${newFile.id} with empty content`);
+        } catch (initError) {
+          console.log(
+            `Note: Initial content upload failed, but file was created: ${initError.message}`
+          );
+          // Continue anyway since the file exists
+        }
+
+        return newFile;
+      } catch (createError) {
+        // Handle specific creation errors
+        if (createError.status === 403) {
+          console.log("Permission error creating file - check app permissions");
+          throw new Error(
+            "Google Drive permission denied. Check app permissions."
+          );
+        }
+
+        if (createError.status === 401) {
+          console.log(
+            "Authentication error creating file - token may be expired"
+          );
+          throw new Error(
+            "Google Drive authentication failed. Please reconnect your account."
+          );
+        }
+
+        throw createError;
+      }
     } catch (error) {
+      // Handle network errors
+      if (
+        error.name === "TypeError" &&
+        error.message.includes("NetworkError")
+      ) {
+        console.log("Network error:", error.message);
+        throw new Error("Network error. Please check your connection.");
+      }
+
+      // Handle rate limiting
+      if (error.status === 429) {
+        console.log("Google Drive rate limit reached");
+        throw new Error(
+          "Google Drive rate limit reached. Please try again later."
+        );
+      }
+
       console.error("Error finding/creating file:", error);
       throw error;
     }
   }
 
+  /**
+   * Upload a file to Google Drive with better empty content handling
+   * @param {string} fileId - The ID of the file to update
+   * @param {Object} content - The content to upload
+   * @returns {Promise<Object>} The upload result information
+   */
   async uploadFile(fileId, content) {
     console.log(`Uploading to Google Drive file ID: ${fileId}...`);
-  
-    if (!content || (typeof content === "object" && Object.keys(content).length === 0)) {
-      console.error("Cannot upload empty content:", content);
-      throw new Error("Cannot upload empty or null content");
+
+    // Handle empty content cases more gracefully
+    if (!content) {
+      console.log(
+        `No content provided for upload to ${fileId}, using empty object`
+      );
+      content = {}; // Use empty object instead of failing
     }
-  
+
+    // For empty objects, log but continue
+    if (typeof content === "object" && Object.keys(content).length === 0) {
+      console.log(`Uploading empty object to ${fileId}`);
+      // Continue with upload rather than throwing error
+    }
+
     try {
       const contentStr = JSON.stringify(content);
       const accessToken = this.gapi.client.getToken().access_token;
-  
+
+      console.log(`Content size: ${contentStr.length} bytes`);
+
       // Upload the file, requesting valid fields in the response
       const response = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,name,version,headRevisionId,md5Checksum,modifiedTime`,
@@ -279,7 +353,7 @@ class GoogleDriveProvider {
           body: contentStr,
         }
       );
-  
+
       // Handle errors
       if (!response.ok) {
         let errorText = "Unknown error";
@@ -289,14 +363,46 @@ class GoogleDriveProvider {
         } catch (e) {
           errorText = await response.text();
         }
-        
-        throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+
+        // Check for specific error conditions
+        if (response.status === 401) {
+          console.log(`Authentication error: Token may have expired`);
+          throw new Error(
+            `Google Drive authentication failed. Please reconnect your account.`
+          );
+        }
+
+        if (response.status === 403) {
+          console.log(`Permission denied for file ${fileId}`);
+          throw new Error(
+            `Google Drive permission denied. Check app permissions.`
+          );
+        }
+
+        if (response.status === 404) {
+          console.log(`File ${fileId} not found during upload`);
+          throw new Error(`File not found. It may have been deleted.`);
+        }
+
+        if (response.status === 429) {
+          console.log(`Google Drive rate limit reached`);
+          throw new Error(
+            `Google Drive rate limit reached. Please try again later.`
+          );
+        }
+
+        throw new Error(
+          `Upload failed with status ${response.status}: ${errorText}`
+        );
       }
-  
+
       const result = await response.json();
-      console.log("Upload result:", result);
-      console.log("Upload version:", result.version);
-  
+      console.log("Upload successful:", {
+        id: result.id,
+        name: result.name,
+        version: result.version || "unknown",
+      });
+
       // Return complete file info
       return {
         id: result.id,
@@ -307,12 +413,22 @@ class GoogleDriveProvider {
         modifiedTime: result.modifiedTime,
       };
     } catch (error) {
+      // Handle network errors
+      if (error.name === "TypeError" && error.message.includes("fetch")) {
+        console.log("Network error during upload:", error.message);
+        throw new Error(`Network error: Please check your connection.`);
+      }
+
       console.error("Upload failed:", error);
       throw error;
     }
   }
 
-
+  /**
+   * Download a file from Google Drive with better empty file handling
+   * @param {string} fileId - The ID of the file to download
+   * @returns {Promise<Object|null>} The file content or null if not found/empty
+   */
   async downloadFile(fileId) {
     try {
       console.log(`Downloading Google Drive file with ID: ${fileId}...`);
@@ -323,7 +439,14 @@ class GoogleDriveProvider {
         fields: "id,name,mimeType,size",
       });
 
-      console.log("File metadata:", metadataResponse.result);
+      // Check if file is empty or very small based on metadata
+      const fileMetadata = metadataResponse.result;
+      console.log("File metadata:", fileMetadata);
+
+      if (fileMetadata.size === "0" || fileMetadata.size === 0) {
+        console.log(`File ${fileId} exists but is empty, returning null`);
+        return null;
+      }
 
       // Then download the content
       const response = await this.gapi.client.drive.files.get({
@@ -331,24 +454,18 @@ class GoogleDriveProvider {
         alt: "media",
       });
 
-      // Validate response
+      // Basic validation - no console.error, just log
       if (!response || !response.body) {
-        console.error("Empty response from Google Drive API");
+        console.log(
+          `Empty API response for file ${fileId} - file may be empty or not accessible`
+        );
         return null;
       }
 
-      // Log the raw response for debugging
-      //console.log("Raw response body type:", typeof response.body);
-      //console.log(
-      //  "Raw response sample:",
-      //  typeof response.body === "string"
-      //    ? response.body.substring(0, 100)
-      //    : JSON.stringify(response.body).substring(0, 100)
-      //);
-      console.log("Raw response:", typeof response.body, response.body);
-      if (response.body === "{}" || response.body === "" || !response.body) {
-        console.log("Received empty JSON object from Google Drive");
-        return null;
+      // Check for empty content but don't treat as error
+      if (response.body === "{}" || response.body === "") {
+        console.log(`File ${fileId} contains empty object or string`);
+        return {}; // Return empty object instead of null for empty JSON
       }
 
       // Process the response based on type
@@ -357,17 +474,16 @@ class GoogleDriveProvider {
       if (typeof response.body === "string") {
         // Handle string response
         if (response.body.trim() === "") {
-          console.error("Downloaded empty string from Google Drive");
-          return null;
+          console.log(`Downloaded empty string content from file ${fileId}`);
+          return {};
         }
 
         try {
           // Try to parse as JSON
           parsedContent = JSON.parse(response.body);
-          console.log("Parsed string response as JSON object");
+          console.log("Successfully parsed string response as JSON object");
         } catch (e) {
-          console.warn("Could not parse response as JSON:", e);
-          // Return the string if it's not empty
+          console.log("Response is not JSON, treating as plain text");
           parsedContent = response.body;
         }
       } else {
@@ -375,23 +491,28 @@ class GoogleDriveProvider {
         parsedContent = response.body;
       }
 
-      // Final validation of content
+      // Final validation of content - downgrade from error to info
       if (
         !parsedContent ||
         (typeof parsedContent === "object" &&
           Object.keys(parsedContent).length === 0)
       ) {
-        console.error("Downloaded empty content from Google Drive");
-        return null;
+        console.log(`File ${fileId} content is empty or invalid`);
+        return {}; // Return empty object for consistency
       }
 
-      console.log("Downloaded content:", parsedContent);
+      // Successful download
+      console.log(`Successfully downloaded file ${fileId}`);
       return parsedContent;
     } catch (error) {
       if (error.status === 404) {
-        console.log(`File with ID ${fileId} not found`);
-        return null; // File not found, which is okay for first sync
+        console.log(
+          `File with ID ${fileId} not found - this is normal for first sync`
+        );
+        return null; // File not found, which is expected in some cases
       }
+
+      // Only log as error for unexpected issues
       console.error(`Error downloading file ${fileId}:`, error);
       throw error;
     }
@@ -400,16 +521,17 @@ class GoogleDriveProvider {
   async getFileMetadata(fileId) {
     try {
       console.log(`Getting metadata for Google Drive file: ${fileId}`);
-  
+
       // Request specific fields we need, using valid fields from the API
       const response = await this.gapi.client.drive.files.get({
         fileId: fileId,
-        fields: "id,name,version,headRevisionId,modifiedTime,size,mimeType,md5Checksum",
+        fields:
+          "id,name,version,headRevisionId,modifiedTime,size,mimeType,md5Checksum",
       });
-  
+
       // Log the full response for debugging
       console.log("Google Drive metadata response:", response.result);
-  
+
       // Return essential metadata
       return {
         id: response.result.id,
@@ -426,7 +548,7 @@ class GoogleDriveProvider {
         console.log(`File with ID ${fileId} not found`);
         return null;
       }
-      
+
       console.error(`Error getting metadata for file ${fileId}:`, error);
       return null;
     }
