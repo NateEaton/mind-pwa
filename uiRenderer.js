@@ -60,6 +60,8 @@ const domElements = {
   toastElements: {
     toastContainer: null,
     toastMessage: null,
+    toastSpinner: null,
+    toastText: null,
   },
 };
 
@@ -124,9 +126,16 @@ function initialize() {
   };
 
   // Cache toast elements
+  const toastMessageDiv = document.getElementById("toast-message");
   domElements.toastElements = {
     toastContainer: document.getElementById("toast-container"),
     toastMessage: document.getElementById("toast-message"),
+    toastSpinner: toastMessageDiv
+      ? toastMessageDiv.querySelector(".toast-spinner")
+      : null,
+    toastText: toastMessageDiv
+      ? toastMessageDiv.querySelector(".toast-text")
+      : null,
   };
 
   // Log initialization status
@@ -774,32 +783,56 @@ function setActiveView(viewId) {
 /**
  * Show a toast notification
  * @param {string} message - The message to display
- * @param {string} type - The toast type ('success' or 'error')
- * @param {number} duration - The display duration in milliseconds
+ * @param {string} type - The toast type ('success', 'error', 'info', 'warning')
+ * @param {Object} options - Options for the toast
+ * @param {number} [options.duration=3000] - The display duration in ms (ignored if persistent)
+ * @param {boolean} [options.isPersistent=false] - If true, toast stays until replaced
+ * @param {boolean} [options.showSpinner=false] - If true, shows a spinner
  */
-function showToast(message, type = "success", duration = 3000) {
-  const { toastMessage } = domElements.toastElements;
+function showToast(message, type = "info", options = {}) {
+  const { toastMessage, toastSpinner, toastText } = domElements.toastElements;
+  const {
+    duration = 1000,
+    isPersistent = false,
+    showSpinner = false,
+  } = options;
 
-  if (!toastMessage) return;
+  if (!toastMessage || !toastSpinner || !toastText) {
+    console.warn("Toast elements not fully cached. Cannot show toast.");
+    return;
+  }
 
   // Clear any existing timeout
   if (toastTimeout) {
     clearTimeout(toastTimeout);
+    toastTimeout = null; // Important to reset
   }
 
-  // Reset classes
-  toastMessage.className = "toast";
+  // Reset classes on the main toast message div
+  toastMessage.className = "toast"; // Resets to base class
 
   // Set content and style
-  toastMessage.textContent = message;
-  toastMessage.classList.add(`toast-${type}`);
+  toastText.textContent = message; // Set text on the new span
+  toastMessage.classList.add(`toast-${type}`); // Add type class for styling
+
+  // Handle spinner
+  if (showSpinner) {
+    toastSpinner.classList.add("active");
+  } else {
+    toastSpinner.classList.remove("active");
+  }
+
+  // Show the toast
   toastMessage.classList.add("toast-show");
 
-  // Set timeout to hide
-  toastTimeout = setTimeout(() => {
-    toastMessage.classList.remove("toast-show");
-    toastTimeout = null;
-  }, duration);
+  // Set timeout to hide, unless it's persistent
+  if (!isPersistent) {
+    toastTimeout = setTimeout(() => {
+      toastMessage.classList.remove("toast-show");
+      toastSpinner.classList.remove("active"); // Ensure spinner is also hidden
+      toastTimeout = null; // Reset after execution
+    }, duration);
+  }
 }
 
 /**

@@ -395,7 +395,7 @@ function setupNetworkListeners() {
 
     // Try to sync when device comes online
     if (syncEnabled && cloudSync && syncReady) {
-      syncData(true); // Silent sync
+      syncData(); //syncData(true);
     }
   });
 
@@ -494,17 +494,15 @@ async function initializeApp() {
     // 7. Perform initial sync if enabled and initialized
     if (syncEnabled && syncReady) {
       console.log("Performing initial sync");
-      await syncData(true); // Silent sync
+      await syncData(); // syncData(true);
     }
 
     console.log("App initialization complete");
   } catch (error) {
     console.error("Error during app initialization:", error);
-    uiRenderer.showToast(
-      `Initialization Error: ${error.message}`,
-      "error",
-      5000
-    );
+    uiRenderer.showToast(`Initialization Error: ${error.message}`, "error", {
+      duration: 5000,
+    });
   }
 }
 
@@ -598,7 +596,7 @@ async function initializeCloudSync() {
       uiRenderer.showToast(
         "Cloud sync is disabled: API keys not configured",
         "warning",
-        5000
+        { duration: 5000 }
       );
 
       // Update preferences to disable sync
@@ -658,7 +656,7 @@ async function initializeCloudSync() {
     uiRenderer.showToast(
       `Cloud sync initialization failed: ${error.message}`,
       "error",
-      5000
+      { duration: 5000 }
     );
 
     return false;
@@ -811,7 +809,7 @@ function setupEventListeners() {
   window.addEventListener("online", () => {
     // Try to sync when device comes online
     if (syncEnabled && cloudSync) {
-      syncData(true);
+      syncData(); //syncData(true);
     }
   });
 
@@ -1387,7 +1385,11 @@ function setupDevControlEventListeners() {
         uiRenderer.closeModal();
 
         // Show a progress toast for the deletion
-        uiRenderer.showToast(`Deleting ${files.length} cloud files...`, "info");
+        uiRenderer.showToast(
+          `Deleting ${files.length} cloud files...`,
+          "info",
+          { isPersistent: true, showSpinner: true }
+        );
 
         // Step 2: Actually clear the files
         const deletedCount = await provider.clearAllAppDataFiles();
@@ -1412,14 +1414,14 @@ function setupDevControlEventListeners() {
         uiRenderer.showToast(
           `Success! Deleted ${deletedCount} cloud files and disabled sync.`,
           "success",
-          5000
+          { duration: 3000 }
         );
       } catch (error) {
         console.error("Error clearing cloud data:", error);
         uiRenderer.showToast(
           `Error clearing cloud files: ${error.message}`,
           "error",
-          5000
+          { duration: 5000 }
         );
       } finally {
         clearCloudDataBtn.disabled = false;
@@ -1605,10 +1607,12 @@ async function handleImportFileSelect(event) {
           successMessage = `Import successful!`;
       }
 
-      uiRenderer.showToast(successMessage, "success", 4000);
+      uiRenderer.showToast(successMessage, "success", { duration: 4000 });
     } catch (error) {
       console.error("Error importing data:", error);
-      uiRenderer.showToast(`Import failed: ${error.message}`, "error", 5000);
+      uiRenderer.showToast(`Import failed: ${error.message}`, "error", {
+        duration: 5000,
+      });
     } finally {
       domElements.importFileInput.value = "";
     }
@@ -1787,7 +1791,9 @@ function handleSyncComplete(result) {
   // Only show success toast if there's a valid result
   if (result) {
     // Show toast notification
-    uiRenderer.showToast("Data synced successfully", "success");
+    uiRenderer.showToast("Data synced successfully", "success", {
+      duration: 5000,
+    });
 
     // If history was synced, re-render history view
     if (result.historySynced) {
@@ -1804,7 +1810,9 @@ function handleSyncError(error) {
   const errorMessage = error.message || "Unknown error";
 
   // Show toast notification
-  uiRenderer.showToast(`Sync failed: ${errorMessage}`, "error");
+  uiRenderer.showToast(`Sync failed: ${errorMessage}`, "error", {
+    duration: 5000,
+  });
 
   // If authentication error, prompt user to re-authenticate
   if (
@@ -1838,18 +1846,28 @@ async function syncData(silent = false, force = false) {
   // Check authentication status
   if (!cloudSync.isAuthenticated) {
     console.log("Authentication needed before sync");
+    if (!silent) {
+      uiRenderer.showToast("Authenticating with cloud service...", "info", {
+        isPersistent: true,
+        showSpinner: true,
+      });
+    }
     try {
       const authResult = await cloudSync.authenticate();
       if (!authResult) {
         console.log("Authentication failed or was canceled");
-        uiRenderer.showToast("Authentication required for sync", "warning");
+        uiRenderer.showToast("Authentication required for sync", "warning", {
+          duration: 5000,
+        });
         return;
       }
       // Authentication succeeded
       console.log("Authentication successful, proceeding with sync");
     } catch (error) {
       console.error("Authentication error:", error);
-      uiRenderer.showToast(`Authentication error: ${error.message}`, "error");
+      uiRenderer.showToast(`Authentication error: ${error.message}`, "error", {
+        duration: 5000,
+      });
       return;
     }
   }
@@ -1863,7 +1881,10 @@ async function syncData(silent = false, force = false) {
   }
 
   if (!silent) {
-    uiRenderer.showToast("Syncing data...", "info", 3000);
+    uiRenderer.showToast("Syncing data...", "info", {
+      isPersistent: true,
+      showSpinner: true,
+    });
   }
 
   try {
@@ -1924,7 +1945,9 @@ async function syncData(silent = false, force = false) {
     uiRenderer.renderEverything();
 
     if (!silent) {
-      uiRenderer.showToast("Data synchronized successfully!", "success");
+      uiRenderer.showToast("Data synchronized successfully!", "success", {
+        duration: 3000,
+      });
     }
   } catch (error) {
     console.error("Sync error:", error);
@@ -2127,7 +2150,7 @@ async function showSettings() {
             uiRenderer.showToast(
               "Cloud sync may not work unless your account has been registered for testing with Dropbox or Google Drive.",
               "warning",
-              5000
+              { duration: 5000 }
             );
           }
 
@@ -2291,7 +2314,7 @@ function applySettingsWithoutClosing() {
     uiRenderer.showToast(
       "Cloud sync may not work unless your account has been registered for testing with Dropbox or Google Drive.",
       "warning",
-      5000
+      { duration: 5000 }
     );
   }
 

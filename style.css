@@ -745,32 +745,47 @@ h3:first-child {
 #toast-container {
     position: fixed;
     bottom: 25px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    /* This will center its direct child (#toast-message.toast) */
     z-index: 2000;
     pointer-events: none;
-    width: 90%;
-    max-width: 450px;
-    text-align: center;
+    /* REMOVED max-width: 450px; */
+    /* REMOVED text-align: center; */
 }
 
 #toast-message.toast {
-    display: inline-block;
+    display: inline-flex;
+    /* MAKES THE TOAST SHRINK-WRAP ITS CONTENT, AND BEHAVE LIKE AN INLINE ELEMENT FOR PARENT'S FLEX CENTERING */
+    align-items: center;
+    /* For vertical alignment of spinner and text within the toast */
+    /* justify-content: center; /* Current: centers spinner+text within the toast. Change to flex-start for left. */
     padding: 12px 25px;
     color: white;
     background-color: var(--secondary-color);
     border-radius: 30px;
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
     font-size: var(--font-sm);
-    opacity: 0;
-    transition: opacity 0.4s ease-in-out;
     margin-bottom: 8px;
     pointer-events: all;
     cursor: default;
+    /* width: fit-content; /* Replaced by display: inline-flex for shrink-wrapping behavior */
+    max-width: 80%;
+    /* Limits the toast's own width if content is very long */
+    /* REMOVED margin-left: auto; */
+    /* REMOVED margin-right: auto; */
+    opacity: 0;
+    transform: translateY(100%);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    /* text-align: left; /* Add if you want text explicitly left-aligned and removed justify-content: center */
 }
 
 #toast-message.toast.toast-show {
     opacity: 1;
+    transform: translateY(0);
 }
 
 #toast-message.toast.toast-success {
@@ -783,6 +798,53 @@ h3:first-child {
 
 #toast-message.toast.toast-error {
     background-color: #d9534f;
+}
+
+/* --- Spinner for Toast --- */
+.toast-spinner {
+    display: none;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 0.75em;
+    box-sizing: border-box;
+}
+
+.toast-spinner.active {
+    display: inline-block;
+}
+
+/* Optional: Spinner color variations based on toast type for better contrast */
+/* These assume your toast background colors are distinct */
+.toast-success .toast-spinner {
+    border-top-color: #fff;
+    /* Or a specific color like #6fbf73 */
+}
+
+.toast-error .toast-spinner {
+    border-top-color: #fff;
+    /* Or a specific color like #f6685e */
+}
+
+.toast-info .toast-spinner {
+    border-top-color: #fff;
+    /* Or a specific color like #4fc3f7 */
+}
+
+.toast-warning .toast-spinner {
+    border-top-color: #333;
+    /* Darker spinner on yellow warning might be better */
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* ================================== */
