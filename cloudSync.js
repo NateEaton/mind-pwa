@@ -606,7 +606,6 @@ export class CloudSyncManager {
     }
 
     // *** SPECIAL WEEKLY RESET HANDLING ***
-    // This is a critical case where we ALWAYS keep local zeroed counts for both daily and weekly totals
     if (weeklyResetPerformed) {
       console.log("WEEKLY RESET detected - this is a new week");
 
@@ -620,7 +619,10 @@ export class CloudSyncManager {
 
       // If remote week start date is before local, it's from the previous week
       const remoteIsFromPreviousWeek = remoteWeekStartDate < localWeekStartDate;
+      const remoteIsFromSameWeek =
+        remoteWeekStartDate.getTime() === localWeekStartDate.getTime();
 
+      // Schedule merge with archived previous week if needed
       if (
         remoteIsFromPreviousWeek &&
         localData.metadata?.previousWeekStartDate
@@ -636,8 +638,39 @@ export class CloudSyncManager {
         );
       }
 
-      // ALWAYS use local data (zeroed counts) after weekly reset regardless of timestamps
-      // This ensures we start the new week fresh
+      // If remote is from the same new week and has newer data, use it
+      if (
+        remoteIsFromSameWeek &&
+        remoteWeeklyUpdatedAt > localWeeklyResetTimestamp
+      ) {
+        console.log(
+          "Remote data is from same new week and newer than local reset - using remote data"
+        );
+
+        // Use remote data but keep local reset metadata
+        const mergedData = {
+          ...localData,
+          weeklyCounts: { ...remoteData.weeklyCounts },
+          dailyCounts: { ...remoteData.dailyCounts },
+          lastModified: now,
+          metadata: {
+            ...localData.metadata,
+            weeklyTotalsUpdatedAt: remoteWeeklyUpdatedAt,
+            dailyTotalsUpdatedAt:
+              remoteDailyUpdatedAt > localWeeklyResetTimestamp
+                ? remoteDailyUpdatedAt
+                : localData.metadata.dailyTotalsUpdatedAt,
+            weeklyTotalsDirty: false,
+            dailyTotalsDirty: false,
+            currentWeekDirty: false,
+          },
+        };
+
+        return mergedData;
+      }
+
+      // Otherwise use local zeroed state (weekly reset is newer than remote data)
+      console.log("Weekly reset: Using local (zeroed) state for new week");
       const mergedData = {
         ...localData,
         lastModified: now,
@@ -649,7 +682,6 @@ export class CloudSyncManager {
         },
       };
 
-      console.log("Weekly reset: Using local (zeroed) state for new week");
       return mergedData;
     }
 
