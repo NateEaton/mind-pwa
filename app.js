@@ -395,7 +395,7 @@ function setupNetworkListeners() {
 
     // Try to sync when device comes online
     if (syncEnabled && cloudSync && syncReady) {
-      syncData(); //syncData(true);
+      syncData(); 
     }
   });
 
@@ -494,7 +494,7 @@ async function initializeApp() {
     // 7. Perform initial sync if enabled and initialized
     if (syncEnabled && syncReady) {
       console.log("Performing initial sync");
-      await syncData(); // syncData(true);
+      await syncData(); 
     }
 
     console.log("App initialization complete");
@@ -809,7 +809,7 @@ function setupEventListeners() {
   window.addEventListener("online", () => {
     // Try to sync when device comes online
     if (syncEnabled && cloudSync) {
-      syncData(); //syncData(true);
+      syncData(); 
     }
   });
 

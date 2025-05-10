@@ -187,10 +187,9 @@ export class CloudSyncManager {
   /**
    * Sync data between local device and cloud
    * @param {boolean} silent - Whether to show notifications
-   * @param {boolean} force - Whether to force sync regardless of dirty flags
    * @returns {Promise<Object|boolean>} Sync results or false if sync failed
    */
-  async sync(silent = false, force = false) {
+  async sync(silent = false) {
     if (this.syncInProgress) {
       console.log("Sync already in progress, skipping");
       return false;
@@ -232,21 +231,14 @@ export class CloudSyncManager {
       // Always determine what needs to be synced
       const { syncCurrent, syncHistory } = await this.determineWhatToSync();
 
-      // Force initial sync if there's no last sync timestamp
-      const isFirstSync = !this.lastSyncTimestamp;
-      if (isFirstSync) {
-        console.log("This appears to be the first sync, forcing upload");
-        force = true;
-      }
-
       let syncResults = { currentWeekSynced: false, historySynced: false };
 
       // Now proceed with actual sync
       try {
         // 1. Sync current week data if needed
-        if (syncCurrent || force) {
+        if (syncCurrent) {
           try {
-            const currentWeekResult = (await this.syncCurrentWeek(force)) || {};
+            const currentWeekResult = (await this.syncCurrentWeek()) || {};
             syncResults.currentWeekSynced = !currentWeekResult.noChanges;
 
             // Clear the current week dirty flags
@@ -261,9 +253,9 @@ export class CloudSyncManager {
         }
 
         // 2. Sync history data if needed
-        if (syncHistory || force) {
+        if (syncHistory) {
           try {
-            const historyResult = (await this.syncHistory(force)) || {};
+            const historyResult = (await this.syncHistory()) || {};
             syncResults.historySynced =
               historyResult && historyResult.syncedCount > 0;
 
@@ -314,10 +306,9 @@ export class CloudSyncManager {
 
   /**
    * Sync current week data with improved empty response handling
-   * @param {boolean} forceUpload - Whether to force upload regardless of changes
    * @returns {Promise<Object>} Result information
    */
-  async syncCurrentWeek(forceUpload = false) {
+  async syncCurrentWeek() {
     console.log("=== Starting Current Week Sync ===");
 
     try {
@@ -358,17 +349,17 @@ export class CloudSyncManager {
       let cloudFileExists = false;
       let hasFileChanged = true;
 
-      if (!forceUpload && !hasLocalChanges) {
+      if (!hasLocalChanges) {
         try {
           hasFileChanged = await this.checkIfFileChanged(
             currentWeekFileName,
             fileInfo.id
           );
-
+      
           // If we got here, the file is accessible
           cloudFileAccessible = true;
           cloudFileExists = true;
-
+      
           if (!hasFileChanged) {
             console.log(
               "Current week file hasn't changed in cloud, skipping sync entirely"
@@ -384,13 +375,15 @@ export class CloudSyncManager {
         }
       }
 
-      // Download remote data only if cloud file is accessible
+      // Download remote data when:
+      // 1. We have local changes to merge, or
+      // 2. Cloud file exists and has changed since last sync
       let remoteData = null;
-      if (cloudFileAccessible) {
+      if (hasLocalChanges || (cloudFileAccessible && hasFileChanged)) {
         try {
           console.log("Downloading remote data...");
           remoteData = await this.provider.downloadFile(fileInfo.id);
-
+      
           // Important: handle the case where download returns empty data
           if (
             remoteData === null ||
@@ -466,7 +459,6 @@ export class CloudSyncManager {
 
       // Determine whether to upload
       const needsUpload =
-        forceUpload ||
         hasLocalChanges ||
         dataToUpload.metadata?.currentWeekDirty ||
         dataToUpload.metadata?.dailyTotalsDirty ||
@@ -475,7 +467,6 @@ export class CloudSyncManager {
       // For fresh installs, we should be more cautious about uploading
       const shouldSkipUploadForFreshInstall =
         isFreshInstall &&
-        !forceUpload &&
         cloudFileAccessible &&
         cloudFileExists;
 
@@ -1345,7 +1336,7 @@ export class CloudSyncManager {
     }
   }
 
-  async syncHistory(forceUpload = false) {
+  async syncHistory() {
     console.log("=== Starting History Sync ===");
 
     try {
