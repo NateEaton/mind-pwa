@@ -1,14 +1,31 @@
-// cloudSync.js
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
 
 import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
 import DropboxProvider from "./cloudProviders/dropboxProvider.js";
+import logger from "./logger.js";
 
 export class CloudSyncManager {
   constructor(dataService, stateManager, onSyncComplete, onSyncError) {
     this.dataService = dataService;
     this.stateManager = stateManager;
     this.onSyncComplete = onSyncComplete || (() => {});
-    this.onSyncError = onSyncError || console.error;
+    this.onSyncError = onSyncError || logger.error;
     this.provider = null;
     this.isAuthenticated = false;
     this.lastSyncTimestamp = 0;
@@ -30,7 +47,7 @@ export class CloudSyncManager {
     // Initialize the provider and check if it was successful
     const initResult = await this.provider.initialize();
     if (!initResult) {
-      console.warn(
+      logger.warn(
         `Provider ${providerName} initialization failed, likely due to missing config`
       );
       return false;
@@ -52,7 +69,7 @@ export class CloudSyncManager {
       const currentState = this.dataService.loadState();
       const metadata = currentState.metadata || {};
 
-      console.log(
+      logger.info(
         "Sync determination metadata:",
         JSON.stringify(metadata, null, 2)
       );
@@ -88,7 +105,7 @@ export class CloudSyncManager {
         (dateResetPerformed && dateResetType === "WEEKLY") ||
         alwaysCheckCloudChanges;
 
-      console.log("Sync determination:", {
+      logger.info("Sync determination:", {
         syncCurrent,
         syncHistory,
         dailyTotalsDirty,
@@ -103,7 +120,7 @@ export class CloudSyncManager {
 
       return { syncCurrent, syncHistory };
     } catch (error) {
-      console.error("Error determining what to sync:", error);
+      logger.error("Error determining what to sync:", error);
       // Default to syncing everything if we can't determine
       return { syncCurrent: true, syncHistory: true };
     }
@@ -154,9 +171,9 @@ export class CloudSyncManager {
       currentState.metadata = metadata;
       this.dataService.saveState(currentState);
 
-      console.log(`Cleared ${flagName} flag`);
+      logger.info(`Cleared ${flagName} flag`);
     } catch (error) {
-      console.warn(`Failed to clear ${flagName} flag:`, error);
+      logger.warn(`Failed to clear ${flagName} flag:`, error);
     }
   }
 
@@ -178,9 +195,9 @@ export class CloudSyncManager {
       currentState.metadata = metadata;
       this.dataService.saveState(currentState);
 
-      console.log("Cleared date reset flags");
+      logger.info("Cleared date reset flags");
     } catch (error) {
-      console.warn("Failed to clear date reset flags:", error);
+      logger.warn("Failed to clear date reset flags:", error);
     }
   }
 
@@ -191,7 +208,7 @@ export class CloudSyncManager {
    */
   async sync(silent = false) {
     if (this.syncInProgress) {
-      console.log("Sync already in progress, skipping");
+      logger.info("Sync already in progress, skipping");
       return false;
     }
 
@@ -205,11 +222,11 @@ export class CloudSyncManager {
 
     try {
       this.syncInProgress = true;
-      console.log("Starting sync process");
+      logger.info("Starting sync process");
 
       // Check if we're authenticated
       if (!this.isAuthenticated) {
-        console.log("Not authenticated, attempting authentication");
+        logger.info("Not authenticated, attempting authentication");
         try {
           await this.authenticate();
           if (!this.isAuthenticated) {
@@ -218,7 +235,7 @@ export class CloudSyncManager {
             throw error;
           }
         } catch (authError) {
-          console.error("Authentication failed:", authError);
+          logger.error("Authentication failed:", authError);
           const error = new Error(
             `Authentication failed: ${authError.message}`
           );
@@ -247,7 +264,7 @@ export class CloudSyncManager {
             // Clear date reset flags if they were set
             await this.clearDateResetFlags();
           } catch (weekError) {
-            console.error("Error syncing current week:", weekError);
+            logger.error("Error syncing current week:", weekError);
             syncResults.currentWeekError = weekError.message;
           }
         }
@@ -262,18 +279,18 @@ export class CloudSyncManager {
             // Clear the history dirty flag
             await this.clearDirtyFlag("historyDirty");
           } catch (historyError) {
-            console.error("Error syncing history:", historyError);
+            logger.error("Error syncing history:", historyError);
             syncResults.historyError = historyError.message;
           }
         }
 
         // 3. Execute any pending archive merges after the main sync operations
         if (this.pendingArchiveMerge) {
-          console.log("Executing pending archive merge after sync");
+          logger.info("Executing pending archive merge after sync");
           try {
             await this.executePendingArchiveMerge();
           } catch (archiveError) {
-            console.warn(
+            logger.warn(
               "Error executing archive merge, but continuing sync:",
               archiveError
             );
@@ -289,7 +306,7 @@ export class CloudSyncManager {
 
         return syncResults;
       } catch (syncError) {
-        console.error("Sync operation failed:", syncError);
+        logger.error("Sync operation failed:", syncError);
         const error = new Error(`Sync failed: ${syncError.message}`);
         error.code = "SYNC_OPERATION_FAILED";
         error.originalError = syncError;
@@ -300,7 +317,7 @@ export class CloudSyncManager {
       return false;
     } finally {
       this.syncInProgress = false;
-      console.log("Sync process completed");
+      logger.info("Sync process completed");
     }
   }
 
@@ -309,7 +326,7 @@ export class CloudSyncManager {
    * @returns {Promise<Object>} Result information
    */
   async syncCurrentWeek() {
-    console.log("=== Starting Current Week Sync ===");
+    logger.info("=== Starting Current Week Sync ===");
 
     try {
       // Define the filename for current week data
@@ -328,15 +345,15 @@ export class CloudSyncManager {
       let fileInfo;
       try {
         fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
-        console.log("Current week file info:", fileInfo);
+        logger.info("Current week file info:", fileInfo);
       } catch (fileError) {
-        console.error("Error finding/creating cloud file:", fileError);
+        logger.error("Error finding/creating cloud file:", fileError);
         throw new Error(`Failed to access cloud file: ${fileError.message}`);
       }
 
       // Check if we have a valid file ID
       if (!fileInfo || !fileInfo.id) {
-        console.error("Invalid file info returned from cloud provider");
+        logger.error("Invalid file info returned from cloud provider");
         return {
           error: "Invalid file info",
           uploaded: false,
@@ -355,13 +372,13 @@ export class CloudSyncManager {
             currentWeekFileName,
             fileInfo.id
           );
-      
+
           // If we got here, the file is accessible
           cloudFileAccessible = true;
           cloudFileExists = true;
-      
+
           if (!hasFileChanged) {
-            console.log(
+            logger.info(
               "Current week file hasn't changed in cloud, skipping sync entirely"
             );
             // Store successful check time in metadata
@@ -369,7 +386,7 @@ export class CloudSyncManager {
             return { noChanges: true };
           }
         } catch (metadataError) {
-          console.warn("Error checking file metadata:", metadataError);
+          logger.warn("Error checking file metadata:", metadataError);
           cloudFileAccessible = false;
           // We'll continue the process but note we couldn't check metadata
         }
@@ -381,25 +398,25 @@ export class CloudSyncManager {
       let remoteData = null;
       if (hasLocalChanges || (cloudFileAccessible && hasFileChanged)) {
         try {
-          console.log("Downloading remote data...");
+          logger.info("Downloading remote data...");
           remoteData = await this.provider.downloadFile(fileInfo.id);
-      
+
           // Important: handle the case where download returns empty data
           if (
             remoteData === null ||
             (typeof remoteData === "object" &&
               Object.keys(remoteData).length === 0)
           ) {
-            console.log(
+            logger.info(
               "Remote file exists but contains no data or empty object"
             );
             remoteData = null;
           } else {
             cloudFileExists = true;
-            console.log("Remote data downloaded successfully");
+            logger.info("Remote data downloaded successfully");
           }
         } catch (downloadError) {
-          console.warn("Error downloading remote data:", downloadError);
+          logger.warn("Error downloading remote data:", downloadError);
           // Continue with local data
         }
       }
@@ -409,23 +426,23 @@ export class CloudSyncManager {
         Object.keys(localData.dailyCounts || {}).length > 0 ||
         Object.keys(localData.weeklyCounts || {}).length > 0;
 
-      console.log("Has data to sync:", hasDataToSync);
+      logger.info("Has data to sync:", hasDataToSync);
 
       // If remote data exists and is valid, merge with local
       let dataToUpload = localData;
 
       if (remoteData && this.validateData(remoteData, "current")) {
-        console.log("Remote data found, merging with local data");
+        logger.info("Remote data found, merging with local data");
         dataToUpload = this.mergeCurrentWeekData(localData, remoteData);
 
         // Update local store with merged data
-        console.log("Updating local store with merged data");
+        logger.info("Updating local store with merged data");
         this.dataService.saveState(dataToUpload);
 
         // Store file metadata after download
         await this.storeFileMetadata(currentWeekFileName, fileInfo);
       } else {
-        console.log("No valid remote data available");
+        logger.info("No valid remote data available");
 
         // IMPORTANT CHANGE: Only force dirty flag if this is not a fresh install
         // or if we're certain the cloud file doesn't exist
@@ -438,11 +455,11 @@ export class CloudSyncManager {
               dataToUpload.metadata.currentWeekDirty = true;
               dataToUpload.metadata.dailyTotalsDirty = true;
               dataToUpload.metadata.weeklyTotalsDirty = true;
-              console.log(
+              logger.info(
                 "Forcing dirty flag - fresh install with no cloud data"
               );
             } else {
-              console.log(
+              logger.info(
                 "Fresh install with possible cloud data - not forcing dirty flag"
               );
             }
@@ -450,7 +467,7 @@ export class CloudSyncManager {
             dataToUpload.metadata.currentWeekDirty = true;
             dataToUpload.metadata.dailyTotalsDirty = true;
             dataToUpload.metadata.weeklyTotalsDirty = true;
-            console.log(
+            logger.info(
               "Forcing dirty flag for data upload - not fresh install"
             );
           }
@@ -466,23 +483,21 @@ export class CloudSyncManager {
 
       // For fresh installs, we should be more cautious about uploading
       const shouldSkipUploadForFreshInstall =
-        isFreshInstall &&
-        cloudFileAccessible &&
-        cloudFileExists;
+        isFreshInstall && cloudFileAccessible && cloudFileExists;
 
       if (shouldSkipUploadForFreshInstall) {
-        console.log("Fresh install with existing cloud data - skipping upload");
+        logger.info("Fresh install with existing cloud data - skipping upload");
         return { downloaded: true, uploaded: false, freshInstallSkipped: true };
       }
 
       if (needsUpload) {
         try {
-          console.log("Uploading data to cloud");
+          logger.info("Uploading data to cloud");
           const uploadResult = await this.provider.uploadFile(
             fileInfo.id,
             dataToUpload
           );
-          console.log("Successfully uploaded data to server");
+          logger.info("Successfully uploaded data to server");
 
           // Store file metadata after upload
           await this.storeFileMetadata(currentWeekFileName, uploadResult);
@@ -497,7 +512,7 @@ export class CloudSyncManager {
 
           return { downloaded: !!remoteData, uploaded: true };
         } catch (uploadError) {
-          console.error("Error uploading to cloud:", uploadError);
+          logger.error("Error uploading to cloud:", uploadError);
           return {
             error: uploadError.message,
             downloaded: !!remoteData,
@@ -505,11 +520,11 @@ export class CloudSyncManager {
           };
         }
       } else {
-        console.log("No data changes detected, skipping upload");
+        logger.info("No data changes detected, skipping upload");
         return { downloaded: !!remoteData, uploaded: false };
       }
     } catch (error) {
-      console.error("Error in current week sync:", error);
+      logger.error("Error in current week sync:", error);
       return { error: error.message, uploaded: false, downloaded: false };
     }
   }
@@ -521,8 +536,8 @@ export class CloudSyncManager {
    * @returns {Object} The merged data
    */
   mergeCurrentWeekData(localData, remoteData) {
-    console.log("Merging current week data:");
-    console.log("LOCAL data:", {
+    logger.info("Merging current week data:");
+    logger.info("LOCAL data:", {
       dayDate: localData.currentDayDate,
       weekStartDate: localData.currentWeekStartDate,
       lastModified: localData.lastModified,
@@ -534,7 +549,7 @@ export class CloudSyncManager {
       dateResetType: localData.metadata?.dateResetType,
     });
 
-    console.log("REMOTE data:", {
+    logger.info("REMOTE data:", {
       dayDate: remoteData.currentDayDate,
       weekStartDate: remoteData.currentWeekStartDate,
       lastModified: remoteData.lastModified,
@@ -547,7 +562,7 @@ export class CloudSyncManager {
     const remoteDateStr = remoteData.currentDayDate;
     const needsDateReset = todayStr !== remoteDateStr;
 
-    console.log(
+    logger.info(
       `System date: ${todayStr}, Remote date: ${remoteDateStr}, Needs reset: ${needsDateReset}`
     );
 
@@ -582,7 +597,7 @@ export class CloudSyncManager {
       localWeeklyResetTimestamp > 0 &&
       localData.metadata?.dateResetType === "WEEKLY";
 
-    console.log("Reset status:", {
+    logger.info("Reset status:", {
       dailyReset: dailyResetPerformed,
       weeklyReset: weeklyResetPerformed,
       previousWeekStartDate: localData.metadata?.previousWeekStartDate,
@@ -590,7 +605,7 @@ export class CloudSyncManager {
 
     // Special case for fresh installs - prefer remote data
     if (localData.metadata && localData.metadata.isFreshInstall) {
-      console.log(
+      logger.info(
         "Fresh install detected - using remote data and updating timestamp"
       );
       // [existing fresh install logic]
@@ -598,7 +613,7 @@ export class CloudSyncManager {
 
     // *** SPECIAL WEEKLY RESET HANDLING ***
     if (weeklyResetPerformed) {
-      console.log("WEEKLY RESET detected - this is a new week");
+      logger.info("WEEKLY RESET detected - this is a new week");
 
       // Check if remote data is from the previous week
       const localWeekStartDate = new Date(
@@ -618,7 +633,7 @@ export class CloudSyncManager {
         remoteIsFromPreviousWeek &&
         localData.metadata?.previousWeekStartDate
       ) {
-        console.log(
+        logger.info(
           "Remote data is from previous week - scheduling archive merge"
         );
 
@@ -634,7 +649,7 @@ export class CloudSyncManager {
         remoteIsFromSameWeek &&
         remoteWeeklyUpdatedAt > localWeeklyResetTimestamp
       ) {
-        console.log(
+        logger.info(
           "Remote data is from same new week and newer than local reset - using remote data"
         );
 
@@ -661,7 +676,7 @@ export class CloudSyncManager {
       }
 
       // Otherwise use local zeroed state (weekly reset is newer than remote data)
-      console.log("Weekly reset: Using local (zeroed) state for new week");
+      logger.info("Weekly reset: Using local (zeroed) state for new week");
       const mergedData = {
         ...localData,
         lastModified: now,
@@ -705,7 +720,7 @@ export class CloudSyncManager {
         localDailyResetTimestamp > remoteDailyUpdatedAt
       ) {
         // But there's been a reset since the remote update - keep local zeroed counts
-        console.log(
+        logger.info(
           "Using local daily counts (reset is newer than remote update)"
         );
         mergedData.dailyCounts = { ...localData.dailyCounts };
@@ -714,14 +729,14 @@ export class CloudSyncManager {
         mergedData.metadata.dailyTotalsDirty = false;
       } else {
         // No reset or reset is older than remote data - use remote data
-        console.log("Using remote daily counts (newer than local update)");
+        logger.info("Using remote daily counts (newer than local update)");
         mergedData.dailyCounts = { ...remoteData.dailyCounts };
         mergedData.metadata.dailyTotalsUpdatedAt = remoteDailyUpdatedAt;
         mergedData.metadata.dailyTotalsDirty = false;
       }
     } else {
       // Local update is newer than remote - keep local data
-      console.log("Using local daily counts (newer than remote update)");
+      logger.info("Using local daily counts (newer than remote update)");
       mergedData.dailyCounts = { ...localData.dailyCounts };
       mergedData.metadata.dailyTotalsUpdatedAt = localDailyUpdatedAt;
       mergedData.metadata.dailyTotalsDirty = false;
@@ -731,13 +746,13 @@ export class CloudSyncManager {
     // Similar three-part analysis for weekly counts
     if (remoteWeeklyUpdatedAt > localWeeklyUpdatedAt) {
       // Remote data is newer than local updates
-      console.log("Using remote weekly counts (newer than local update)");
+      logger.info("Using remote weekly counts (newer than local update)");
       mergedData.weeklyCounts = { ...remoteData.weeklyCounts };
       mergedData.metadata.weeklyTotalsUpdatedAt = remoteWeeklyUpdatedAt;
       mergedData.metadata.weeklyTotalsDirty = false;
     } else {
       // Local update is newer than remote - keep local data
-      console.log("Using local weekly counts (newer than remote update)");
+      logger.info("Using local weekly counts (newer than remote update)");
       mergedData.weeklyCounts = { ...localData.weeklyCounts };
       mergedData.metadata.weeklyTotalsUpdatedAt = localWeeklyUpdatedAt;
       mergedData.metadata.weeklyTotalsDirty = false;
@@ -752,10 +767,10 @@ export class CloudSyncManager {
     if (needsDateReset) {
       mergedData.metadata.pendingDateReset = true;
       mergedData.metadata.remoteDateWas = remoteDateStr;
-      console.log("Flagged for post-sync date reset");
+      logger.info("Flagged for post-sync date reset");
     }
 
-    console.log("MERGED data:", {
+    logger.info("MERGED data:", {
       dayDate: mergedData.currentDayDate,
       weekStartDate: mergedData.currentWeekStartDate,
       dailyUpdatedAt: mergedData.metadata.dailyTotalsUpdatedAt,
@@ -778,7 +793,7 @@ export class CloudSyncManager {
       weekStartDate,
       remoteWeeklyCounts,
     };
-    console.log(`Scheduled archive merge for week ${weekStartDate}`);
+    logger.info(`Scheduled archive merge for week ${weekStartDate}`);
   }
 
   /**
@@ -791,14 +806,14 @@ export class CloudSyncManager {
     }
 
     const { weekStartDate, remoteWeeklyCounts } = this.pendingArchiveMerge;
-    console.log(`Executing pending archive merge for week ${weekStartDate}`);
+    logger.info(`Executing pending archive merge for week ${weekStartDate}`);
 
     try {
       // Get the archived week data
       const archivedWeek = await this.dataService.getWeekHistory(weekStartDate);
 
       if (!archivedWeek) {
-        console.warn(`Could not find archived week ${weekStartDate} for merge`);
+        logger.warn(`Could not find archived week ${weekStartDate} for merge`);
         this.pendingArchiveMerge = null;
         return false;
       }
@@ -813,7 +828,7 @@ export class CloudSyncManager {
           if (remoteCount > localCount) {
             mergedTotals[groupId] = remoteCount;
             changed = true;
-            console.log(
+            logger.info(
               `Updated archive total for ${groupId}: ${localCount} → ${remoteCount}`
             );
           }
@@ -821,7 +836,7 @@ export class CloudSyncManager {
       );
 
       if (!changed) {
-        console.log(`No changes needed for archived week ${weekStartDate}`);
+        logger.info(`No changes needed for archived week ${weekStartDate}`);
         this.pendingArchiveMerge = null;
         return true;
       }
@@ -834,7 +849,7 @@ export class CloudSyncManager {
       // Save the updated archive
       await this.dataService.saveWeekHistory(archivedWeek);
 
-      console.log(
+      logger.info(
         `Successfully merged remote data into archived week ${weekStartDate}`
       );
 
@@ -851,7 +866,7 @@ export class CloudSyncManager {
       this.pendingArchiveMerge = null;
       return true;
     } catch (error) {
-      console.error(
+      logger.error(
         `Error during archive merge for week ${weekStartDate}:`,
         error
       );
@@ -876,7 +891,7 @@ export class CloudSyncManager {
     const currentState = this.dataService.loadState();
     const currentWeekStart = currentState.currentWeekStartDate;
 
-    console.log("Checking if history sync needed:", {
+    logger.info("Checking if history sync needed:", {
       currentWeekStart,
       lastSyncedWeek: this.lastSyncedWeek,
       lastHistorySyncTimestamp: this.lastHistorySyncTimestamp || "never",
@@ -885,14 +900,14 @@ export class CloudSyncManager {
 
     // If we don't have a record of the last synced week, sync is needed
     if (!this.lastSyncedWeek) {
-      console.log("No record of last synced week, sync needed");
+      logger.info("No record of last synced week, sync needed");
       this.lastSyncedWeek = currentWeekStart;
       return true;
     }
 
     // If the current week has changed since last sync, sync history
     if (this.lastSyncedWeek !== currentWeekStart) {
-      console.log(
+      logger.info(
         `Week transition detected: ${this.lastSyncedWeek} -> ${currentWeekStart}, sync needed`
       );
       this.lastSyncedWeek = currentWeekStart;
@@ -901,7 +916,7 @@ export class CloudSyncManager {
 
     // Check if local history data has been updated since last sync
     if (currentState.metadata && currentState.metadata.historyUpdated) {
-      console.log("History updated flag detected, sync needed");
+      logger.info("History updated flag detected, sync needed");
       // Clear the flag after detecting it
       delete currentState.metadata.historyUpdated;
       this.dataService.saveState(currentState);
@@ -917,7 +932,7 @@ export class CloudSyncManager {
         const fileModifiedTime = new Date(fileInfo.modifiedTime).getTime();
         // If file has been modified since our last sync, we need to sync again
         const needsSync = fileModifiedTime > this.lastHistorySyncTimestamp;
-        console.log(
+        logger.info(
           `Cloud file modified: ${new Date(
             fileModifiedTime
           ).toISOString()}, Last sync: ${new Date(
@@ -927,7 +942,7 @@ export class CloudSyncManager {
         return needsSync;
       }
     } catch (error) {
-      console.warn("Error checking history file:", error);
+      logger.warn("Error checking history file:", error);
     }
 
     // Default to needing sync if we can't determine
@@ -935,7 +950,7 @@ export class CloudSyncManager {
   }
 
   async syncHistoryIndex() {
-    console.log("=== Starting History Index Sync ===");
+    logger.info("=== Starting History Index Sync ===");
 
     try {
       const historyIndexFileName = "mind-diet-history-index.json";
@@ -958,7 +973,7 @@ export class CloudSyncManager {
 
       // If file hasn't changed and no local changes, skip the entire process
       if (!hasFileChanged && !historyDirty && localHistory.length > 0) {
-        console.log(
+        logger.info(
           "History index hasn't changed and no local changes, skipping sync entirely"
         );
         // Update last check time in metadata
@@ -977,7 +992,7 @@ export class CloudSyncManager {
 
       // If we have local changes but no remote changes, just upload without downloading
       if (!hasFileChanged && historyDirty) {
-        console.log(
+        logger.info(
           "Local history changes detected but no cloud changes - uploading without merging"
         );
         const uploadResult = await this.provider.uploadFile(
@@ -994,7 +1009,7 @@ export class CloudSyncManager {
       }
 
       // If we reach here, we need to download and potentially merge
-      console.log("Downloading remote index...");
+      logger.info("Downloading remote index...");
       const remoteIndex = await this.provider.downloadFile(fileInfo.id);
 
       // Store metadata after successful download
@@ -1009,7 +1024,7 @@ export class CloudSyncManager {
         remoteIndex.weeks &&
         Array.isArray(remoteIndex.weeks)
       ) {
-        console.log("Remote index found, comparing with local history");
+        logger.info("Remote index found, comparing with local history");
 
         // Create a map of weeks by start date for easier lookup
         const localWeekMap = new Map();
@@ -1027,7 +1042,7 @@ export class CloudSyncManager {
           const localWeek = localWeekMap.get(weekStart);
           if (!localWeek) {
             // Week exists in remote but not local - mark for download
-            console.log(
+            logger.info(
               `Week ${weekStart} exists in cloud but not locally - adding to download queue`
             );
             weeksToSync.push({
@@ -1036,7 +1051,7 @@ export class CloudSyncManager {
             });
           } else if (remoteWeek.updatedAt > localWeek.updatedAt) {
             // Remote is newer than local - mark for download
-            console.log(
+            logger.info(
               `Remote week ${weekStart} is newer (${remoteWeek.updatedAt} > ${localWeek.updatedAt}) - adding to download queue`
             );
             weeksToSync.push({
@@ -1051,7 +1066,7 @@ export class CloudSyncManager {
           const remoteWeek = remoteWeekMap.get(weekStart);
           if (!remoteWeek) {
             // Week exists in local but not remote - mark for upload
-            console.log(
+            logger.info(
               `Week ${weekStart} exists locally but not in cloud - adding to upload queue`
             );
             weeksToSync.push({
@@ -1060,7 +1075,7 @@ export class CloudSyncManager {
             });
           } else if (localWeek.updatedAt > remoteWeek.updatedAt) {
             // Local is newer than remote - mark for upload
-            console.log(
+            logger.info(
               `Local week ${weekStart} is newer (${localWeek.updatedAt} > ${remoteWeek.updatedAt}) - adding to upload queue`
             );
             weeksToSync.push({
@@ -1102,7 +1117,7 @@ export class CloudSyncManager {
           weeks: mergedWeeks,
         };
       } else {
-        console.log(
+        logger.info(
           "No remote index found or it's invalid - will create new index"
         );
         // Since we're creating a new index, mark all local weeks for upload
@@ -1121,24 +1136,24 @@ export class CloudSyncManager {
           fileInfo.id,
           indexToUpload
         );
-        console.log("History index synced successfully");
+        logger.info("History index synced successfully");
 
         // Store metadata after successful operation
         await this.storeFileMetadata(historyIndexFileName, uploadResult);
       } else {
-        console.log("No history changes detected, skipping index upload");
+        logger.info("No history changes detected, skipping index upload");
       }
 
       // Return the list of weeks that need syncing
       return weeksToSync;
     } catch (error) {
-      console.error("Error in history index sync:", error);
+      logger.error("Error in history index sync:", error);
       throw error;
     }
   }
 
   async syncWeek(weekStartDate, direction) {
-    console.log(`=== Syncing week ${weekStartDate} (${direction}) ===`);
+    logger.info(`=== Syncing week ${weekStartDate} (${direction}) ===`);
 
     try {
       const weekFileName = `mind-diet-week-${weekStartDate}.json`;
@@ -1153,7 +1168,7 @@ export class CloudSyncManager {
         const localWeek = await this.dataService.getWeekHistory(weekStartDate);
 
         if (!localWeek) {
-          console.warn(`Local week ${weekStartDate} not found for upload`);
+          logger.warn(`Local week ${weekStartDate} not found for upload`);
           return false;
         }
 
@@ -1174,7 +1189,7 @@ export class CloudSyncManager {
             storedMetadata.lastModified >= localWeek.metadata.updatedAt &&
             !this.dataService.loadState().metadata.historyDirty // Add this check
           ) {
-            console.log(
+            logger.info(
               `Week ${weekStartDate} has no changes, skipping upload`
             );
             return true;
@@ -1186,7 +1201,7 @@ export class CloudSyncManager {
           fileInfo.id,
           localWeek
         );
-        console.log(`Week ${weekStartDate} uploaded successfully`);
+        logger.info(`Week ${weekStartDate} uploaded successfully`);
 
         // Store metadata after upload - IMPORTANT: skip verification download
         await this.storeFileMetadata(weekFileName, uploadResult || fileInfo);
@@ -1203,7 +1218,7 @@ export class CloudSyncManager {
             fileInfo.id
           );
           if (!hasFileChanged) {
-            console.log(
+            logger.info(
               `Week ${weekStartDate} has no changes, skipping download`
             );
             return true;
@@ -1214,7 +1229,7 @@ export class CloudSyncManager {
         const remoteWeek = await this.provider.downloadFile(fileInfo.id);
 
         if (!remoteWeek || !remoteWeek.weekStartDate) {
-          console.warn(`Remote week ${weekStartDate} not found or invalid`);
+          logger.warn(`Remote week ${weekStartDate} not found or invalid`);
           return false;
         }
 
@@ -1222,7 +1237,7 @@ export class CloudSyncManager {
         await this.dataService.saveWeekHistory(remoteWeek, {
           syncStatus: "synced",
         });
-        console.log(`Week ${weekStartDate} downloaded successfully`);
+        logger.info(`Week ${weekStartDate} downloaded successfully`);
 
         // Store metadata after download
         await this.storeFileMetadata(weekFileName, fileInfo);
@@ -1319,10 +1334,10 @@ export class CloudSyncManager {
             };
             await this.storeFileMetadata(indexFileName, metadataToStore);
 
-            console.log(`Updated history index for week ${weekStartDate}`);
+            logger.info(`Updated history index for week ${weekStartDate}`);
           }
         } catch (indexError) {
-          console.warn(
+          logger.warn(
             `Error updating index after week sync: ${indexError.message}`
           );
           // Don't fail the sync if index update fails
@@ -1331,22 +1346,22 @@ export class CloudSyncManager {
 
       return syncSuccessful;
     } catch (error) {
-      console.error(`Error syncing week ${weekStartDate}:`, error);
+      logger.error(`Error syncing week ${weekStartDate}:`, error);
       return false;
     }
   }
 
   async syncHistory() {
-    console.log("=== Starting History Sync ===");
+    logger.info("=== Starting History Sync ===");
 
     try {
       // First sync the index to determine which weeks need syncing
       const weeksToSync = await this.syncHistoryIndex();
 
-      console.log(`Found ${weeksToSync.length} weeks that need syncing`);
+      logger.info(`Found ${weeksToSync.length} weeks that need syncing`);
 
       if (weeksToSync.length === 0) {
-        console.log("No history weeks need syncing");
+        logger.info("No history weeks need syncing");
         return true;
       }
 
@@ -1364,7 +1379,7 @@ export class CloudSyncManager {
         }
       }
 
-      console.log(
+      logger.info(
         `Synced ${syncSuccessCount} out of ${weeksToSync.length} weeks`
       );
 
@@ -1380,23 +1395,23 @@ export class CloudSyncManager {
         syncedCount: syncSuccessCount,
       };
     } catch (error) {
-      console.error("Error in history sync:", error);
+      logger.error("Error in history sync:", error);
       throw error;
     }
   }
 
   mergeHistoryData(localHistory, remoteHistory) {
-    console.log("Starting history merge process");
-    console.log(`Local history: ${localHistory.length} items`);
-    console.log(`Remote history: ${remoteHistory.length} items`);
+    logger.info("Starting history merge process");
+    logger.info(`Local history: ${localHistory.length} items`);
+    logger.info(`Remote history: ${remoteHistory.length} items`);
 
     // Validate both arrays and create safe copies
     if (!Array.isArray(localHistory)) {
-      console.warn("Local history is not an array, using empty array");
+      logger.warn("Local history is not an array, using empty array");
       localHistory = [];
     }
     if (!Array.isArray(remoteHistory)) {
-      console.warn("Remote history is not an array, using empty array");
+      logger.warn("Remote history is not an array, using empty array");
       remoteHistory = [];
     }
 
@@ -1407,7 +1422,7 @@ export class CloudSyncManager {
     localHistory.forEach((week, index) => {
       // Skip if week is missing a start date
       if (!week.weekStartDate) {
-        console.warn(
+        logger.warn(
           `Local history item at index ${index} missing weekStartDate, skipping`,
           week
         );
@@ -1415,7 +1430,7 @@ export class CloudSyncManager {
       }
 
       // Log week data for debugging
-      console.log(`Local week ${week.weekStartDate}:`, {
+      logger.info(`Local week ${week.weekStartDate}:`, {
         hasTotals: !!week.totals,
         hasTargets: !!week.targets,
         updatedAt: week.metadata?.updatedAt || 0,
@@ -1423,7 +1438,7 @@ export class CloudSyncManager {
 
       // Ensure totals exists
       if (!week.totals) {
-        console.warn(
+        logger.warn(
           `Local week ${week.weekStartDate} missing totals, adding empty object`
         );
         week.totals = {};
@@ -1450,7 +1465,7 @@ export class CloudSyncManager {
     remoteHistory.forEach((week, index) => {
       // Skip if week is missing a start date
       if (!week.weekStartDate) {
-        console.warn(
+        logger.warn(
           `Remote history item at index ${index} missing weekStartDate, skipping`,
           week
         );
@@ -1458,7 +1473,7 @@ export class CloudSyncManager {
       }
 
       // Log week data for debugging
-      console.log(`Remote week ${week.weekStartDate}:`, {
+      logger.info(`Remote week ${week.weekStartDate}:`, {
         hasTotals: !!week.totals,
         hasTargets: !!week.targets,
         updatedAt: week.metadata?.updatedAt || 0,
@@ -1466,7 +1481,7 @@ export class CloudSyncManager {
 
       // Ensure totals exists
       if (!week.totals) {
-        console.warn(
+        logger.warn(
           `Remote week ${week.weekStartDate} missing totals, adding empty object`
         );
         week.totals = {};
@@ -1483,7 +1498,7 @@ export class CloudSyncManager {
 
       if (!existingWeek) {
         // New week from remote, add it
-        console.log(`New week found in remote data: ${week.weekStartDate}`);
+        logger.info(`New week found in remote data: ${week.weekStartDate}`);
         weekMap.set(week.weekStartDate, {
           source: "remote",
           data: week,
@@ -1496,7 +1511,7 @@ export class CloudSyncManager {
 
         if (remoteUpdatedAt > existingWeek.updatedAt) {
           // Remote is newer
-          console.log(
+          logger.info(
             `Newer version found for week ${week.weekStartDate}: remote (${remoteUpdatedAt}) > local (${existingWeek.updatedAt})`
           );
           weekMap.set(week.weekStartDate, {
@@ -1506,7 +1521,7 @@ export class CloudSyncManager {
           });
           changed = true;
         } else {
-          console.log(
+          logger.info(
             `Using local version for week ${week.weekStartDate}: local (${existingWeek.updatedAt}) >= remote (${remoteUpdatedAt})`
           );
         }
@@ -1520,20 +1535,20 @@ export class CloudSyncManager {
         return new Date(b.weekStartDate) - new Date(a.weekStartDate);
       });
 
-    console.log(
+    logger.info(
       `Merge complete. Result has ${mergedData.length} weeks, changed: ${changed}`
     );
 
     // Do a final validation to ensure all weeks have the required structure
     const validatedData = mergedData.filter((week) => {
       if (!week.weekStartDate) {
-        console.warn("Filtering out history item missing weekStartDate", week);
+        logger.warn("Filtering out history item missing weekStartDate", week);
         return false;
       }
 
       // Ensure totals exists
       if (!week.totals) {
-        console.warn(
+        logger.warn(
           `Week ${week.weekStartDate} missing totals, adding empty object`
         );
         week.totals = {};
@@ -1548,7 +1563,7 @@ export class CloudSyncManager {
     });
 
     if (validatedData.length !== mergedData.length) {
-      console.warn(
+      logger.warn(
         `Filtered out ${
           mergedData.length - validatedData.length
         } invalid history items`
@@ -1573,19 +1588,19 @@ export class CloudSyncManager {
     this.autoSyncTimer = setInterval(() => {
       if (navigator.onLine) {
         this.sync().catch((error) => {
-          console.warn("Auto-sync failed:", error);
+          logger.warn("Auto-sync failed:", error);
         });
       }
     }, interval);
 
-    console.log(`Auto-sync started, interval: ${intervalMinutes} minutes`);
+    logger.info(`Auto-sync started, interval: ${intervalMinutes} minutes`);
   }
 
   stopAutoSync() {
     if (this.autoSyncTimer) {
       clearInterval(this.autoSyncTimer);
       this.autoSyncTimer = null;
-      console.log("Auto-sync stopped");
+      logger.info("Auto-sync stopped");
     }
   }
 
@@ -1616,7 +1631,7 @@ export class CloudSyncManager {
   // Add this to CloudSyncManager
   validateData(data, type = "current") {
     if (!data || typeof data !== "object") {
-      console.error(`Invalid ${type} data:`, data);
+      logger.error(`Invalid ${type} data:`, data);
       return false;
     }
 
@@ -1631,7 +1646,7 @@ export class CloudSyncManager {
       const missingFields = requiredFields.filter((field) => !(field in data));
 
       if (missingFields.length > 0) {
-        console.error(
+        logger.error(
           `Current week data missing required fields:`,
           missingFields
         );
@@ -1640,7 +1655,7 @@ export class CloudSyncManager {
 
       // Ensure lastModified is present
       if (!data.lastModified) {
-        console.warn(
+        logger.warn(
           "Current week data missing lastModified timestamp, adding one"
         );
         data.lastModified = Date.now() - 10000; // Slightly older than "now"
@@ -1661,9 +1676,9 @@ export class CloudSyncManager {
         lastSyncTimestamp: this.lastSyncTimestamp,
       };
       localStorage.setItem("cloudSyncState", JSON.stringify(syncState));
-      console.log("Stored sync state:", syncState);
+      logger.info("Stored sync state:", syncState);
     } catch (error) {
-      console.warn("Failed to store sync state:", error);
+      logger.warn("Failed to store sync state:", error);
     }
   }
 
@@ -1678,10 +1693,10 @@ export class CloudSyncManager {
         this.lastSyncedWeek = syncState.lastSyncedWeek;
         this.lastHistorySyncTimestamp = syncState.lastHistorySyncTimestamp;
         this.lastSyncTimestamp = syncState.lastSyncTimestamp;
-        console.log("Loaded sync state:", syncState);
+        logger.info("Loaded sync state:", syncState);
       }
     } catch (error) {
-      console.warn("Failed to load sync state:", error);
+      logger.warn("Failed to load sync state:", error);
     }
   }
 
@@ -1694,8 +1709,8 @@ export class CloudSyncManager {
       // Check metadata and dirty flags
       const metadata = currentState.metadata || {};
 
-      console.log("=== Sync Debug Info ===");
-      console.log("Current State:", {
+      logger.info("=== Sync Debug Info ===");
+      logger.info("Current State:", {
         currentDayDate: currentState.currentDayDate,
         currentWeekStartDate: currentState.currentWeekStartDate,
         lastModified: currentState.lastModified,
@@ -1704,14 +1719,14 @@ export class CloudSyncManager {
         weeklyCountsSize: Object.keys(currentState.weeklyCounts || {}).length,
       });
 
-      console.log("Metadata:", {
+      logger.info("Metadata:", {
         ...metadata,
         exists: !!metadata,
       });
 
       // Check data validity
       const isValid = this.validateData(currentState, "current");
-      console.log("Data validity:", isValid);
+      logger.info("Data validity:", isValid);
 
       return {
         hasData: Object.keys(currentState.weeklyCounts || {}).length > 0,
@@ -1723,7 +1738,7 @@ export class CloudSyncManager {
         isValid,
       };
     } catch (error) {
-      console.error("Error in sync debug:", error);
+      logger.error("Error in sync debug:", error);
       return { error: error.message };
     }
   }
@@ -1746,7 +1761,7 @@ export class CloudSyncManager {
 
       // If file doesn't exist or we couldn't get metadata, assume changed
       if (!fileInfo) {
-        console.log(`File ${fileName} not found or metadata unavailable`);
+        logger.info(`File ${fileName} not found or metadata unavailable`);
         return true;
       }
 
@@ -1755,7 +1770,7 @@ export class CloudSyncManager {
 
       if (!storedMetadata) {
         // No stored metadata, assume file has changed
-        console.log(`No stored metadata for ${fileName}, assuming changed`);
+        logger.info(`No stored metadata for ${fileName}, assuming changed`);
         return true;
       }
 
@@ -1789,10 +1804,10 @@ export class CloudSyncManager {
         }
       }
 
-      console.log(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
+      logger.info(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
       return hasChanged;
     } catch (error) {
-      console.warn(`Error checking if file ${fileName} changed:`, error);
+      logger.warn(`Error checking if file ${fileName} changed:`, error);
       // If error occurs, assume file has changed to be safe
       return true;
     }
@@ -1809,7 +1824,7 @@ export class CloudSyncManager {
       if (!fileInfo) return;
 
       // Log the full fileInfo to debug
-      console.log(`Full fileInfo for ${fileName}:`, fileInfo);
+      logger.info(`Full fileInfo for ${fileName}:`, fileInfo);
 
       const metadata = {
         fileName,
@@ -1825,7 +1840,7 @@ export class CloudSyncManager {
           (fileInfo[".tag"] === "file" && fileInfo.rev);
 
         metadata.rev = rev;
-        console.log(`Storing Dropbox rev for ${fileName}: ${metadata.rev}`);
+        logger.info(`Storing Dropbox rev for ${fileName}: ${metadata.rev}`);
       } else {
         // For Google Drive - store all available revision indicators
         metadata.headRevisionId =
@@ -1834,13 +1849,13 @@ export class CloudSyncManager {
         metadata.md5Checksum =
           fileInfo.md5Checksum || fileInfo.result?.md5Checksum;
 
-        console.log(
+        logger.info(
           `Storing Google Drive headRevisionId for ${fileName}: ${metadata.headRevisionId}`
         );
-        console.log(
+        logger.info(
           `Storing Google Drive version for ${fileName}: ${metadata.version}`
         );
-        console.log(
+        logger.info(
           `Storing Google Drive md5Checksum for ${fileName}: ${metadata.md5Checksum}`
         );
       }
@@ -1850,9 +1865,9 @@ export class CloudSyncManager {
         `file_metadata_${fileName}`,
         metadata
       );
-      console.log(`Stored metadata for ${fileName}:`, metadata);
+      logger.info(`Stored metadata for ${fileName}:`, metadata);
     } catch (error) {
-      console.warn(`Error storing file metadata for ${fileName}:`, error);
+      logger.warn(`Error storing file metadata for ${fileName}:`, error);
     }
   }
 

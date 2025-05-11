@@ -1,4 +1,7 @@
 // cloudProviders/googleDriveProvider.js
+
+import logger from "../logger.js";
+
 class GoogleDriveProvider {
   constructor() {
     this.GOOGLE_CLIENT_ID = null;
@@ -21,16 +24,16 @@ class GoogleDriveProvider {
         this.GOOGLE_CLIENT_ID = configModule.CONFIG.GOOGLE_CLIENT_ID;
         this.GOOGLE_API_KEY = configModule.CONFIG.GOOGLE_API_KEY;
         this.configLoaded = true;
-        console.log("Google Drive config loaded successfully");
+        logger.info("Google Drive config loaded successfully");
       } catch (configError) {
-        console.warn("Failed to load config.js:", configError);
+        logger.warn("Failed to load config.js:", configError);
         this.configLoaded = false;
         return false;
       }
 
       // If config didn't load properly, don't proceed
       if (!this.GOOGLE_CLIENT_ID || !this.GOOGLE_API_KEY) {
-        console.warn("Google Drive API keys not available");
+        logger.warn("Google Drive API keys not available");
         return false;
       }
 
@@ -64,47 +67,44 @@ class GoogleDriveProvider {
                   resolve(true);
                 };
                 gisScript.onerror = (err) => {
-                  console.error(
-                    "Failed to load Google Identity Services:",
-                    err
-                  );
+                  logger.error("Failed to load Google Identity Services:", err);
                   reject(new Error("Failed to load Google Identity Services"));
                 };
                 document.body.appendChild(gisScript);
               } catch (error) {
-                console.error("Failed to initialize GAPI client:", error);
+                logger.error("Failed to initialize GAPI client:", error);
                 reject(error);
               }
             },
             (error) => {
-              console.error("Failed to load GAPI client:", error);
+              logger.error("Failed to load GAPI client:", error);
               reject(new Error("Failed to load GAPI client"));
             }
           );
         };
 
         script.onerror = (err) => {
-          console.error("Failed to load Google API:", err);
+          logger.error("Failed to load Google API:", err);
           reject(new Error("Failed to load Google API"));
         };
         document.body.appendChild(script);
       });
     } catch (error) {
-      console.error("Error in initialization sequence:", error);
+      logger.error("Error in initialization sequence:", error);
       throw error; // Re-throw to allow calling code to handle
     }
   }
 
   async checkAuth() {
     try {
-      console.log("Checking Google authentication");
+      logger.info("Checking Google authentication");
       // Try to get cached token from localStorage first
       const cachedTokenStr = localStorage.getItem("google_drive_token");
 
       if (cachedTokenStr) {
         try {
           const cachedToken = JSON.parse(cachedTokenStr);
-          console.log("Found cached token, setting in gapi");
+          logger.info("Found cached token, setting in gapi");
 
           // Set the token in gapi
           this.gapi.client.setToken(cachedToken);
@@ -115,16 +115,16 @@ class GoogleDriveProvider {
               pageSize: 1,
               spaces: "appDataFolder",
             });
-            console.log("Token is valid!");
+            logger.info("Token is valid!");
             return true;
           } catch (e) {
-            console.warn("Cached token not valid, attempting to refresh", e);
+            logger.warn("Cached token not valid, attempting to refresh", e);
 
             // Try to silently refresh the token
             return await this.refreshToken();
           }
         } catch (e) {
-          console.error("Error parsing cached token:", e);
+          logger.error("Error parsing cached token:", e);
           localStorage.removeItem("google_drive_token");
         }
       }
@@ -132,7 +132,7 @@ class GoogleDriveProvider {
       // If we get here, either no token or invalid token
       return false;
     } catch (error) {
-      console.warn("Not authenticated with Google Drive:", error);
+      logger.warn("Not authenticated with Google Drive:", error);
       return false;
     }
   }
@@ -140,13 +140,13 @@ class GoogleDriveProvider {
   // Add a new method to GoogleDriveProvider for token refresh
   async refreshToken() {
     try {
-      console.log("Attempting to silently refresh token");
+      logger.info("Attempting to silently refresh token");
 
       return new Promise((resolve) => {
         // Set up a temporary callback for silent token refresh
         this.tokenClient.callback = async (resp) => {
           if (resp.error) {
-            console.error("Silent token refresh failed:", resp);
+            logger.error("Silent token refresh failed:", resp);
             resolve(false);
             return;
           }
@@ -155,13 +155,13 @@ class GoogleDriveProvider {
           try {
             const token = this.gapi.client.getToken();
             if (token) {
-              console.log("Got new token via silent refresh, saving");
+              logger.info("Got new token via silent refresh, saving");
               localStorage.setItem("google_drive_token", JSON.stringify(token));
               resolve(true);
               return;
             }
           } catch (e) {
-            console.error("Error saving refreshed token:", e);
+            logger.error("Error saving refreshed token:", e);
           }
 
           resolve(false);
@@ -171,18 +171,18 @@ class GoogleDriveProvider {
         this.tokenClient.requestAccessToken({ prompt: "" });
       });
     } catch (error) {
-      console.error("Error during token refresh:", error);
+      logger.error("Error during token refresh:", error);
       return false;
     }
   }
 
   async authenticate() {
-    console.log("Starting Google authentication");
+    logger.info("Starting Google authentication");
     return new Promise((resolve) => {
       this.tokenClient.callback = async (resp) => {
-        console.log("Auth callback received", resp);
+        logger.info("Auth callback received", resp);
         if (resp.error) {
-          console.error("Error authenticating with Google:", resp);
+          logger.error("Error authenticating with Google:", resp);
           // Signal that sync is not ready
           if (window.setSyncReady) window.setSyncReady(false);
           resolve(false);
@@ -193,17 +193,17 @@ class GoogleDriveProvider {
         try {
           const token = this.gapi.client.getToken();
           if (token) {
-            console.log("Got valid token, saving to localStorage");
+            logger.info("Got valid token, saving to localStorage");
             localStorage.setItem("google_drive_token", JSON.stringify(token));
           }
         } catch (e) {
-          console.error("Error saving token:", e);
+          logger.error("Error saving token:", e);
         }
 
         // Signal that sync is ready
         if (window.setSyncReady) window.setSyncReady(true);
 
-        console.log("Authentication successful");
+        logger.info("Authentication successful");
         resolve(true);
       };
       this.tokenClient.requestAccessToken({ prompt: "consent" });
@@ -219,7 +219,7 @@ class GoogleDriveProvider {
   async findOrCreateFile(filename, mimeType = "application/json") {
     try {
       // Search for the file in the app data folder
-      console.log(
+      logger.info(
         `Searching for Google Drive file '${filename}' in appDataFolder...`
       );
       const response = await this.gapi.client.drive.files.list({
@@ -231,7 +231,7 @@ class GoogleDriveProvider {
       // Check if we got any results
       if (response.result.files && response.result.files.length > 0) {
         const file = response.result.files[0];
-        console.log(
+        logger.info(
           `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${
             file.modifiedTime
           }, Size: ${file.size || "unknown"} bytes)`
@@ -240,7 +240,7 @@ class GoogleDriveProvider {
       }
 
       // If file not found, create it with an empty JSON object
-      console.log(`File '${filename}' not found, creating new file...`);
+      logger.info(`File '${filename}' not found, creating new file...`);
       const fileMetadata = {
         name: filename,
         parents: ["appDataFolder"],
@@ -254,14 +254,14 @@ class GoogleDriveProvider {
         });
 
         const newFile = createResponse.result;
-        console.log(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
+        logger.info(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
 
         // Upload empty JSON content to initialize the file
         try {
           await this.uploadFile(newFile.id, {});
-          console.log(`Initialized new file ${newFile.id} with empty content`);
+          logger.info(`Initialized new file ${newFile.id} with empty content`);
         } catch (initError) {
-          console.log(
+          logger.info(
             `Note: Initial content upload failed, but file was created: ${initError.message}`
           );
           // Continue anyway since the file exists
@@ -271,14 +271,14 @@ class GoogleDriveProvider {
       } catch (createError) {
         // Handle specific creation errors
         if (createError.status === 403) {
-          console.log("Permission error creating file - check app permissions");
+          logger.info("Permission error creating file - check app permissions");
           throw new Error(
             "Google Drive permission denied. Check app permissions."
           );
         }
 
         if (createError.status === 401) {
-          console.log(
+          logger.info(
             "Authentication error creating file - token may be expired"
           );
           throw new Error(
@@ -294,19 +294,19 @@ class GoogleDriveProvider {
         error.name === "TypeError" &&
         error.message.includes("NetworkError")
       ) {
-        console.log("Network error:", error.message);
+        logger.info("Network error:", error.message);
         throw new Error("Network error. Please check your connection.");
       }
 
       // Handle rate limiting
       if (error.status === 429) {
-        console.log("Google Drive rate limit reached");
+        logger.info("Google Drive rate limit reached");
         throw new Error(
           "Google Drive rate limit reached. Please try again later."
         );
       }
 
-      console.error("Error finding/creating file:", error);
+      logger.error("Error finding/creating file:", error);
       throw error;
     }
   }
@@ -318,11 +318,11 @@ class GoogleDriveProvider {
    * @returns {Promise<Object>} The upload result information
    */
   async uploadFile(fileId, content) {
-    console.log(`Uploading to Google Drive file ID: ${fileId}...`);
+    logger.info(`Uploading to Google Drive file ID: ${fileId}...`);
 
     // Handle empty content cases more gracefully
     if (!content) {
-      console.log(
+      logger.info(
         `No content provided for upload to ${fileId}, using empty object`
       );
       content = {}; // Use empty object instead of failing
@@ -330,7 +330,7 @@ class GoogleDriveProvider {
 
     // For empty objects, log but continue
     if (typeof content === "object" && Object.keys(content).length === 0) {
-      console.log(`Uploading empty object to ${fileId}`);
+      logger.info(`Uploading empty object to ${fileId}`);
       // Continue with upload rather than throwing error
     }
 
@@ -338,7 +338,7 @@ class GoogleDriveProvider {
       const contentStr = JSON.stringify(content);
       const accessToken = this.gapi.client.getToken().access_token;
 
-      console.log(`Content size: ${contentStr.length} bytes`);
+      logger.info(`Content size: ${contentStr.length} bytes`);
 
       // Upload the file, requesting valid fields in the response
       const response = await fetch(
@@ -366,26 +366,26 @@ class GoogleDriveProvider {
 
         // Check for specific error conditions
         if (response.status === 401) {
-          console.log(`Authentication error: Token may have expired`);
+          logger.info(`Authentication error: Token may have expired`);
           throw new Error(
             `Google Drive authentication failed. Please reconnect your account.`
           );
         }
 
         if (response.status === 403) {
-          console.log(`Permission denied for file ${fileId}`);
+          logger.info(`Permission denied for file ${fileId}`);
           throw new Error(
             `Google Drive permission denied. Check app permissions.`
           );
         }
 
         if (response.status === 404) {
-          console.log(`File ${fileId} not found during upload`);
+          logger.info(`File ${fileId} not found during upload`);
           throw new Error(`File not found. It may have been deleted.`);
         }
 
         if (response.status === 429) {
-          console.log(`Google Drive rate limit reached`);
+          logger.info(`Google Drive rate limit reached`);
           throw new Error(
             `Google Drive rate limit reached. Please try again later.`
           );
@@ -397,7 +397,7 @@ class GoogleDriveProvider {
       }
 
       const result = await response.json();
-      console.log("Upload successful:", {
+      logger.info("Upload successful:", {
         id: result.id,
         name: result.name,
         version: result.version || "unknown",
@@ -415,11 +415,11 @@ class GoogleDriveProvider {
     } catch (error) {
       // Handle network errors
       if (error.name === "TypeError" && error.message.includes("fetch")) {
-        console.log("Network error during upload:", error.message);
+        logger.info("Network error during upload:", error.message);
         throw new Error(`Network error: Please check your connection.`);
       }
 
-      console.error("Upload failed:", error);
+      logger.error("Upload failed:", error);
       throw error;
     }
   }
@@ -431,7 +431,7 @@ class GoogleDriveProvider {
    */
   async downloadFile(fileId) {
     try {
-      console.log(`Downloading Google Drive file with ID: ${fileId}...`);
+      logger.info(`Downloading Google Drive file with ID: ${fileId}...`);
 
       // First, try to get the file metadata to check properties
       const metadataResponse = await this.gapi.client.drive.files.get({
@@ -441,10 +441,10 @@ class GoogleDriveProvider {
 
       // Check if file is empty or very small based on metadata
       const fileMetadata = metadataResponse.result;
-      console.log("File metadata:", fileMetadata);
+      logger.info("File metadata:", fileMetadata);
 
       if (fileMetadata.size === "0" || fileMetadata.size === 0) {
-        console.log(`File ${fileId} exists but is empty, returning null`);
+        logger.info(`File ${fileId} exists but is empty, returning null`);
         return null;
       }
 
@@ -454,9 +454,9 @@ class GoogleDriveProvider {
         alt: "media",
       });
 
-      // Basic validation - no console.error, just log
+      // Basic validation - no logger.error, just log
       if (!response || !response.body) {
-        console.log(
+        logger.info(
           `Empty API response for file ${fileId} - file may be empty or not accessible`
         );
         return null;
@@ -464,7 +464,7 @@ class GoogleDriveProvider {
 
       // Check for empty content but don't treat as error
       if (response.body === "{}" || response.body === "") {
-        console.log(`File ${fileId} contains empty object or string`);
+        logger.info(`File ${fileId} contains empty object or string`);
         return {}; // Return empty object instead of null for empty JSON
       }
 
@@ -474,16 +474,16 @@ class GoogleDriveProvider {
       if (typeof response.body === "string") {
         // Handle string response
         if (response.body.trim() === "") {
-          console.log(`Downloaded empty string content from file ${fileId}`);
+          logger.info(`Downloaded empty string content from file ${fileId}`);
           return {};
         }
 
         try {
           // Try to parse as JSON
           parsedContent = JSON.parse(response.body);
-          console.log("Successfully parsed string response as JSON object");
+          logger.info("Successfully parsed string response as JSON object");
         } catch (e) {
-          console.log("Response is not JSON, treating as plain text");
+          logger.info("Response is not JSON, treating as plain text");
           parsedContent = response.body;
         }
       } else {
@@ -497,30 +497,30 @@ class GoogleDriveProvider {
         (typeof parsedContent === "object" &&
           Object.keys(parsedContent).length === 0)
       ) {
-        console.log(`File ${fileId} content is empty or invalid`);
+        logger.info(`File ${fileId} content is empty or invalid`);
         return {}; // Return empty object for consistency
       }
 
       // Successful download
-      console.log(`Successfully downloaded file ${fileId}`);
+      logger.info(`Successfully downloaded file ${fileId}`);
       return parsedContent;
     } catch (error) {
       if (error.status === 404) {
-        console.log(
+        logger.info(
           `File with ID ${fileId} not found - this is normal for first sync`
         );
         return null; // File not found, which is expected in some cases
       }
 
       // Only log as error for unexpected issues
-      console.error(`Error downloading file ${fileId}:`, error);
+      logger.error(`Error downloading file ${fileId}:`, error);
       throw error;
     }
   }
 
   async getFileMetadata(fileId) {
     try {
-      console.log(`Getting metadata for Google Drive file: ${fileId}`);
+      logger.info(`Getting metadata for Google Drive file: ${fileId}`);
 
       // Request specific fields we need, using valid fields from the API
       const response = await this.gapi.client.drive.files.get({
@@ -530,7 +530,7 @@ class GoogleDriveProvider {
       });
 
       // Log the full response for debugging
-      console.log("Google Drive metadata response:", response.result);
+      logger.info("Google Drive metadata response:", response.result);
 
       // Return essential metadata
       return {
@@ -545,11 +545,11 @@ class GoogleDriveProvider {
       };
     } catch (error) {
       if (error.status === 404) {
-        console.log(`File with ID ${fileId} not found`);
+        logger.info(`File with ID ${fileId} not found`);
         return null;
       }
 
-      console.error(`Error getting metadata for file ${fileId}:`, error);
+      logger.error(`Error getting metadata for file ${fileId}:`, error);
       return null;
     }
   }
@@ -572,29 +572,29 @@ class GoogleDriveProvider {
         pageToken = listResponse.result.nextPageToken;
 
         if (files.length === 0 && deletedCount === 0) {
-          console.log("No files found to delete.");
+          logger.info("No files found to delete.");
           return 0;
         }
 
         // Delete each file
         for (const file of files) {
           try {
-            console.log(`Deleting file: ${file.name} (ID: ${file.id})`);
+            logger.info(`Deleting file: ${file.name} (ID: ${file.id})`);
             await this.gapi.client.drive.files.delete({ fileId: file.id });
             deletedCount++;
           } catch (deleteError) {
-            console.error(`Error deleting file ${file.name}:`, deleteError);
+            logger.error(`Error deleting file ${file.name}:`, deleteError);
             // Continue with other files
           }
         }
       } while (pageToken); // Continue if there are more pages
 
-      console.log(
+      logger.info(
         `Successfully deleted ${deletedCount} files from appDataFolder`
       );
       return deletedCount;
     } catch (error) {
-      console.error("Error clearing appDataFolder files:", error);
+      logger.error("Error clearing appDataFolder files:", error);
       throw error;
     }
   }

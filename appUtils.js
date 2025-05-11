@@ -20,6 +20,8 @@
  * AppUtils - Common utility functions for the application
  */
 
+import logger from "./logger.js";
+
 /**
  * Trigger haptic feedback for device vibration
  * @param {number} duration - Duration of vibration in milliseconds
@@ -31,7 +33,7 @@ function triggerHapticFeedback(duration = 50) {
       navigator.vibrate(duration);
       return true;
     } catch (error) {
-      console.error("Vibration API error:", error);
+      logger.error("Vibration API error:", error);
       return false;
     }
   }
@@ -48,14 +50,14 @@ async function registerServiceWorker() {
       const registration = await navigator.serviceWorker.register(
         "serviceWorker.js"
       );
-      console.log("Service Worker registered with scope:", registration.scope);
+      logger.info("Service Worker registered with scope:", registration.scope);
       return registration;
     } catch (error) {
-      console.error("Service Worker registration failed:", error);
+      logger.error("Service Worker registration failed:", error);
       return null;
     }
   } else {
-    console.log("Service Workers not supported in this browser");
+    logger.info("Service Workers not supported in this browser");
     return null;
   }
 }
@@ -95,7 +97,7 @@ function formatDate(date, options = {}) {
 
     return date.toLocaleDateString(undefined, formatOptions);
   } catch (error) {
-    console.error("Error formatting date:", error);
+    logger.error("Error formatting date:", error);
     return date.toLocaleDateString();
   }
 }
@@ -235,10 +237,10 @@ async function loadAppVersion(versionElement = null) {
       versionElement.textContent = `(v${versionData.commitHash})`;
     }
 
-    console.log("App Version Info:", versionData);
+    logger.info("App Version Info:", versionData);
     return versionData;
   } catch (error) {
-    console.error("Failed to load version info:", error);
+    logger.error("Failed to load version info:", error);
 
     // Update element with fallback if provided
     if (versionElement) {

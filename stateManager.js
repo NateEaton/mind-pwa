@@ -17,6 +17,7 @@
  */
 
 import dataService from "./dataService.js";
+import logger from "./logger.js";
 
 /**
  * StateManager - Centralized state management with publisher/subscriber pattern
@@ -106,7 +107,7 @@ function notifySubscribers(state, action) {
     try {
       callback(state, action);
     } catch (error) {
-      console.error("Error in subscriber callback:", error);
+      logger.error("Error in subscriber callback:", error);
     }
   });
 }
@@ -120,7 +121,7 @@ function notifySubscribers(state, action) {
  */
 function dispatch(action) {
   if (!action || !action.type) {
-    console.error("Invalid action:", action);
+    logger.error("Invalid action:", action);
     return _state;
   }
 
@@ -256,7 +257,7 @@ function reducer(state, action) {
       };
 
     default:
-      console.warn(`Unknown action type: ${action.type}`);
+      logger.warn(`Unknown action type: ${action.type}`);
       return state;
   }
 }
@@ -277,7 +278,7 @@ function saveStateToStorage() {
   // Optionally add lastModified here if you want stateManager to control it consistently
   // stateToSave.lastModified = _state.lastModified; // Ensure lastModified is saved
 
-  console.log("StateManager saving state to storage:", stateToSave); // Add logging to verify
+  logger.info("StateManager saving state to storage:", stateToSave); // Add logging to verify
   dataService.saveState(stateToSave);
 }
 
@@ -328,7 +329,7 @@ async function initialize(foodGroups) {
       });
     }
   } catch (error) {
-    console.error("Failed to load history data:", error);
+    logger.error("Failed to load history data:", error);
   }
 
   return getState();
@@ -406,9 +407,9 @@ function updateWeeklyCount(groupId, count) {
  * @returns {Object} The action object
  */
 function resetDailyCounts(resetTimestamp = null) {
-  console.log(`==== resetDailyCounts called ====`);
+  logger.info(`==== resetDailyCounts called ====`);
   const state = getState();
-  console.log(
+  logger.info(
     `Daily counts before reset: ${JSON.stringify(state.dailyCounts)}`
   );
 
@@ -435,10 +436,10 @@ function resetDailyCounts(resetTimestamp = null) {
 
   // Verify the reset worked
   const afterState = getState();
-  console.log(
+  logger.info(
     `Daily counts after reset: ${JSON.stringify(afterState.dailyCounts)}`
   );
-  console.log(`==== resetDailyCounts completed ====`);
+  logger.info(`==== resetDailyCounts completed ====`);
 
   return result;
 }
@@ -449,9 +450,9 @@ function resetDailyCounts(resetTimestamp = null) {
  * @returns {Object} The action object
  */
 function resetWeeklyCounts(resetTimestamp = null) {
-  console.log(`==== resetWeeklyCounts called ====`);
+  logger.info(`==== resetWeeklyCounts called ====`);
   const state = getState();
-  console.log(
+  logger.info(
     `Weekly counts before reset: ${JSON.stringify(state.weeklyCounts)}`
   );
 
@@ -477,10 +478,10 @@ function resetWeeklyCounts(resetTimestamp = null) {
 
   // Verify the reset worked
   const afterState = getState();
-  console.log(
+  logger.info(
     `Weekly counts after reset: ${JSON.stringify(afterState.weeklyCounts)}`
   );
-  console.log(`==== resetWeeklyCounts completed ====`);
+  logger.info(`==== resetWeeklyCounts completed ====`);
 
   return result;
 }
@@ -533,24 +534,24 @@ async function checkDateAndReset() {
   );
   const weeksDiff = Math.floor(daysDiff / 7);
 
-  console.log(`====== checkDateAndReset: DETAILED DIAGNOSTICS ======`);
-  console.log(`Current state date: ${state.currentDayDate}`);
-  console.log(`System date (today): ${todayStr}`);
-  console.log(`Current week start in state: ${state.currentWeekStartDate}`);
-  console.log(`Calculated week start for today: ${currentWeekStartStr}`);
-  console.log(`Day difference: ${daysDiff}`);
-  console.log(`Week difference: ${weeksDiff}`);
+  logger.info(`====== checkDateAndReset: DETAILED DIAGNOSTICS ======`);
+  logger.info(`Current state date: ${state.currentDayDate}`);
+  logger.info(`System date (today): ${todayStr}`);
+  logger.info(`Current week start in state: ${state.currentWeekStartDate}`);
+  logger.info(`Calculated week start for today: ${currentWeekStartStr}`);
+  logger.info(`Day difference: ${daysDiff}`);
+  logger.info(`Week difference: ${weeksDiff}`);
 
   // Check for week change
   if (state.currentWeekStartDate !== currentWeekStartStr) {
-    console.log(`Entering WEEK RESET logic`);
+    logger.info(`Entering WEEK RESET logic`);
 
     // Save the previous week start date for use in sync
     const previousWeekStartDate = state.currentWeekStartDate;
 
     // Handle multi-week gap case
     if (weeksDiff > 1) {
-      console.log(`Multi-week gap detected: ${weeksDiff} weeks`);
+      logger.info(`Multi-week gap detected: ${weeksDiff} weeks`);
 
       // FIX: Check if we have valid foodGroups before archiving
       if (
@@ -562,35 +563,35 @@ async function checkDateAndReset() {
         const nextWeekStartDate = getNextWeekStartDate(
           state.currentWeekStartDate
         );
-        console.log(
+        logger.info(
           `Archiving week starting ${state.currentWeekStartDate} before reset`
         );
         await archiveCurrentWeek(getMidnightTimestamp(nextWeekStartDate));
       } else {
-        console.log(
+        logger.info(
           "Food groups not available during multi-week gap handling, skipping archive"
         );
       }
 
       // Set new week start date - with timestamp of current week start
-      console.log(`Setting new week start date to ${currentWeekStartStr}`);
+      logger.info(`Setting new week start date to ${currentWeekStartStr}`);
       setCurrentWeek(currentWeekStartStr);
 
       // Reset weekly counts with timestamp of current week start midnight
       const resetTimestamp = getMidnightTimestamp(currentWeekStartStr);
-      console.log("Resetting weekly counts");
+      logger.info("Resetting weekly counts");
       resetWeeklyCounts(resetTimestamp);
 
       // Reset daily counts
-      console.log("Resetting daily counts");
+      logger.info("Resetting daily counts");
       resetDailyCounts(resetTimestamp);
 
       // Set new day
-      console.log(`Setting current day to ${todayStr}`);
+      logger.info(`Setting current day to ${todayStr}`);
       setCurrentDay(todayStr);
     } else {
       // Normal single week change
-      console.log("Normal week transition");
+      logger.info("Normal week transition");
 
       // FIX: Check if we have valid foodGroups before archiving
       if (
@@ -599,30 +600,30 @@ async function checkDateAndReset() {
         state.foodGroups.length > 0
       ) {
         // Archive the completed week before resetting
-        console.log(
+        logger.info(
           `Archiving week starting ${state.currentWeekStartDate} before reset`
         );
         await archiveCurrentWeek();
       } else {
-        console.log(
+        logger.info(
           "Food groups not available during week reset, skipping archive"
         );
       }
 
       // Set new week start date
-      console.log(`Setting new week start date to ${currentWeekStartStr}`);
+      logger.info(`Setting new week start date to ${currentWeekStartStr}`);
       setCurrentWeek(currentWeekStartStr);
 
       // Reset weekly counts with timestamp of midnight on the day after last update
       const resetTimestamp = getMidnightAfterDate(state.currentWeekStartDate);
-      console.log("Resetting weekly counts");
+      logger.info("Resetting weekly counts");
       resetWeeklyCounts(resetTimestamp);
 
       // Reset daily counts and set new day (handled by week change)
-      console.log("Resetting daily counts");
+      logger.info("Resetting daily counts");
       resetDailyCounts(resetTimestamp);
 
-      console.log(`Setting current day to ${todayStr}`);
+      logger.info(`Setting current day to ${todayStr}`);
       setCurrentDay(todayStr);
     }
 
@@ -641,23 +642,23 @@ async function checkDateAndReset() {
 
   // Check for day change (if week didn't already reset)
   if (!weekResetOccurred && state.currentDayDate !== todayStr) {
-    console.log(`Entering DAY RESET logic`);
-    console.log(
+    logger.info(`Entering DAY RESET logic`);
+    logger.info(
       `Current daily counts before reset: ${JSON.stringify(state.dailyCounts)}`
     );
-    console.log(
+    logger.info(
       `Current weekly counts before rollup: ${JSON.stringify(
         state.weeklyCounts
       )}`
     );
 
     // Reset daily counts
-    console.log(`Calling resetDailyCounts with timestamp`);
+    logger.info(`Calling resetDailyCounts with timestamp`);
     const resetTimestamp = getMidnightAfterDate(state.currentDayDate);
     resetDailyCounts(resetTimestamp);
 
     // Set new day
-    console.log(`Updating currentDayDate to ${todayStr}`);
+    logger.info(`Updating currentDayDate to ${todayStr}`);
     setCurrentDay(todayStr);
 
     stateChanged = true;
@@ -672,14 +673,14 @@ async function checkDateAndReset() {
 
     // Verify the reset was successful
     const afterState = getState();
-    console.log(
+    logger.info(
       `Daily counts after reset: ${JSON.stringify(afterState.dailyCounts)}`
     );
   }
 
   // If neither condition triggered
   if (!stateChanged) {
-    console.log(
+    logger.info(
       `======= NO DATE RESET REQUIRED: Condition checks failed =======`
     );
   }
@@ -687,14 +688,14 @@ async function checkDateAndReset() {
   // Add a final verification
   if (stateChanged) {
     const afterState = getState();
-    console.log("VERIFICATION - After reset:");
-    console.log(`- Current day: ${afterState.currentDayDate}`);
-    console.log(`- Current week start: ${afterState.currentWeekStartDate}`);
-    console.log(`- Daily counts: ${JSON.stringify(afterState.dailyCounts)}`);
-    console.log(`- Weekly counts: ${JSON.stringify(afterState.weeklyCounts)}`);
+    logger.info("VERIFICATION - After reset:");
+    logger.info(`- Current day: ${afterState.currentDayDate}`);
+    logger.info(`- Current week start: ${afterState.currentWeekStartDate}`);
+    logger.info(`- Daily counts: ${JSON.stringify(afterState.dailyCounts)}`);
+    logger.info(`- Weekly counts: ${JSON.stringify(afterState.weeklyCounts)}`);
   }
 
-  console.log(
+  logger.info(
     `====== checkDateAndReset: FINISHED (stateChanged=${stateChanged}) ======`
   );
 
@@ -776,7 +777,7 @@ async function archiveCurrentWeek(archiveTimestamp = null) {
       return acc;
     }, {});
   } else {
-    console.log(
+    logger.info(
       "Food groups not available during archiving, creating empty targets object"
     );
     weekData.targets = {};
@@ -785,7 +786,7 @@ async function archiveCurrentWeek(archiveTimestamp = null) {
   try {
     // Save week data to history store
     await dataService.saveWeekHistory(weekData);
-    console.log(
+    logger.info(
       `Archived week ${state.currentWeekStartDate} with timestamp ${timestamp}`
     );
 
@@ -813,7 +814,7 @@ async function archiveCurrentWeek(archiveTimestamp = null) {
       });
     }
   } catch (error) {
-    console.error(
+    logger.error(
       `Failed to archive week ${state.currentWeekStartDate}:`,
       error
     );
@@ -836,11 +837,11 @@ function getFoodGroup(id) {
  * @returns {Promise<boolean>} Success indicator
  */
 async function reload() {
-  console.log("Reloading state from data service");
+  logger.info("Reloading state from data service");
 
   // Load fresh data from data service
   const freshData = dataService.loadState();
-  console.log("Fresh data loaded:", {
+  logger.info("Fresh data loaded:", {
     dayDate: freshData.currentDayDate,
     weekStartDate: freshData.currentWeekStartDate,
     dailyCounts: Object.keys(freshData.dailyCounts || {}),
@@ -855,14 +856,14 @@ async function reload() {
 
   // Also reload history if needed
   const historyData = await dataService.getAllWeekHistory();
-  console.log("History data loaded:", historyData.length, "weeks");
+  logger.info("History data loaded:", historyData.length, "weeks");
 
   dispatch({
     type: ACTION_TYPES.SET_HISTORY,
     payload: { history: historyData },
   });
 
-  console.log("State reloaded successfully");
+  logger.info("State reloaded successfully");
   return true;
 }
 
@@ -892,21 +893,21 @@ function ensureCurrentDate() {
   const state = getState();
   const todayStr = dataService.getTodayDateString();
 
-  console.log(`==== ensureCurrentDate ====`);
-  console.log(`Current date in state: ${state.currentDayDate}`);
-  console.log(`System date: ${todayStr}`);
-  console.log(`Dates match? ${state.currentDayDate === todayStr}`);
+  logger.info(`==== ensureCurrentDate ====`);
+  logger.info(`Current date in state: ${state.currentDayDate}`);
+  logger.info(`System date: ${todayStr}`);
+  logger.info(`Dates match? ${state.currentDayDate === todayStr}`);
 
   // If current date in state doesn't match today, update it
   if (state.currentDayDate !== todayStr) {
-    console.log(
+    logger.info(
       `Correcting currentDayDate from ${state.currentDayDate} to ${todayStr}`
     );
     setCurrentDay(todayStr);
     return true;
   }
 
-  console.log(`No date correction needed`);
+  logger.info(`No date correction needed`);
   return false;
 }
 

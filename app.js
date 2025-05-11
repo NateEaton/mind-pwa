@@ -67,6 +67,65 @@ import uiRenderer from "./uiRenderer.js";
 import appUtils from "./appUtils.js";
 import CloudSyncManager from "./cloudSync.js";
 
+import { createLogger, configure, LOG_LEVELS } from "./logger.js";
+const logger = createLogger("app");
+
+// Initialize logger configuration
+(function initializeLogger() {
+  try {
+    // Try to read from localStorage first for persistence
+    const storedLogLevel = localStorage.getItem("appLogLevel");
+
+    // Check if we're in development mode
+    let isDevMode = false;
+    try {
+      // First try to dynamically import config
+      import("./config.js")
+        .then((config) => {
+          isDevMode = config.CONFIG?.DEV_MODE || false;
+        })
+        .catch(() => {
+          // Config import failed, ignore
+        });
+    } catch (error) {
+      // Ignore error, default to false
+    }
+
+    // Set initial configuration
+    configure({
+      // Use stored level or default based on mode
+      defaultLevel: storedLogLevel
+        ? LOG_LEVELS[storedLogLevel]
+        : isDevMode
+        ? LOG_LEVELS.DEBUG
+        : LOG_LEVELS.INFO,
+
+      // Enable colors in console output
+      useColors: true,
+
+      // Include timestamps in development mode
+      showTimestamp: true,
+
+      // Module-specific overrides (optional initial settings)
+      moduleConfig: {
+        // Important modules with potential troubleshooting needs
+        cloudSync: LOG_LEVELS.INFO,
+        googleDriveProvider: LOG_LEVELS.INFO,
+        dropboxProvider: LOG_LEVELS.INFO,
+      },
+    });
+
+    logger.debug(
+      `Logger initialized with default level: ${
+        storedLogLevel || (isDevMode ? "DEBUG" : "INFO")
+      }`
+    );
+  } catch (error) {
+    // Fallback if configuration fails
+    console.error("Logger initialization failed:", error);
+  }
+})();
+
 // --- Application Configuration ---
 const foodGroups = [
   // Daily Positive
@@ -238,7 +297,7 @@ let syncReady = false;
 function setSyncReady(ready) {
   syncReady = ready;
   updateSyncUIElements();
-  console.log("Sync readiness set to:", syncReady);
+  logger.info("Sync readiness set to:", syncReady);
 }
 
 // Make function available globally
@@ -312,7 +371,7 @@ function updateSyncUIElements() {
     !syncInProgress &&
     syncEnabled;
 
-  console.log("Updating sync UI elements with state:", {
+  logger.info("Updating sync UI elements with state:", {
     online: isOnline,
     cloudSyncExists: hasSyncManager,
     providerName,
@@ -380,11 +439,11 @@ function updateSyncUIElements() {
 function setupNetworkListeners() {
   // Track current online status
   let isOnline = navigator.onLine;
-  console.log("Initial network status:", isOnline ? "Online" : "Offline");
+  logger.info("Initial network status:", isOnline ? "Online" : "Offline");
 
   // Listen for online event
   window.addEventListener("online", () => {
-    console.log("Device came online");
+    logger.info("Device came online");
     isOnline = true;
 
     // Update UI elements
@@ -395,13 +454,13 @@ function setupNetworkListeners() {
 
     // Try to sync when device comes online
     if (syncEnabled && cloudSync && syncReady) {
-      syncData(); 
+      syncData();
     }
   });
 
   // Listen for offline event
   window.addEventListener("offline", () => {
-    console.log("Device went offline");
+    logger.info("Device went offline");
     isOnline = false;
 
     // Update UI elements
@@ -415,7 +474,7 @@ function setupNetworkListeners() {
   if ("connection" in navigator && navigator.connection) {
     navigator.connection.addEventListener("change", () => {
       const connectionType = navigator.connection.type;
-      console.log("Connection type changed:", connectionType);
+      logger.info("Connection type changed:", connectionType);
 
       // Update UI if we have a wifi-only constraint
       const syncWifiOnly = cloudSync?.syncWifiOnly || false;
@@ -432,7 +491,7 @@ function setupNetworkListeners() {
         rtt: navigator.connection.rtt,
         saveData: navigator.connection.saveData,
       };
-      console.log("Connection details:", connectionDetails);
+      logger.info("Connection details:", connectionDetails);
     });
   }
 }
@@ -441,26 +500,26 @@ function setupNetworkListeners() {
  * Initialize the application
  */
 async function initializeApp() {
-  console.log("Initializing app...");
+  logger.info("Initializing app...");
 
   try {
     // 1. Initialize data service first
     await dataService.initialize();
-    console.log("Data service initialized");
+    logger.info("Data service initialized");
 
     // 2. Initialize state manager with food groups configuration
     await stateManager.initialize(foodGroups);
-    console.log("State manager initialized");
+    logger.info("State manager initialized");
 
     // 3. Check for date/week changes and perform resets if needed
     const dateChanged = await stateManager.checkDateAndReset();
     if (dateChanged) {
-      console.log("Date or week changed and state was updated");
+      logger.info("Date or week changed and state was updated");
     }
 
     // 4. Initialize UI renderer
     uiRenderer.initialize();
-    console.log("UI renderer initialized");
+    logger.info("UI renderer initialized");
 
     // Render all UI components after initialization
     uiRenderer.renderEverything();
@@ -493,13 +552,13 @@ async function initializeApp() {
 
     // 7. Perform initial sync if enabled and initialized
     if (syncEnabled && syncReady) {
-      console.log("Performing initial sync");
-      await syncData(); 
+      logger.info("Performing initial sync");
+      await syncData();
     }
 
-    console.log("App initialization complete");
+    logger.info("App initialization complete");
   } catch (error) {
-    console.error("Error during app initialization:", error);
+    logger.error("Error during app initialization:", error);
     uiRenderer.showToast(`Initialization Error: ${error.message}`, "error", {
       duration: 5000,
     });
@@ -513,10 +572,10 @@ async function initializeApp() {
 async function initializeCloudSync() {
   // First, check if sync is enabled - exit early if not
   syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
-  console.log("Initial syncEnabled value:", syncEnabled);
+  logger.info("Initial syncEnabled value:", syncEnabled);
 
   if (!syncEnabled) {
-    console.log("Cloud sync is disabled in preferences");
+    logger.info("Cloud sync is disabled in preferences");
     return false;
   }
 
@@ -552,25 +611,25 @@ async function initializeCloudSync() {
           // Check if state is recent (within 10 minutes)
           const stateAge = Date.now() - authState.timestamp;
           if (stateAge <= 10 * 60 * 1000) {
-            console.log("Found recent Dropbox auth state");
+            logger.info("Found recent Dropbox auth state");
             effectiveProvider = "dropbox";
             hasDropboxAuthRedirect = true;
           } else {
-            console.log("Stored auth state expired, ignoring");
+            logger.info("Stored auth state expired, ignoring");
           }
         } catch (e) {
-          console.error("Error processing stored auth state:", e);
+          logger.error("Error processing stored auth state:", e);
         }
       }
 
       // Force provider to dropbox if token is in URL
       if (hasDropboxTokenInUrl) {
-        console.log("Detected Dropbox token in URL hash");
+        logger.info("Detected Dropbox token in URL hash");
         effectiveProvider = "dropbox";
       }
     }
 
-    console.log(`Initializing cloud sync with provider: ${effectiveProvider}`);
+    logger.info(`Initializing cloud sync with provider: ${effectiveProvider}`);
 
     // Create and initialize cloud sync manager
     cloudSync = new CloudSyncManager(
@@ -588,7 +647,7 @@ async function initializeCloudSync() {
 
     // Check if initialization failed due to missing config
     if (!initResult) {
-      console.warn(
+      logger.warn(
         "Cloud sync initialization failed: Config missing or invalid"
       );
 
@@ -608,12 +667,12 @@ async function initializeCloudSync() {
       return false;
     }
 
-    console.log("Cloud sync initialized successfully");
+    logger.info("Cloud sync initialized successfully");
 
     // Configure auto-sync
     if (autoSyncInterval > 0) {
       cloudSync.startAutoSync(autoSyncInterval);
-      console.log(`Auto-sync configured for every ${autoSyncInterval} minutes`);
+      logger.info(`Auto-sync configured for every ${autoSyncInterval} minutes`);
     }
 
     // Handle Dropbox auth redirect case - only relevant for Dropbox
@@ -647,7 +706,7 @@ async function initializeCloudSync() {
 
     return true;
   } catch (error) {
-    console.error("Failed to initialize cloud sync:", error);
+    logger.error("Failed to initialize cloud sync:", error);
     // Keep sync disabled but don't interrupt app initialization
     setSyncReady(false);
     updateSyncUIElements();
@@ -673,7 +732,7 @@ function setupSyncButton() {
     syncBtn.textContent = "Sync Now";
 
     syncBtn.addEventListener("click", () => {
-      console.log("Sync button clicked");
+      logger.info("Sync button clicked");
       closeMenu();
       syncData();
     });
@@ -809,7 +868,7 @@ function setupEventListeners() {
   window.addEventListener("online", () => {
     // Try to sync when device comes online
     if (syncEnabled && cloudSync) {
-      syncData(); 
+      syncData();
     }
   });
 
@@ -829,7 +888,7 @@ function setupEventListeners() {
           }
         }
       } catch (e) {
-        console.warn("Could not sync on page unload:", e);
+        logger.warn("Could not sync on page unload:", e);
       }
     }
   });
@@ -863,7 +922,7 @@ function handleNavigation(event) {
  */
 function toggleMenu() {
   const menuBtn = document.getElementById("tab-menu-btn");
-  console.log(
+  logger.info(
     "Toggling menu, current state:",
     domElements.mainMenu.classList.contains("menu-open")
   );
@@ -881,7 +940,7 @@ function toggleMenu() {
   }
 
   domElements.mainMenu.classList.toggle("menu-open");
-  console.log(
+  logger.info(
     "Menu toggled, new state:",
     domElements.mainMenu.classList.contains("menu-open")
   );
@@ -1074,7 +1133,7 @@ async function handleAboutClick() {
     const config = await import("./config.js");
     isDevMode = config.CONFIG.DEV_MODE || false;
   } catch (error) {
-    console.warn(
+    logger.warn(
       "Could not load config.js, defaulting to production mode:",
       error
     );
@@ -1103,6 +1162,22 @@ async function handleAboutClick() {
     <div id="dev-controls" style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc;">
       <h4 style="margin: 5px 0;">Developer Controls</h4>
       
+      <!-- Log Level Controls -->
+      <div style="display: flex; align-items: center; margin-bottom: 10px;">
+        <label for="log-level-select" style="margin-right: 10px;">Log Level:</label>
+        <select id="log-level-select" style="margin-right: 5px;">
+          <option value="ERROR">ERROR</option>
+          <option value="WARN">WARN</option>
+          <option value="INFO" selected>INFO</option>
+          <option value="DEBUG">DEBUG</option>
+          <option value="TRACE">TRACE</option>
+        </select>
+        <button id="apply-log-level" style="margin-left: 5px;">Apply</button>
+      </div>
+      <div id="log-level-status" style="font-size: 12px; color: #888;">
+        Current application log level: INFO
+      </div>      
+
       <!-- Existing test date controls -->
       <div style="display: flex; align-items: center; margin-bottom: 10px;">
         <label for="test-date" style="margin-right: 10px;">Test Date:</label>
@@ -1210,6 +1285,42 @@ function setupDevControlEventListeners() {
   const applyTestDateBtn = document.getElementById("apply-test-date");
   const resetTestDateBtn = document.getElementById("reset-test-date");
   const testDateStatus = document.getElementById("test-date-status");
+
+  // Add event listener for log level selector
+  const logLevelSelect = document.getElementById("log-level-select");
+  const applyLogLevelBtn = document.getElementById("apply-log-level");
+  const logLevelStatus = document.getElementById("log-level-status");
+
+  // Set initial selection from localStorage if available
+  if (logLevelSelect) {
+    const storedLevel = localStorage.getItem("appLogLevel") || "INFO";
+    logLevelSelect.value = storedLevel;
+    logLevelStatus.textContent = `Current application log level: ${storedLevel}`;
+  }
+
+  if (applyLogLevelBtn) {
+    applyLogLevelBtn.addEventListener("click", () => {
+      const selectedLevel = logLevelSelect.value;
+
+      // Update logger configuration
+      import("./logger.js").then(({ configure, LOG_LEVELS }) => {
+        configure({
+          defaultLevel: LOG_LEVELS[selectedLevel],
+        });
+
+        // Store selection in localStorage for persistence
+        localStorage.setItem("appLogLevel", selectedLevel);
+
+        // Update status text
+        if (logLevelStatus) {
+          logLevelStatus.textContent = `Current application log level: ${selectedLevel}`;
+        }
+
+        // Show toast notification
+        uiRenderer.showToast(`Log level set to ${selectedLevel}`, "success");
+      });
+    });
+  }
 
   if (applyTestDateBtn) {
     applyTestDateBtn.addEventListener("click", async () => {
@@ -1417,7 +1528,7 @@ function setupDevControlEventListeners() {
           { duration: 3000 }
         );
       } catch (error) {
-        console.error("Error clearing cloud data:", error);
+        logger.error("Error clearing cloud data:", error);
         uiRenderer.showToast(
           `Error clearing cloud files: ${error.message}`,
           "error",
@@ -1437,7 +1548,7 @@ async function handleExport() {
   closeMenu();
 
   try {
-    console.log("Exporting data...");
+    logger.info("Exporting data...");
     const dataToExport = await dataService.exportData();
 
     if (
@@ -1461,11 +1572,11 @@ async function handleExport() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    console.log("Data exported successfully.");
+    logger.info("Data exported successfully.");
     uiRenderer.showToast("Data exported successfully!", "success");
     uiRenderer.setActiveView("tracker");
   } catch (error) {
-    console.error("Error exporting data:", error);
+    logger.error("Error exporting data:", error);
     uiRenderer.showToast(`Export failed: ${error.message}`, "error");
   }
 }
@@ -1485,7 +1596,7 @@ function triggerImport() {
 async function handleImportFileSelect(event) {
   const file = event.target.files[0];
   if (!file) {
-    console.log("No file selected for import.");
+    logger.info("No file selected for import.");
     return;
   }
 
@@ -1571,7 +1682,7 @@ async function handleImportFileSelect(event) {
       });
 
       if (!confirmed) {
-        console.log("Import cancelled by user.");
+        logger.info("Import cancelled by user.");
         domElements.importFileInput.value = "";
         return;
       }
@@ -1609,7 +1720,7 @@ async function handleImportFileSelect(event) {
 
       uiRenderer.showToast(successMessage, "success", { duration: 4000 });
     } catch (error) {
-      console.error("Error importing data:", error);
+      logger.error("Error importing data:", error);
       uiRenderer.showToast(`Import failed: ${error.message}`, "error", {
         duration: 5000,
       });
@@ -1619,7 +1730,7 @@ async function handleImportFileSelect(event) {
   };
 
   reader.onerror = (e) => {
-    console.error("Error reading file:", e);
+    logger.error("Error reading file:", e);
     uiRenderer.showToast("Error reading the selected file.", "error");
     domElements.importFileInput.value = "";
   };
@@ -1756,7 +1867,7 @@ async function processImport(importedData, dateRelationship) {
 
     return importResult;
   } catch (error) {
-    console.error("Error during import processing:", error);
+    logger.error("Error during import processing:", error);
     throw error;
   }
 }
@@ -1786,7 +1897,7 @@ function getDateRelationship(importDate, todayDate) {
 }
 
 function handleSyncComplete(result) {
-  console.log("Sync completed:", result);
+  logger.info("Sync completed:", result);
 
   // Only show success toast if there's a valid result
   if (result) {
@@ -1800,12 +1911,12 @@ function handleSyncComplete(result) {
       uiRenderer.renderHistory();
     }
   } else {
-    console.warn("Sync completed with no result object");
+    logger.warn("Sync completed with no result object");
   }
 }
 
 function handleSyncError(error) {
-  console.error("Sync error:", error);
+  logger.error("Sync error:", error);
 
   const errorMessage = error.message || "Unknown error";
 
@@ -1821,12 +1932,12 @@ function handleSyncError(error) {
   ) {
     cloudSync
       .authenticate()
-      .catch((e) => console.error("Authentication failed:", e));
+      .catch((e) => logger.error("Authentication failed:", e));
   }
 }
 
 async function syncData(silent = false, force = false) {
-  console.log("syncData called", {
+  logger.info("syncData called", {
     cloudSync,
     syncEnabled,
     syncReady,
@@ -1835,7 +1946,7 @@ async function syncData(silent = false, force = false) {
   });
 
   if (!cloudSync || !syncEnabled || !syncReady) {
-    console.log("Sync skipped: not ready", {
+    logger.info("Sync skipped: not ready", {
       cloudSync,
       syncEnabled,
       syncReady,
@@ -1845,7 +1956,7 @@ async function syncData(silent = false, force = false) {
 
   // Check authentication status
   if (!cloudSync.isAuthenticated) {
-    console.log("Authentication needed before sync");
+    logger.info("Authentication needed before sync");
     if (!silent) {
       uiRenderer.showToast("Authenticating with cloud service...", "info", {
         isPersistent: true,
@@ -1855,16 +1966,16 @@ async function syncData(silent = false, force = false) {
     try {
       const authResult = await cloudSync.authenticate();
       if (!authResult) {
-        console.log("Authentication failed or was canceled");
+        logger.info("Authentication failed or was canceled");
         uiRenderer.showToast("Authentication required for sync", "warning", {
           duration: 5000,
         });
         return;
       }
       // Authentication succeeded
-      console.log("Authentication successful, proceeding with sync");
+      logger.info("Authentication successful, proceeding with sync");
     } catch (error) {
-      console.error("Authentication error:", error);
+      logger.error("Authentication error:", error);
       uiRenderer.showToast(`Authentication error: ${error.message}`, "error", {
         duration: 5000,
       });
@@ -1875,9 +1986,9 @@ async function syncData(silent = false, force = false) {
   // Add debugging of metadata to help trace the issue
   try {
     const state = dataService.loadState();
-    console.log("Current state metadata before sync:", state.metadata);
+    logger.info("Current state metadata before sync:", state.metadata);
   } catch (e) {
-    console.error("Error logging state metadata:", e);
+    logger.error("Error logging state metadata:", e);
   }
 
   if (!silent) {
@@ -1888,20 +1999,20 @@ async function syncData(silent = false, force = false) {
   }
 
   try {
-    console.log("Starting sync operation");
+    logger.info("Starting sync operation");
     // Update UI to show sync in progress
     updateSyncUIElements();
 
     const result = await cloudSync.sync();
-    console.log("Sync completed:", result);
+    logger.info("Sync completed:", result);
 
     // Force a complete reload of state from dataService
-    console.log("Reloading state after sync");
+    logger.info("Reloading state after sync");
     if (typeof stateManager.reload === "function") {
-      console.log("stateManager.reload is typeof function, calling reload");
+      logger.info("stateManager.reload is typeof function, calling reload");
       await stateManager.reload();
     } else {
-      console.warn("stateManager.reload not found, manually reloading state");
+      logger.warn("stateManager.reload not found, manually reloading state");
       // Fallback if reload method doesn't exist
       const freshData = dataService.loadState();
       stateManager.dispatch({
@@ -1921,7 +2032,7 @@ async function syncData(silent = false, force = false) {
     const needsPostSyncReset = currentState.metadata?.pendingDateReset === true;
 
     if (needsPostSyncReset) {
-      console.log("Performing post-sync date reset");
+      logger.info("Performing post-sync date reset");
 
       // Clear the pending flag first
       delete currentState.metadata.pendingDateReset;
@@ -1934,14 +2045,14 @@ async function syncData(silent = false, force = false) {
       const dateChanged = await stateManager.checkDateAndReset();
 
       if (dateChanged) {
-        console.log("Post-sync date reset completed successfully");
+        logger.info("Post-sync date reset completed successfully");
       } else {
-        console.warn("Post-sync date reset was flagged but no changes made");
+        logger.warn("Post-sync date reset was flagged but no changes made");
       }
     }
 
     // Now refresh the UI
-    console.log("Refreshing UI after state reload");
+    logger.info("Refreshing UI after state reload");
     uiRenderer.renderEverything();
 
     if (!silent) {
@@ -1950,7 +2061,7 @@ async function syncData(silent = false, force = false) {
       });
     }
   } catch (error) {
-    console.error("Sync error:", error);
+    logger.error("Sync error:", error);
     handleSyncError(error);
   } finally {
     // Make sure syncInProgress is set to false if the cloudSync object exists
@@ -1989,7 +2100,7 @@ async function showSettings() {
       "cloudSyncEnabled",
       false
     );
-    console.log(
+    logger.info(
       "Settings dialog opening with cloud sync enabled:",
       freshSyncEnabled
     );
@@ -2007,14 +2118,14 @@ async function showSettings() {
       )
         ? "dropbox"
         : "gdrive";
-      console.log("Active provider detected:", currentSyncProvider);
+      logger.info("Active provider detected:", currentSyncProvider);
     } else {
       // Fall back to saved preference
       currentSyncProvider = await dataService.getPreference(
         "cloudSyncProvider",
         "gdrive"
       );
-      console.log("Using saved provider preference:", currentSyncProvider);
+      logger.info("Using saved provider preference:", currentSyncProvider);
     }
 
     // Get Wi-Fi only preference
@@ -2188,7 +2299,7 @@ async function showSettings() {
               document.getElementById("sync-now-btn").disabled =
                 !cloudSync.isAuthenticated;
             } catch (error) {
-              console.error("Failed to initialize cloud sync:", error);
+              logger.error("Failed to initialize cloud sync:", error);
               uiRenderer.showToast(
                 "Failed to initialize sync: " + error.message,
                 "error"
@@ -2215,7 +2326,7 @@ async function showSettings() {
             : "gdrive"
           : "none";
 
-        console.log(
+        logger.info(
           `Provider changing from ${currentProvider} to ${newProvider}`
         );
 
@@ -2283,7 +2394,7 @@ async function showSettings() {
         }
       });
   } catch (err) {
-    console.error("Error loading settings:", err);
+    logger.error("Error loading settings:", err);
     uiRenderer.showToast("Failed to load settings", "error");
   }
 }
@@ -2307,7 +2418,7 @@ function applySettingsWithoutClosing() {
   window.syncEnabled = newSyncEnabled;
   syncEnabled = newSyncEnabled;
 
-  console.log("Applied sync settings, syncEnabled =", syncEnabled);
+  logger.info("Applied sync settings, syncEnabled =", syncEnabled);
 
   // Add warning for demo host when enabling cloud sync
   if (isDemoHost && newSyncEnabled) {
@@ -2331,7 +2442,7 @@ function applySettingsWithoutClosing() {
       (cloudSync.provider?.constructor.name.includes("Dropbox") &&
         syncProvider === "gdrive")
     ) {
-      console.log("Initializing new cloud sync provider:", syncProvider);
+      logger.info("Initializing new cloud sync provider:", syncProvider);
 
       cloudSync = new CloudSyncManager(
         dataService,
@@ -2367,7 +2478,7 @@ function applySettingsWithoutClosing() {
           }
         })
         .catch((error) => {
-          console.error("Failed to initialize cloud sync:", error);
+          logger.error("Failed to initialize cloud sync:", error);
           setSyncReady(false);
         });
     } else {
@@ -2381,7 +2492,7 @@ function applySettingsWithoutClosing() {
     // Disable sync
     cloudSync = null;
     setSyncReady(false);
-    console.log("Cloud sync disabled completely");
+    logger.info("Cloud sync disabled completely");
   }
 
   // Update the main menu Sync Now button
@@ -2437,7 +2548,7 @@ function openEditTotalsModal(source) {
     )}`;
     editingSource = "history";
   } else {
-    console.error("Invalid source for edit modal:", source);
+    logger.error("Invalid source for edit modal:", source);
     return;
   }
 
@@ -2517,7 +2628,7 @@ function handleEditTotalsItemClick(event) {
 
   const groupId = button.dataset.groupId;
   if (!groupId) {
-    console.error("Edit button clicked, but no groupId found in dataset.");
+    logger.error("Edit button clicked, but no groupId found in dataset.");
     return;
   }
 
@@ -2549,7 +2660,7 @@ function handleEditTotalsItemClick(event) {
  */
 async function saveEditedTotals() {
   if (!editingSource || !editingWeekDataRef) {
-    console.error("Cannot save, editing context is missing.");
+    logger.error("Cannot save, editing context is missing.");
     uiRenderer.showToast("Error saving changes.", "error");
     closeEditTotalsModal();
     return;
@@ -2579,7 +2690,7 @@ async function saveEditedTotals() {
             },
           },
         });
-        console.log(
+        logger.info(
           "Explicitly set currentWeekDirty flag after edit totals save"
         );
       }
@@ -2626,10 +2737,10 @@ async function saveEditedTotals() {
           if (typeof cloudSync.syncWeek === "function") {
             cloudSync
               .syncWeek(editingWeekDataRef.weekStartDate, "upload")
-              .catch((err) => console.warn("Error syncing edited week:", err));
+              .catch((err) => logger.warn("Error syncing edited week:", err));
           }
         } catch (error) {
-          console.warn("Could not trigger week sync after edit:", error);
+          logger.warn("Could not trigger week sync after edit:", error);
         }
       }
 
@@ -2641,7 +2752,7 @@ async function saveEditedTotals() {
 
     closeEditTotalsModal();
   } catch (error) {
-    console.error(`Error saving edited totals for ${editingSource}:`, error);
+    logger.error(`Error saving edited totals for ${editingSource}:`, error);
     uiRenderer.showToast(`Failed to save changes: ${error.message}`, "error");
   }
 }

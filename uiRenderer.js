@@ -18,6 +18,7 @@
 
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
+import logger from "./logger.js";
 
 /**
  * UIRenderer - Responsible for rendering UI components based on application state
@@ -140,9 +141,9 @@ function initialize() {
 
   // Log initialization status
   if (allRequiredElementsCached()) {
-    console.log("UI Renderer initialized successfully");
+    logger.info("UI Renderer initialized successfully");
   } else {
-    console.warn("UI Renderer initialized with missing elements");
+    logger.warn("UI Renderer initialized with missing elements");
   }
 
   // Subscribe to state changes
@@ -160,7 +161,7 @@ function allRequiredElementsCached() {
     !domElements.views["current-week"] ||
     !domElements.views.history
   ) {
-    console.warn("Missing main view elements");
+    logger.warn("Missing main view elements");
     return false;
   }
 
@@ -169,19 +170,19 @@ function allRequiredElementsCached() {
     !domElements.trackerElements.foodItemsList ||
     !domElements.trackerElements.foodGroupTemplate
   ) {
-    console.warn("Missing tracker elements");
+    logger.warn("Missing tracker elements");
     return false;
   }
 
   // Check current week elements
   if (!domElements.currentWeekElements.currentWeekSummaryContent) {
-    console.warn("Missing current week elements");
+    logger.warn("Missing current week elements");
     return false;
   }
 
   // Check history elements
   if (!domElements.historyElements.historyContent) {
-    console.warn("Missing history elements");
+    logger.warn("Missing history elements");
     return false;
   }
 
@@ -194,7 +195,7 @@ function allRequiredElementsCached() {
  * @param {Object} action - The action that caused the state change
  */
 function handleStateChange(state, action) {
-  console.log(`State changed due to action: ${action.type}`);
+  logger.info(`State changed due to action: ${action.type}`);
 
   // Determine what to render based on the action type
   switch (action.type) {
@@ -288,7 +289,7 @@ function renderDateElements() {
         })}`;
     }
   } catch (error) {
-    console.error("Error rendering date elements:", error);
+    logger.error("Error rendering date elements:", error);
 
     // Handle error display
     if (domElements.trackerElements.trackerDateEl) {
@@ -308,7 +309,7 @@ function renderTrackerItems() {
 
   // Ensure we have the required elements
   if (!foodItemsList || !foodGroupTemplate) {
-    console.error("Missing required elements for renderTrackerItems");
+    logger.error("Missing required elements for renderTrackerItems");
     return;
   }
 
@@ -464,7 +465,7 @@ function renderCurrentWeekSummary() {
 
   // Ensure we have the required element
   if (!currentWeekSummaryContent) {
-    console.error("Missing required element for renderCurrentWeekSummary");
+    logger.error("Missing required element for renderCurrentWeekSummary");
     return;
   }
 
@@ -560,7 +561,7 @@ function renderHistory(weekIndex) {
 
   // Ensure we have the required element
   if (!historyContent) {
-    console.error("Missing required element for renderHistory");
+    logger.error("Missing required element for renderHistory");
     return;
   }
 
@@ -752,7 +753,7 @@ function setActiveView(viewId) {
   if (activeView) {
     activeView.classList.add("active-view");
   } else {
-    console.error(`Could not find view element for key: ${viewId}`);
+    logger.error(`Could not find view element for key: ${viewId}`);
   }
 
   // Activate the corresponding tab button
@@ -798,7 +799,7 @@ function showToast(message, type = "info", options = {}) {
   } = options;
 
   if (!toastMessage || !toastSpinner || !toastText) {
-    console.warn("Toast elements not fully cached. Cannot show toast.");
+    logger.warn("Toast elements not fully cached. Cannot show toast.");
     return;
   }
 
@@ -848,7 +849,7 @@ function openModal(title, htmlContent, options = {}) {
     domElements.modalElements;
 
   if (!genericModal || !modalBody) {
-    console.error("Modal elements not found", { genericModal, modalBody });
+    logger.error("Modal elements not found", { genericModal, modalBody });
     return;
   }
 
@@ -870,7 +871,7 @@ function openModal(title, htmlContent, options = {}) {
     } else if (htmlContent instanceof Element) {
       modalBody.appendChild(htmlContent);
     } else {
-      console.warn(
+      logger.warn(
         "Invalid content type provided to modal:",
         typeof htmlContent
       );
@@ -915,8 +916,8 @@ function openModal(title, htmlContent, options = {}) {
   }
 
   // Debug output
-  console.log("Modal opened with title:", title);
-  console.log("Modal content length:", htmlContent ? htmlContent.length : 0);
+  logger.info("Modal opened with title:", title);
+  logger.info("Modal content length:", htmlContent ? htmlContent.length : 0);
 }
 
 /**

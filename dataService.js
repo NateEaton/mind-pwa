@@ -28,6 +28,8 @@
  * - Data structure normalization
  */
 
+import logger from "./logger.js";
+
 // Constants
 const DB_NAME = "MindDietTrackerDB";
 const DB_VERSION = 2;
@@ -134,7 +136,7 @@ function getDeviceInfo() {
     };
     return JSON.stringify(info);
   } catch (error) {
-    console.warn("Could not get complete device info:", error);
+    logger.warn("Could not get complete device info:", error);
     return JSON.stringify({ userAgent: navigator.userAgent || "unknown" });
   }
 }
@@ -226,20 +228,20 @@ async function initDatabase() {
 
   return new Promise((resolve, reject) => {
     try {
-      console.log("Opening database...");
+      logger.info("Opening database...");
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = (event) => {
         const error = new Error(
           `Database error: ${event.target.errorCode || "unknown error"}`
         );
-        console.error(error);
+        logger.error(error);
         reject(error);
       };
 
       request.onsuccess = (event) => {
         _db = event.target.result;
-        console.log(
+        logger.info(
           "Database opened successfully:",
           DB_NAME,
           "version",
@@ -248,14 +250,14 @@ async function initDatabase() {
 
         // Set up error handler for the database connection
         _db.onerror = (event) => {
-          console.error("Database error:", event.target.errorCode);
+          logger.error("Database error:", event.target.errorCode);
         };
 
         resolve(_db);
       };
 
       request.onupgradeneeded = (event) => {
-        console.log(
+        logger.info(
           `Upgrading database from version ${event.oldVersion} to ${event.newVersion}`
         );
         const db = event.target.result;
@@ -270,7 +272,7 @@ async function initDatabase() {
             historyStore.createIndex("updatedAt", "metadata.updatedAt", {
               unique: false,
             });
-            console.log(`Object store created: ${STORES.HISTORY}`);
+            logger.info(`Object store created: ${STORES.HISTORY}`);
           }
         }
 
@@ -280,7 +282,7 @@ async function initDatabase() {
             const prefsStore = db.createObjectStore(STORES.PREFERENCES, {
               keyPath: "id",
             });
-            console.log(`Object store created: ${STORES.PREFERENCES}`);
+            logger.info(`Object store created: ${STORES.PREFERENCES}`);
           }
 
           // Add sync log store in version 2
@@ -293,12 +295,12 @@ async function initDatabase() {
             syncStore.createIndex("recordType", "recordType", {
               unique: false,
             });
-            console.log(`Object store created: ${STORES.SYNC_LOG}`);
+            logger.info(`Object store created: ${STORES.SYNC_LOG}`);
           }
         }
       };
     } catch (error) {
-      console.error("Error during database initialization:", error);
+      logger.error("Error during database initialization:", error);
       reject(error);
     }
   });
@@ -334,21 +336,21 @@ async function dbOperation(storeName, mode, operation) {
       const store = transaction.objectStore(storeName);
 
       transaction.oncomplete = () => {
-        console.log(`Transaction completed for store '${storeName}'`);
+        logger.info(`Transaction completed for store '${storeName}'`);
       };
 
       transaction.onerror = (event) => {
         const error = new Error(
           `Transaction error for store '${storeName}': ${event.target.error}`
         );
-        console.error(error);
+        logger.error(error);
         reject(error);
       };
 
       // Execute the operation with the store
       operation(store, transaction, resolve, reject);
     } catch (error) {
-      console.error(
+      logger.error(
         `Unexpected error in dbOperation(${storeName}, ${mode}):`,
         error
       );
@@ -437,7 +439,7 @@ async function saveWeekHistory(weekData, options = {}) {
       }
     );
   } catch (error) {
-    console.warn(`Could not check for existing record: ${error.message}`);
+    logger.warn(`Could not check for existing record: ${error.message}`);
   }
 
   // Create normalized record structure
@@ -453,7 +455,7 @@ async function saveWeekHistory(weekData, options = {}) {
     (store, transaction, resolve, reject) => {
       const request = store.put(normalizedRecord);
       request.onsuccess = () => {
-        console.log("Week data saved successfully:", weekStartDate);
+        logger.info("Week data saved successfully:", weekStartDate);
 
         // Log the change for future sync
         logSyncChange(
@@ -471,7 +473,7 @@ async function saveWeekHistory(weekData, options = {}) {
             saveState(currentState);
           }
         } catch (e) {
-          console.warn("Could not update historyDirty flag:", e);
+          logger.warn("Could not update historyDirty flag:", e);
         }
 
         resolve();
@@ -577,7 +579,7 @@ async function clearHistoryStore() {
       const request = store.clear();
 
       request.onsuccess = () => {
-        console.log(`Object store '${STORES.HISTORY}' cleared successfully.`);
+        logger.info(`Object store '${STORES.HISTORY}' cleared successfully.`);
 
         // Log the massive change for sync purposes
         logSyncChange("history", "clear", "all", null);
@@ -621,7 +623,7 @@ async function savePreference(key, value) {
       }
     );
   } catch (error) {
-    console.warn(`Could not check for existing preference: ${error.message}`);
+    logger.warn(`Could not check for existing preference: ${error.message}`);
   }
 
   // Create normalized preference structure
@@ -643,7 +645,7 @@ async function savePreference(key, value) {
       const request = store.put(normalizedPref);
 
       request.onsuccess = () => {
-        console.log(`Preference '${key}' saved successfully.`);
+        logger.info(`Preference '${key}' saved successfully.`);
 
         // Log the change for future sync
         logSyncChange("preference", "update", key, { key, value });
@@ -697,10 +699,7 @@ async function getPreference(key, defaultValue = null) {
 
     return result;
   } catch (error) {
-    console.warn(
-      `Error getting preference '${key}', returning default:`,
-      error
-    );
+    logger.warn(`Error getting preference '${key}', returning default:`, error);
     return defaultValue;
   }
 }
@@ -735,7 +734,7 @@ async function getAllPreferences() {
       return result;
     }, {});
   } catch (error) {
-    console.error("Error getting all preferences:", error);
+    logger.error("Error getting all preferences:", error);
     return {};
   }
 }
@@ -755,7 +754,7 @@ async function deletePreference(key) {
       const request = store.delete(key);
 
       request.onsuccess = () => {
-        console.log(`Preference '${key}' deleted successfully.`);
+        logger.info(`Preference '${key}' deleted successfully.`);
 
         // Log the change for future sync
         logSyncChange("preference", "delete", key, null);
@@ -798,18 +797,18 @@ async function logSyncChange(recordType, operation, recordId, data = null) {
         const request = store.add(logEntry);
 
         request.onsuccess = () => {
-          console.log(`Sync log entry added for ${recordType} ${operation}`);
+          logger.info(`Sync log entry added for ${recordType} ${operation}`);
           resolve();
         };
 
         request.onerror = (event) => {
-          console.warn(`Error logging sync change: ${event.target.error}`);
+          logger.warn(`Error logging sync change: ${event.target.error}`);
           resolve(); // Resolve anyway - sync logging is non-critical
         };
       }
     );
   } catch (error) {
-    console.warn("Error logging sync change:", error);
+    logger.warn("Error logging sync change:", error);
     // Intentionally not rejecting - sync logging failure shouldn't block operations
   }
 }
@@ -841,7 +840,7 @@ async function getPendingSyncChanges(since = 0) {
       }
     );
   } catch (error) {
-    console.error("Error getting pending sync changes:", error);
+    logger.error("Error getting pending sync changes:", error);
     return [];
   }
 }
@@ -873,7 +872,7 @@ function loadState() {
 
     // For fresh installs, add a special flag to indicate this is initial data
     if (isFreshInstall) {
-      console.log(
+      logger.info(
         "Fresh install detected - using old timestamp:",
         new Date(oldTimestamp).toISOString()
       );
@@ -897,10 +896,10 @@ function loadState() {
       metadata: normalizedMetadata,
     };
 
-    console.log("Loaded state:", normalizedState);
+    logger.info("Loaded state:", normalizedState);
     return normalizedState;
   } catch (error) {
-    console.error("Error loading state from localStorage:", error);
+    logger.error("Error loading state from localStorage:", error);
     // Return a default state with essential metadata on error
     const today = getTodayDateString();
     const currentWeekStart = getWeekStartDate(getCurrentDate());
@@ -960,22 +959,22 @@ function saveState(state) {
     };
 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedState));
-    console.log("Saved state with timestamp:", now);
+    logger.info("Saved state with timestamp:", now);
 
     // Optional: log the metadata that's being saved for debugging
     if (state.metadata) {
-      console.log("Saving state with metadata:", state.metadata);
+      logger.info("Saving state with metadata:", state.metadata);
     }
 
     // Log the change for future sync (if sync becomes a feature)
     logSyncChange("currentState", "update", "current", {
       timestamp: now,
       weekStartDate: state.currentWeekStartDate,
-    }).catch((e) => console.warn("Failed to log current state change"));
+    }).catch((e) => logger.warn("Failed to log current state change"));
 
     return true;
   } catch (error) {
-    console.error("Error saving state to localStorage:", error);
+    logger.error("Error saving state to localStorage:", error);
     return false;
   }
 }
@@ -1012,7 +1011,7 @@ async function exportData() {
 
     return dataToExport;
   } catch (error) {
-    console.error("Error exporting data:", error);
+    logger.error("Error exporting data:", error);
     throw new Error(`Export failed: ${error.message}`);
   }
 }
@@ -1039,7 +1038,7 @@ async function importData(importedData) {
     // Validate schema version if present
     const importedVersion = importedData.appInfo?.schemaVersion || 0;
     if (importedVersion > SCHEMA.VERSION) {
-      console.warn(
+      logger.warn(
         `Importing data from newer schema version (${importedVersion} > ${SCHEMA.VERSION}). Some features may not work correctly.`
       );
     }
@@ -1050,7 +1049,7 @@ async function importData(importedData) {
 
     if (!isPartialImport) {
       // 1. Clear existing data only for full imports
-      console.log("Clearing existing data...");
+      logger.info("Clearing existing data...");
       await clearHistoryStore();
       localStorage.removeItem(LOCAL_STORAGE_KEY);
     }
@@ -1069,9 +1068,9 @@ async function importData(importedData) {
       };
 
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedState));
-      console.log("Current state restored to localStorage.");
+      logger.info("Current state restored to localStorage.");
     } else {
-      console.warn("No 'currentState' found in imported file.");
+      logger.warn("No 'currentState' found in imported file.");
     }
 
     // 3. Restore history records one by one with normalization
@@ -1103,13 +1102,13 @@ async function importData(importedData) {
             await saveWeekHistory(normalizedWeekData);
             importCount++;
           } else {
-            console.warn(
+            logger.warn(
               "Skipping invalid/incomplete history record during import:",
               weekData
             );
           }
         } catch (saveError) {
-          console.error(
+          logger.error(
             `Error saving history week ${
               weekData.weekStartDate || "unknown"
             } during import:`,
@@ -1118,9 +1117,9 @@ async function importData(importedData) {
           // Continue with other records even if one fails
         }
       }
-      console.log(`${importCount} history records restored to IndexedDB.`);
+      logger.info(`${importCount} history records restored to IndexedDB.`);
     } else {
-      console.log(
+      logger.info(
         "No history records found in imported data or history array is empty."
       );
     }
@@ -1136,10 +1135,10 @@ async function importData(importedData) {
           await savePreference(key, value);
           prefCount++;
         } catch (prefError) {
-          console.error(`Error importing preference '${key}':`, prefError);
+          logger.error(`Error importing preference '${key}':`, prefError);
         }
       }
-      console.log(`${prefCount} preferences restored.`);
+      logger.info(`${prefCount} preferences restored.`);
     }
 
     // Log the import as a sync change
@@ -1154,7 +1153,7 @@ async function importData(importedData) {
 
     return true;
   } catch (error) {
-    console.error("Error importing data:", error);
+    logger.error("Error importing data:", error);
     throw new Error(`Import failed: ${error.message}`);
   }
 }
@@ -1177,9 +1176,9 @@ async function initialize() {
 
     // Set initialized flag
     _isInitialized = true;
-    console.log("Data service initialized successfully");
+    logger.info("Data service initialized successfully");
   } catch (error) {
-    console.error("Failed to initialize data service:", error);
+    logger.error("Failed to initialize data service:", error);
     throw error;
   }
 }
@@ -1194,7 +1193,7 @@ async function cleanup() {
     _db = null;
   }
   _isInitialized = false;
-  console.log("Data service cleanup complete");
+  logger.info("Data service cleanup complete");
 }
 
 /**
@@ -1242,7 +1241,7 @@ async function getDBStats() {
       },
     };
   } catch (error) {
-    console.error("Error getting DB stats:", error);
+    logger.error("Error getting DB stats:", error);
     return {
       error: error.message,
       database: {
@@ -1300,7 +1299,7 @@ function enableTestMode(testDate) {
   }
 
   _testModeEnabled = true;
-  console.log(`Test mode ENABLED with date: ${_testDate.toISOString()}`);
+  logger.info(`Test mode ENABLED with date: ${_testDate.toISOString()}`);
 }
 
 /**
@@ -1309,7 +1308,7 @@ function enableTestMode(testDate) {
 function disableTestMode() {
   _testModeEnabled = false;
   _testDate = null;
-  console.log("Test mode DISABLED");
+  logger.info("Test mode DISABLED");
 }
 
 /**
