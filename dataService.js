@@ -272,7 +272,7 @@ async function initDatabase() {
             historyStore.createIndex("updatedAt", "metadata.updatedAt", {
               unique: false,
             });
-            logger.info(`Object store created: ${STORES.HISTORY}`);
+            logger.debug(`Object store created: ${STORES.HISTORY}`);
           }
         }
 
@@ -282,7 +282,7 @@ async function initDatabase() {
             const prefsStore = db.createObjectStore(STORES.PREFERENCES, {
               keyPath: "id",
             });
-            logger.info(`Object store created: ${STORES.PREFERENCES}`);
+            logger.debug(`Object store created: ${STORES.PREFERENCES}`);
           }
 
           // Add sync log store in version 2
@@ -295,7 +295,7 @@ async function initDatabase() {
             syncStore.createIndex("recordType", "recordType", {
               unique: false,
             });
-            logger.info(`Object store created: ${STORES.SYNC_LOG}`);
+            logger.debug(`Object store created: ${STORES.SYNC_LOG}`);
           }
         }
       };
@@ -336,7 +336,7 @@ async function dbOperation(storeName, mode, operation) {
       const store = transaction.objectStore(storeName);
 
       transaction.oncomplete = () => {
-        logger.info(`Transaction completed for store '${storeName}'`);
+        logger.debug(`Transaction completed for store '${storeName}'`);
       };
 
       transaction.onerror = (event) => {
@@ -645,7 +645,7 @@ async function savePreference(key, value) {
       const request = store.put(normalizedPref);
 
       request.onsuccess = () => {
-        logger.info(`Preference '${key}' saved successfully.`);
+        logger.debug(`Preference '${key}' saved successfully.`);
 
         // Log the change for future sync
         logSyncChange("preference", "update", key, { key, value });
@@ -797,7 +797,7 @@ async function logSyncChange(recordType, operation, recordId, data = null) {
         const request = store.add(logEntry);
 
         request.onsuccess = () => {
-          logger.info(`Sync log entry added for ${recordType} ${operation}`);
+          logger.debug(`Sync log entry added for ${recordType} ${operation}`);
           resolve();
         };
 
@@ -896,7 +896,7 @@ function loadState() {
       metadata: normalizedMetadata,
     };
 
-    logger.info("Loaded state:", normalizedState);
+    logger.debug("Loaded state:", normalizedState);
     return normalizedState;
   } catch (error) {
     logger.error("Error loading state from localStorage:", error);
@@ -959,12 +959,7 @@ function saveState(state) {
     };
 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedState));
-    logger.info("Saved state with timestamp:", now);
-
-    // Optional: log the metadata that's being saved for debugging
-    if (state.metadata) {
-      logger.info("Saving state with metadata:", state.metadata);
-    }
+    logger.debug("Saved state with timestamp:", now);
 
     // Log the change for future sync (if sync becomes a feature)
     logSyncChange("currentState", "update", "current", {

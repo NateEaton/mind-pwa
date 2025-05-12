@@ -278,7 +278,7 @@ function saveStateToStorage() {
   // Optionally add lastModified here if you want stateManager to control it consistently
   // stateToSave.lastModified = _state.lastModified; // Ensure lastModified is saved
 
-  logger.info("StateManager saving state to storage:", stateToSave); // Add logging to verify
+  logger.debug("StateManager saving state to storage:", stateToSave); // Add logging to verify
   dataService.saveState(stateToSave);
 }
 
@@ -407,9 +407,9 @@ function updateWeeklyCount(groupId, count) {
  * @returns {Object} The action object
  */
 function resetDailyCounts(resetTimestamp = null) {
-  logger.info(`==== resetDailyCounts called ====`);
+  logger.debug(`==== resetDailyCounts called ====`);
   const state = getState();
-  logger.info(
+  logger.debug(
     `Daily counts before reset: ${JSON.stringify(state.dailyCounts)}`
   );
 
@@ -436,7 +436,7 @@ function resetDailyCounts(resetTimestamp = null) {
 
   // Verify the reset worked
   const afterState = getState();
-  logger.info(
+  logger.debug(
     `Daily counts after reset: ${JSON.stringify(afterState.dailyCounts)}`
   );
   logger.info(`==== resetDailyCounts completed ====`);
@@ -450,9 +450,9 @@ function resetDailyCounts(resetTimestamp = null) {
  * @returns {Object} The action object
  */
 function resetWeeklyCounts(resetTimestamp = null) {
-  logger.info(`==== resetWeeklyCounts called ====`);
+  logger.debug(`==== resetWeeklyCounts called ====`);
   const state = getState();
-  logger.info(
+  logger.debug(
     `Weekly counts before reset: ${JSON.stringify(state.weeklyCounts)}`
   );
 
@@ -478,7 +478,7 @@ function resetWeeklyCounts(resetTimestamp = null) {
 
   // Verify the reset worked
   const afterState = getState();
-  logger.info(
+  logger.debug(
     `Weekly counts after reset: ${JSON.stringify(afterState.weeklyCounts)}`
   );
   logger.info(`==== resetWeeklyCounts completed ====`);
@@ -534,13 +534,13 @@ async function checkDateAndReset() {
   );
   const weeksDiff = Math.floor(daysDiff / 7);
 
-  logger.info(`====== checkDateAndReset: DETAILED DIAGNOSTICS ======`);
-  logger.info(`Current state date: ${state.currentDayDate}`);
-  logger.info(`System date (today): ${todayStr}`);
-  logger.info(`Current week start in state: ${state.currentWeekStartDate}`);
-  logger.info(`Calculated week start for today: ${currentWeekStartStr}`);
-  logger.info(`Day difference: ${daysDiff}`);
-  logger.info(`Week difference: ${weeksDiff}`);
+  logger.debug(`====== checkDateAndReset: DETAILED DIAGNOSTICS ======`);
+  logger.debug(`Current state date: ${state.currentDayDate}`);
+  logger.debug(`System date (today): ${todayStr}`);
+  logger.debug(`Current week start in state: ${state.currentWeekStartDate}`);
+  logger.debug(`Calculated week start for today: ${currentWeekStartStr}`);
+  logger.debug(`Day difference: ${daysDiff}`);
+  logger.debug(`Week difference: ${weeksDiff}`);
 
   // Check for week change
   if (state.currentWeekStartDate !== currentWeekStartStr) {
@@ -643,10 +643,10 @@ async function checkDateAndReset() {
   // Check for day change (if week didn't already reset)
   if (!weekResetOccurred && state.currentDayDate !== todayStr) {
     logger.info(`Entering DAY RESET logic`);
-    logger.info(
+    logger.debug(
       `Current daily counts before reset: ${JSON.stringify(state.dailyCounts)}`
     );
-    logger.info(
+    logger.debug(
       `Current weekly counts before rollup: ${JSON.stringify(
         state.weeklyCounts
       )}`
@@ -673,7 +673,7 @@ async function checkDateAndReset() {
 
     // Verify the reset was successful
     const afterState = getState();
-    logger.info(
+    logger.debug(
       `Daily counts after reset: ${JSON.stringify(afterState.dailyCounts)}`
     );
   }
@@ -688,16 +688,12 @@ async function checkDateAndReset() {
   // Add a final verification
   if (stateChanged) {
     const afterState = getState();
-    logger.info("VERIFICATION - After reset:");
-    logger.info(`- Current day: ${afterState.currentDayDate}`);
-    logger.info(`- Current week start: ${afterState.currentWeekStartDate}`);
-    logger.info(`- Daily counts: ${JSON.stringify(afterState.dailyCounts)}`);
-    logger.info(`- Weekly counts: ${JSON.stringify(afterState.weeklyCounts)}`);
+    logger.debug("VERIFICATION - After reset:");
+    logger.debug(`- Current day: ${afterState.currentDayDate}`);
+    logger.debug(`- Current week start: ${afterState.currentWeekStartDate}`);
+    logger.debug(`- Daily counts: ${JSON.stringify(afterState.dailyCounts)}`);
+    logger.debug(`- Weekly counts: ${JSON.stringify(afterState.weeklyCounts)}`);
   }
-
-  logger.info(
-    `====== checkDateAndReset: FINISHED (stateChanged=${stateChanged}) ======`
-  );
 
   return stateChanged;
 }
@@ -841,7 +837,7 @@ async function reload() {
 
   // Load fresh data from data service
   const freshData = dataService.loadState();
-  logger.info("Fresh data loaded:", {
+  logger.debug("Fresh data loaded:", {
     dayDate: freshData.currentDayDate,
     weekStartDate: freshData.currentWeekStartDate,
     dailyCounts: Object.keys(freshData.dailyCounts || {}),
@@ -893,10 +889,10 @@ function ensureCurrentDate() {
   const state = getState();
   const todayStr = dataService.getTodayDateString();
 
-  logger.info(`==== ensureCurrentDate ====`);
-  logger.info(`Current date in state: ${state.currentDayDate}`);
-  logger.info(`System date: ${todayStr}`);
-  logger.info(`Dates match? ${state.currentDayDate === todayStr}`);
+  logger.debug(`==== ensureCurrentDate ====`);
+  logger.debug(`Current date in state: ${state.currentDayDate}`);
+  logger.debug(`System date: ${todayStr}`);
+  logger.debug(`Dates match? ${state.currentDayDate === todayStr}`);
 
   // If current date in state doesn't match today, update it
   if (state.currentDayDate !== todayStr) {

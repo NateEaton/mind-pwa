@@ -180,7 +180,7 @@ class GoogleDriveProvider {
     logger.info("Starting Google authentication");
     return new Promise((resolve) => {
       this.tokenClient.callback = async (resp) => {
-        logger.info("Auth callback received", resp);
+        logger.debug("Auth callback received", resp);
         if (resp.error) {
           logger.error("Error authenticating with Google:", resp);
           // Signal that sync is not ready
@@ -193,7 +193,7 @@ class GoogleDriveProvider {
         try {
           const token = this.gapi.client.getToken();
           if (token) {
-            logger.info("Got valid token, saving to localStorage");
+            logger.debug("Got valid token, saving to localStorage");
             localStorage.setItem("google_drive_token", JSON.stringify(token));
           }
         } catch (e) {
@@ -219,7 +219,7 @@ class GoogleDriveProvider {
   async findOrCreateFile(filename, mimeType = "application/json") {
     try {
       // Search for the file in the app data folder
-      logger.info(
+      logger.debug(
         `Searching for Google Drive file '${filename}' in appDataFolder...`
       );
       const response = await this.gapi.client.drive.files.list({
@@ -231,7 +231,7 @@ class GoogleDriveProvider {
       // Check if we got any results
       if (response.result.files && response.result.files.length > 0) {
         const file = response.result.files[0];
-        logger.info(
+        logger.debug(
           `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${
             file.modifiedTime
           }, Size: ${file.size || "unknown"} bytes)`
@@ -254,14 +254,14 @@ class GoogleDriveProvider {
         });
 
         const newFile = createResponse.result;
-        logger.info(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
+        logger.debug(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
 
         // Upload empty JSON content to initialize the file
         try {
           await this.uploadFile(newFile.id, {});
           logger.info(`Initialized new file ${newFile.id} with empty content`);
         } catch (initError) {
-          logger.info(
+          logger.warn(
             `Note: Initial content upload failed, but file was created: ${initError.message}`
           );
           // Continue anyway since the file exists
@@ -271,14 +271,16 @@ class GoogleDriveProvider {
       } catch (createError) {
         // Handle specific creation errors
         if (createError.status === 403) {
-          logger.info("Permission error creating file - check app permissions");
+          logger.error(
+            "Permission error creating file - check app permissions"
+          );
           throw new Error(
             "Google Drive permission denied. Check app permissions."
           );
         }
 
         if (createError.status === 401) {
-          logger.info(
+          logger.error(
             "Authentication error creating file - token may be expired"
           );
           throw new Error(
@@ -294,13 +296,13 @@ class GoogleDriveProvider {
         error.name === "TypeError" &&
         error.message.includes("NetworkError")
       ) {
-        logger.info("Network error:", error.message);
+        logger.error("Network error:", error.message);
         throw new Error("Network error. Please check your connection.");
       }
 
       // Handle rate limiting
       if (error.status === 429) {
-        logger.info("Google Drive rate limit reached");
+        logger.warn("Google Drive rate limit reached");
         throw new Error(
           "Google Drive rate limit reached. Please try again later."
         );
@@ -338,7 +340,7 @@ class GoogleDriveProvider {
       const contentStr = JSON.stringify(content);
       const accessToken = this.gapi.client.getToken().access_token;
 
-      logger.info(`Content size: ${contentStr.length} bytes`);
+      logger.debug(`Content size: ${contentStr.length} bytes`);
 
       // Upload the file, requesting valid fields in the response
       const response = await fetch(

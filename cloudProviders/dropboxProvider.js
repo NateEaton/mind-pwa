@@ -154,7 +154,7 @@ class DropboxProvider {
         throw new Error("Invalid authorization URL: " + authUrl);
       }
 
-      logger.info("Generated auth URL with state:", authUrl);
+      logger.debug("Generated auth URL with state:", authUrl);
       window.location.href = authUrl;
       return false; // We're redirecting, so auth is not complete yet
     } catch (error) {
@@ -162,7 +162,7 @@ class DropboxProvider {
 
       // Try fallback method if the first approach failed
       try {
-        logger.info("Trying fallback authentication method");
+        logger.warn("Trying fallback authentication method");
         const authUrl = this.dbx.getAuthenticationUrl(this.REDIRECT_URI);
         window.location.href = authUrl;
         return false;
@@ -182,12 +182,12 @@ class DropboxProvider {
    */
   async findOrCreateFile(filename) {
     try {
-      logger.info(`Searching for Dropbox file '${filename}'...`);
+      logger.debug(`Searching for Dropbox file '${filename}'...`);
       // Try to get file metadata
       const path = `/${filename}`;
       try {
         const response = await this.dbx.filesGetMetadata({ path });
-        logger.info(
+        logger.debug(
           `Found existing file: ${response.result.name} (ID: ${response.result.id})`
         );
         return {
@@ -196,23 +196,42 @@ class DropboxProvider {
           modifiedTime: response.result.server_modified,
         };
       } catch (error) {
-        // Check specifically for "not found" error
-        if (
-          error.status === 409 &&
-          error.error?.error?.[".tag"] === "path_lookup"
-        ) {
-          logger.info(`File '${filename}' not found, creating new file...`);
+        // Check specifically for "not found" error from Dropbox API
+        if (error.status === 409) {
+          logger.warn(`File '${filename}' not found, creating new file...`);
 
-          // Create an empty file
+          // Create parent folders first if needed
+          if (filename.includes("/")) {
+            try {
+              const folderPath = path.substring(0, path.lastIndexOf("/"));
+              if (folderPath) {
+                await this.dbx
+                  .filesCreateFolderV2({
+                    path: folderPath,
+                    autorename: false,
+                  })
+                  .catch((e) =>
+                    logger.info(`Parent folder creation result: ${e.message}`)
+                  );
+              }
+            } catch (folderError) {
+              logger.info(
+                `Note: Folder creation attempted: ${folderError.message}`
+              );
+              // Continue anyway - folder might already exist
+            }
+          }
+
+          // Now create the file with a direct path and overwrite mode
           try {
             const createResponse = await this.dbx.filesUpload({
               path,
               contents: JSON.stringify({}),
-              mode: "add",
+              mode: "overwrite", // Use overwrite instead of add for more reliability
               autorename: false,
             });
 
-            logger.info(
+            logger.debug(
               `Created new file: ${createResponse.result.name} (ID: ${createResponse.result.id})`
             );
             return {
@@ -221,55 +240,11 @@ class DropboxProvider {
               modifiedTime: createResponse.result.server_modified,
             };
           } catch (createError) {
-            // Handle creation errors specifically
-            if (
-              createError.status === 409 &&
-              createError.error?.error?.[".tag"] === "path_write_error"
-            ) {
-              logger.info(
-                `Error creating file - path issue, attempting workaround...`
-              );
-
-              // Try with a different approach - first check if parent folders exist
-              try {
-                const pathParts = path.split("/");
-                if (pathParts.length > 2) {
-                  const parentPath = pathParts.slice(0, -1).join("/");
-                  await this.dbx
-                    .filesCreateFolderV2({
-                      path: parentPath,
-                      autorename: false,
-                    })
-                    .catch((e) =>
-                      logger.info(`Parent folder creation: ${e.message}`)
-                    );
-                }
-
-                // Retry creation
-                const retryResponse = await this.dbx.filesUpload({
-                  path,
-                  contents: JSON.stringify({}),
-                  mode: "add",
-                  autorename: false,
-                });
-
-                logger.info(
-                  `Created new file after retry: ${retryResponse.result.name}`
-                );
-                return {
-                  id: retryResponse.result.id,
-                  name: retryResponse.result.name,
-                  modifiedTime: retryResponse.result.server_modified,
-                };
-              } catch (finalError) {
-                logger.warn(
-                  `Final creation attempt failed: ${finalError.message}`
-                );
-                throw finalError;
-              }
-            } else {
-              throw createError;
-            }
+            // Add detail to the error to help debug
+            logger.error(`Error creating file '${filename}':`, createError);
+            throw new Error(
+              `Failed to create Dropbox file '${filename}': ${createError.message}`
+            );
           }
         } else {
           // Not a "not found" error, rethrow
@@ -277,24 +252,7 @@ class DropboxProvider {
         }
       }
     } catch (error) {
-      // Last resort error handler
-      logger.error("Error finding/creating Dropbox file:", error);
-
-      // For connection issues or auth problems, give helpful message
-      if (error.status === 401 || error.name === "AuthError") {
-        logger.info("Authentication error - token may have expired");
-        throw new Error(
-          "Dropbox authentication failed. Please reconnect your account."
-        );
-      }
-
-      // For rate limiting
-      if (error.status === 429) {
-        logger.info("Dropbox rate limit reached - need to wait");
-        throw new Error("Dropbox rate limit reached. Please try again later.");
-      }
-
-      // Default error handling
+      logger.error("Error in Dropbox findOrCreateFile:", error);
       throw error;
     }
   }
@@ -306,114 +264,63 @@ class DropboxProvider {
    */
   async downloadFile(fileId) {
     try {
-      logger.info(`Downloading Dropbox file with ID: ${fileId}...`);
+      logger.debug(`Downloading Dropbox file with ID: ${fileId}...`);
 
-      // Try to get metadata first to check if file is empty
+      // Use a try-catch specifically for the download
       try {
-        const metadataResponse = await this.dbx.filesGetMetadata({
-          path: fileId,
-        });
-        logger.info(`File metadata:`, metadataResponse.result);
+        const response = await this.dbx.filesDownload({ path: fileId });
 
-        // Check if file size indicates it's empty
-        if (metadataResponse.result.size === 0) {
-          logger.info(
-            `File ${fileId} exists but is empty (0 bytes), returning empty object`
-          );
-          return {};
-        }
-      } catch (metaError) {
-        // If we can't get metadata, continue with download attempt
-        // but don't treat as error - file might not exist yet
-        if (metaError.status === 409) {
-          logger.info(
-            `File ${fileId} not found during metadata check - this is normal for first sync`
-          );
-        } else {
-          logger.info(`Couldn't get file metadata: ${metaError.message}`);
-        }
-      }
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
 
-      // Attempt to download the file
-      const response = await this.dbx.filesDownload({ path: fileId });
-
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-
-        reader.onload = () => {
-          try {
-            // Process the raw content
-            if (!reader.result) {
-              logger.info(
-                `No content received from Dropbox for file ${fileId}`
-              );
-              resolve({}); // Return empty object instead of null
-              return;
-            }
-
-            // Check for empty string
-            if (reader.result.trim() === "") {
-              logger.info(
-                `Empty content received from Dropbox for file ${fileId}`
-              );
-              resolve({}); // Return empty object for consistency
-              return;
-            }
-
-            // Try to parse as JSON
+          reader.onload = () => {
             try {
-              const data = JSON.parse(reader.result);
-
-              // Check if empty object
-              if (Object.keys(data).length === 0) {
-                logger.info(`File ${fileId} contains empty JSON object`);
-                resolve({}); // Return empty object consistently
+              // Handle empty content special cases
+              if (!reader.result || reader.result.trim() === "") {
+                logger.info(
+                  `Empty content for ${fileId}, returning empty object`
+                );
+                resolve({});
                 return;
               }
 
-              logger.info(
-                `Successfully downloaded and parsed file ${fileId} (${reader.result.length} bytes)`
-              );
-              resolve(data);
-            } catch (parseError) {
-              logger.info(`Content is not valid JSON: ${parseError.message}`);
-              // If not JSON, return as-is
-              resolve(reader.result);
+              // Try to parse as JSON
+              try {
+                const data = JSON.parse(reader.result);
+                logger.debug(
+                  `Successfully downloaded and parsed file ${fileId}`
+                );
+                resolve(data);
+              } catch (parseError) {
+                logger.warn(`Content is not valid JSON: ${parseError.message}`);
+                // Return empty object for invalid JSON
+                resolve({});
+              }
+            } catch (error) {
+              logger.warn(`Error processing content: ${error.message}`);
+              resolve({});
             }
-          } catch (error) {
-            logger.warn(
-              `Error processing file content for ${fileId}: ${error.message}`
-            );
-            resolve({}); // Return empty object on processing error
-          }
-        };
+          };
 
-        reader.onerror = () => {
-          logger.warn(`Error reading file ${fileId}`);
-          resolve({}); // Return empty object on read error
-        };
+          reader.onerror = () => {
+            logger.warn(`Error reading file ${fileId}`);
+            resolve({});
+          };
 
-        reader.readAsText(response.result.fileBlob);
-      });
+          reader.readAsText(response.result.fileBlob);
+        });
+      } catch (error) {
+        // Specifically handle 409 errors from Dropbox for missing files
+        if (error.status === 409) {
+          logger.info(`File ${fileId} not found - returning empty object`);
+          return {};
+        }
+        throw error;
+      }
     } catch (error) {
-      // Handle specific error codes gracefully
-      if (
-        error.status === 404 ||
-        (error.status === 409 && error.error?.error?.[".tag"] === "path_lookup")
-      ) {
-        logger.info(`File ${fileId} not found - this is normal for first sync`);
-        return null; // File not found
-      }
-
-      // Handle other request errors
-      if (error.status) {
-        logger.info(`Error downloading file ${fileId}: Status ${error.status}`);
-        return null;
-      }
-
-      // Only log unexpected errors as errors
-      logger.error(`Unexpected error downloading file ${fileId}:`, error);
-      throw error;
+      logger.error(`Unexpected error downloading Dropbox file:`, error);
+      // Return empty object instead of null for consistency
+      return {};
     }
   }
 
@@ -442,7 +349,7 @@ class DropboxProvider {
 
     try {
       const contentStr = JSON.stringify(content);
-      logger.info(`Content size: ${contentStr.length} bytes`);
+      logger.debug(`Content size: ${contentStr.length} bytes`);
 
       const response = await this.dbx.filesUpload({
         path: fileId,

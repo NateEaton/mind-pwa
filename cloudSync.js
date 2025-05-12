@@ -69,7 +69,7 @@ export class CloudSyncManager {
       const currentState = this.dataService.loadState();
       const metadata = currentState.metadata || {};
 
-      logger.info(
+      logger.debug(
         "Sync determination metadata:",
         JSON.stringify(metadata, null, 2)
       );
@@ -326,8 +326,6 @@ export class CloudSyncManager {
    * @returns {Promise<Object>} Result information
    */
   async syncCurrentWeek() {
-    logger.info("=== Starting Current Week Sync ===");
-
     try {
       // Define the filename for current week data
       const currentWeekFileName = "mind-diet-current-week.json";
@@ -537,7 +535,7 @@ export class CloudSyncManager {
    */
   mergeCurrentWeekData(localData, remoteData) {
     logger.info("Merging current week data:");
-    logger.info("LOCAL data:", {
+    logger.debug("LOCAL data:", {
       dayDate: localData.currentDayDate,
       weekStartDate: localData.currentWeekStartDate,
       lastModified: localData.lastModified,
@@ -549,7 +547,7 @@ export class CloudSyncManager {
       dateResetType: localData.metadata?.dateResetType,
     });
 
-    logger.info("REMOTE data:", {
+    logger.debug("REMOTE data:", {
       dayDate: remoteData.currentDayDate,
       weekStartDate: remoteData.currentWeekStartDate,
       lastModified: remoteData.lastModified,
@@ -562,7 +560,7 @@ export class CloudSyncManager {
     const remoteDateStr = remoteData.currentDayDate;
     const needsDateReset = todayStr !== remoteDateStr;
 
-    logger.info(
+    logger.trace(
       `System date: ${todayStr}, Remote date: ${remoteDateStr}, Needs reset: ${needsDateReset}`
     );
 
@@ -597,7 +595,7 @@ export class CloudSyncManager {
       localWeeklyResetTimestamp > 0 &&
       localData.metadata?.dateResetType === "WEEKLY";
 
-    logger.info("Reset status:", {
+    logger.trace("Reset status:", {
       dailyReset: dailyResetPerformed,
       weeklyReset: weeklyResetPerformed,
       previousWeekStartDate: localData.metadata?.previousWeekStartDate,
@@ -770,7 +768,7 @@ export class CloudSyncManager {
       logger.info("Flagged for post-sync date reset");
     }
 
-    logger.info("MERGED data:", {
+    logger.debug("MERGED data:", {
       dayDate: mergedData.currentDayDate,
       weekStartDate: mergedData.currentWeekStartDate,
       dailyUpdatedAt: mergedData.metadata.dailyTotalsUpdatedAt,
@@ -950,8 +948,6 @@ export class CloudSyncManager {
   }
 
   async syncHistoryIndex() {
-    logger.info("=== Starting History Index Sync ===");
-
     try {
       const historyIndexFileName = "mind-diet-history-index.json";
 
@@ -1201,7 +1197,7 @@ export class CloudSyncManager {
           fileInfo.id,
           localWeek
         );
-        logger.info(`Week ${weekStartDate} uploaded successfully`);
+        logger.debug(`Week ${weekStartDate} uploaded successfully`);
 
         // Store metadata after upload - IMPORTANT: skip verification download
         await this.storeFileMetadata(weekFileName, uploadResult || fileInfo);
@@ -1334,7 +1330,7 @@ export class CloudSyncManager {
             };
             await this.storeFileMetadata(indexFileName, metadataToStore);
 
-            logger.info(`Updated history index for week ${weekStartDate}`);
+            logger.debug(`Updated history index for week ${weekStartDate}`);
           }
         } catch (indexError) {
           logger.warn(
@@ -1352,8 +1348,6 @@ export class CloudSyncManager {
   }
 
   async syncHistory() {
-    logger.info("=== Starting History Sync ===");
-
     try {
       // First sync the index to determine which weeks need syncing
       const weeksToSync = await this.syncHistoryIndex();
@@ -1804,7 +1798,7 @@ export class CloudSyncManager {
         }
       }
 
-      logger.info(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
+      logger.debug(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
       return hasChanged;
     } catch (error) {
       logger.warn(`Error checking if file ${fileName} changed:`, error);

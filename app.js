@@ -491,7 +491,7 @@ function setupNetworkListeners() {
         rtt: navigator.connection.rtt,
         saveData: navigator.connection.saveData,
       };
-      logger.info("Connection details:", connectionDetails);
+      logger.debug("Connection details:", connectionDetails);
     });
   }
 }
@@ -505,11 +505,9 @@ async function initializeApp() {
   try {
     // 1. Initialize data service first
     await dataService.initialize();
-    logger.info("Data service initialized");
 
     // 2. Initialize state manager with food groups configuration
     await stateManager.initialize(foodGroups);
-    logger.info("State manager initialized");
 
     // 3. Check for date/week changes and perform resets if needed
     const dateChanged = await stateManager.checkDateAndReset();
@@ -519,7 +517,6 @@ async function initializeApp() {
 
     // 4. Initialize UI renderer
     uiRenderer.initialize();
-    logger.info("UI renderer initialized");
 
     // Render all UI components after initialization
     uiRenderer.renderEverything();
@@ -572,7 +569,7 @@ async function initializeApp() {
 async function initializeCloudSync() {
   // First, check if sync is enabled - exit early if not
   syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
-  logger.info("Initial syncEnabled value:", syncEnabled);
+  logger.debug("Initial syncEnabled value:", syncEnabled);
 
   if (!syncEnabled) {
     logger.info("Cloud sync is disabled in preferences");
@@ -922,7 +919,7 @@ function handleNavigation(event) {
  */
 function toggleMenu() {
   const menuBtn = document.getElementById("tab-menu-btn");
-  logger.info(
+  logger.debug(
     "Toggling menu, current state:",
     domElements.mainMenu.classList.contains("menu-open")
   );
@@ -940,7 +937,7 @@ function toggleMenu() {
   }
 
   domElements.mainMenu.classList.toggle("menu-open");
-  logger.info(
+  logger.debug(
     "Menu toggled, new state:",
     domElements.mainMenu.classList.contains("menu-open")
   );
@@ -1937,7 +1934,7 @@ function handleSyncError(error) {
 }
 
 async function syncData(silent = false, force = false) {
-  logger.info("syncData called", {
+  logger.debug("syncData called", {
     cloudSync,
     syncEnabled,
     syncReady,
@@ -1946,7 +1943,7 @@ async function syncData(silent = false, force = false) {
   });
 
   if (!cloudSync || !syncEnabled || !syncReady) {
-    logger.info("Sync skipped: not ready", {
+    logger.debug("Sync skipped: not ready", {
       cloudSync,
       syncEnabled,
       syncReady,
@@ -2118,14 +2115,14 @@ async function showSettings() {
       )
         ? "dropbox"
         : "gdrive";
-      logger.info("Active provider detected:", currentSyncProvider);
+      logger.debug("Active provider detected:", currentSyncProvider);
     } else {
       // Fall back to saved preference
       currentSyncProvider = await dataService.getPreference(
         "cloudSyncProvider",
         "gdrive"
       );
-      logger.info("Using saved provider preference:", currentSyncProvider);
+      logger.debug("Using saved provider preference:", currentSyncProvider);
     }
 
     // Get Wi-Fi only preference

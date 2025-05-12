@@ -195,7 +195,7 @@ function allRequiredElementsCached() {
  * @param {Object} action - The action that caused the state change
  */
 function handleStateChange(state, action) {
-  logger.info(`State changed due to action: ${action.type}`);
+  logger.debug(`State changed due to action: ${action.type}`);
 
   // Determine what to render based on the action type
   switch (action.type) {
@@ -916,8 +916,8 @@ function openModal(title, htmlContent, options = {}) {
   }
 
   // Debug output
-  logger.info("Modal opened with title:", title);
-  logger.info("Modal content length:", htmlContent ? htmlContent.length : 0);
+  logger.debug("Modal opened with title:", title);
+  logger.debug("Modal content length:", htmlContent ? htmlContent.length : 0);
 }
 
 /**
