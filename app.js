@@ -1898,11 +1898,6 @@ function handleSyncComplete(result) {
 
   // Only show success toast if there's a valid result
   if (result) {
-    // Show toast notification
-    uiRenderer.showToast("Data synced successfully", "success", {
-      duration: 5000,
-    });
-
     // If history was synced, re-render history view
     if (result.historySynced) {
       uiRenderer.renderHistory();
@@ -1933,13 +1928,12 @@ function handleSyncError(error) {
   }
 }
 
-async function syncData(silent = false, force = false) {
+async function syncData() {
   logger.debug("syncData called", {
     cloudSync,
     syncEnabled,
     syncReady,
     online: navigator.onLine,
-    force,
   });
 
   if (!cloudSync || !syncEnabled || !syncReady) {
@@ -1954,12 +1948,10 @@ async function syncData(silent = false, force = false) {
   // Check authentication status
   if (!cloudSync.isAuthenticated) {
     logger.info("Authentication needed before sync");
-    if (!silent) {
-      uiRenderer.showToast("Authenticating with cloud service...", "info", {
-        isPersistent: true,
-        showSpinner: true,
-      });
-    }
+    uiRenderer.showToast("Authenticating with cloud service...", "info", {
+      isPersistent: true,
+      showSpinner: true,
+    });
     try {
       const authResult = await cloudSync.authenticate();
       if (!authResult) {
@@ -1983,17 +1975,16 @@ async function syncData(silent = false, force = false) {
   // Add debugging of metadata to help trace the issue
   try {
     const state = dataService.loadState();
-    logger.info("Current state metadata before sync:", state.metadata);
+    logger.debug("Current state metadata before sync:", state.metadata);
   } catch (e) {
     logger.error("Error logging state metadata:", e);
   }
 
-  if (!silent) {
-    uiRenderer.showToast("Syncing data...", "info", {
+  const providerName = cloudSync.provider.constructor.name.includes("Dropbox") ? "Dropbox" : "Google Drive";
+  uiRenderer.showToast(`Syncing data with ${providerName}...`, "info", {
       isPersistent: true,
       showSpinner: true,
-    });
-  }
+  });
 
   try {
     logger.info("Starting sync operation");
@@ -2052,11 +2043,9 @@ async function syncData(silent = false, force = false) {
     logger.info("Refreshing UI after state reload");
     uiRenderer.renderEverything();
 
-    if (!silent) {
-      uiRenderer.showToast("Data synchronized successfully!", "success", {
-        duration: 3000,
-      });
-    }
+    uiRenderer.showToast(`Data synchronized successfully!`, "success", {
+      duration: 2000,
+    });
   } catch (error) {
     logger.error("Sync error:", error);
     handleSyncError(error);
