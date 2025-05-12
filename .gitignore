@@ -11,3 +11,4 @@ mind-diet*.json
 *.tmp
 *.bak
 scratch/*
+archive/*
