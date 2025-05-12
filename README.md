@@ -117,7 +117,7 @@ For detailed cloud sync documentation, see the [Cloud Sync Guide](../../wiki/Clo
 
 ## Development Acknowledgments
 
-This project was developed with assistance from several AI tools:
+This project was developed with assistance from several AI tools following the [vibe coding approach](https://en.wikipedia.org/wiki/Vibe_coding):
 
 - **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro Preview.
 - **Refactoring and Enhancement**: Major refactoring, code organization improvements, UI enhancements, and cloud synchronization features were developed with assistance from Anthropic's Claude Sonnet 3.7.
