@@ -293,6 +293,7 @@ let editedTotals = {}; // Temporary object holding edits within the modal
 let cloudSync = null;
 let syncEnabled = false;
 let syncReady = false;
+let sectionCollapseState = {}; // Track which sections are expanded/collapsed
 
 function setSyncReady(ready) {
   syncReady = ready;
@@ -309,11 +310,12 @@ window.setSyncReady = function (ready) {
 const domElements = {
   // Menu elements
   mainMenu: document.getElementById("main-menu"),
+  aboutBtn: document.getElementById("about-btn"),
+  settingsBtn: document.getElementById("settings-btn"),
+
   exportBtn: document.getElementById("export-btn"),
   importBtnTrigger: document.getElementById("import-btn-trigger"),
   importFileInput: document.getElementById("import-file-input"),
-  aboutBtn: document.getElementById("about-btn"),
-  settingsBtn: document.getElementById("settings-btn"),
 
   // Edit totals modal elements
   editCurrentWeekBtn: document.getElementById("edit-current-week-btn"),
@@ -389,10 +391,10 @@ function updateSyncUIElements() {
 
     // Optionally update button text based on state
     if (syncInProgress) {
-      menuSyncBtn.textContent = "Syncing...";
+      menuSyncBtn.textContent = "🔄 Syncing...";
       menuSyncBtn.classList.add("syncing");
     } else {
-      menuSyncBtn.textContent = "Sync Now";
+      menuSyncBtn.textContent = "🔄 Sync Now";
       menuSyncBtn.classList.remove("syncing");
     }
   }
@@ -726,7 +728,7 @@ function setupSyncButton() {
   if (!syncBtn) {
     syncBtn = document.createElement("button");
     syncBtn.id = "sync-btn";
-    syncBtn.textContent = "Sync Now";
+    syncBtn.textContent = "🔄 Sync Now";
 
     syncBtn.addEventListener("click", () => {
       logger.info("Sync button clicked");
@@ -739,11 +741,13 @@ function setupSyncButton() {
     syncLi.appendChild(syncBtn);
 
     // Find the Settings button's parent li element
-    const settingsLi = document.getElementById("settings-btn").closest("li");
+    const importLi = document
+      .getElementById("import-btn-trigger")
+      .closest("li");
 
     // Insert sync button after the Settings button
-    if (settingsLi && settingsLi.nextSibling) {
-      settingsLi.parentNode.insertBefore(syncLi, settingsLi.nextSibling);
+    if (importLi && importLi.nextSibling) {
+      importLi.parentNode.insertBefore(syncLi, importLi.nextSibling);
     } else {
       // Fallback: just append to the list
       const menuList = document.querySelector("#main-menu ul");
@@ -779,12 +783,6 @@ function setupEventListeners() {
   document.addEventListener("click", handleOutsideMenuClick);
 
   // Menu items
-  domElements.exportBtn.addEventListener("click", handleExport);
-  domElements.importBtnTrigger.addEventListener("click", triggerImport);
-  domElements.importFileInput.addEventListener(
-    "change",
-    handleImportFileSelect
-  );
   domElements.settingsBtn.addEventListener("click", handleSettings);
   domElements.userGuideBtn = document.getElementById("user-guide-btn");
   domElements.aboutBtn.addEventListener("click", handleAboutClick);
@@ -900,6 +898,13 @@ function setupEventListeners() {
       await showSettings();
     });
   }
+
+  domElements.exportBtn.addEventListener("click", handleExport);
+  domElements.importBtnTrigger.addEventListener("click", triggerImport);
+  domElements.importFileInput.addEventListener(
+    "change",
+    handleImportFileSelect
+  );
 }
 
 /**
@@ -1148,11 +1153,13 @@ async function handleAboutClick() {
 
   // Only add dev controls if in dev mode
   if (isDevMode) {
-    // Add development controls
-    const currentSyncProvider = await dataService.getPreference(
-      "cloudSyncProvider",
-      "gdrive"
-    );
+    // Get current cloud provider
+    let currentProvider = "None";
+    if (cloudSync && cloudSync.provider) {
+      currentProvider = cloudSync.provider.constructor.name.includes("Dropbox")
+        ? "Dropbox"
+        : "Google Drive";
+    }
 
     aboutContent += `
     <!-- Developer Testing Controls -->
@@ -1190,23 +1197,7 @@ async function handleAboutClick() {
           !dataService.isTestModeEnabled() ? "disabled" : ""
         }>Reset</button>
       </div>
-      
-      <!-- Cloud data reset controls -->
-      <div style="display: flex; align-items: center; margin-bottom: 10px;">
-        <label style="margin-right: 10px;">Cloud Data:</label>
-        <select id="cloud-provider-select" style="margin-right: 5px;">
-          <option value="gdrive" ${
-            currentSyncProvider === "gdrive" ? "selected" : ""
-          }>Google Drive</option>
-          <option value="dropbox" ${
-            currentSyncProvider === "dropbox" ? "selected" : ""
-          }>Dropbox</option>
-        </select>
-        <button id="clear-cloud-data" style="margin-left: 5px;" ${
-          !syncEnabled ? "disabled" : ""
-        }>Clear Files</button>
-      </div>
-      
+
       <div id="test-date-status" style="font-size: 12px; color: ${
         dataService.isTestModeEnabled() ? "#ff0000" : "#888"
       };">
@@ -1218,10 +1209,20 @@ async function handleAboutClick() {
             : "Test mode inactive (using real system date)"
         }
       </div>
+
+      <!-- Cloud data reset controls -->
+      <div style="display: flex; align-items: center; margin-bottom: 10px;">
+        <label style="margin-right: 10px;">Cloud Data:</label>
+        <span style="font-weight: bold; margin-right: 10px;">${currentProvider}</span>
+        <button id="view-cloud-files-btn" style="margin-left: 5px;" ${
+          !syncEnabled || currentProvider === "None" ? "disabled" : ""
+        }>View Files</button>
+      </div>
+      
       <div id="cloud-clear-status" style="font-size: 12px; color: #888;">
         ${
-          syncEnabled
-            ? "Will disable cloud sync after clearing files"
+          syncEnabled && currentProvider !== "None"
+            ? `Connected to ${currentProvider}`
             : "Cloud sync is not enabled"
         }
       </div>
@@ -1370,171 +1371,283 @@ function setupDevControlEventListeners() {
     });
   }
 
-  const cloudProviderSelect = document.getElementById("cloud-provider-select");
-  const clearCloudDataBtn = document.getElementById("clear-cloud-data");
-  const cloudClearStatus = document.getElementById("cloud-clear-status");
+  const viewFilesBtn = document.getElementById("view-cloud-files-btn");
+  if (viewFilesBtn) {
+    viewFilesBtn.addEventListener("click", async () => {
+      await showViewFilesDialog();
+    });
+  }
+}
 
-  // Event handler for the clear cloud data button
-  // Event handler for the clear cloud data button
-  if (clearCloudDataBtn) {
-    clearCloudDataBtn.addEventListener("click", async () => {
-      // Don't proceed if sync isn't enabled
-      if (!syncEnabled) {
-        uiRenderer.showToast(
-          "Cloud sync must be enabled to clear files",
-          "error"
-        );
-        return;
-      }
+async function showViewFilesDialog() {
+  if (!syncEnabled || !cloudSync || !cloudSync.provider) {
+    uiRenderer.showToast("Cloud sync must be connected", "error");
+    return;
+  }
 
-      const providerType = cloudProviderSelect.value;
+  const providerName = cloudSync.provider.constructor.name.includes("Dropbox")
+    ? "Dropbox"
+    : "Google Drive";
 
-      try {
-        // Disable the button while operation is in progress
-        clearCloudDataBtn.disabled = true;
+  try {
+    // Show loading toast
+    // uiRenderer.showToast(`Loading ${providerName} files...`, "info", {
+    //  isPersistent: true,
+    //  showSpinner: true,
+    //});
 
-        // Get file list first
-        const provider = cloudSync.provider;
+    // Get file list
+    let files = [];
+    const provider = cloudSync.provider;
 
-        // Show a temporary toast while gathering files
-        uiRenderer.showToast(`Gathering ${providerType} files...`, "info");
+    if (providerName === "Google Drive") {
+      const listResponse = await provider.gapi.client.drive.files.list({
+        spaces: "appDataFolder",
+        fields: "files(id, name, mimeType, modifiedTime, size)",
+        pageSize: 100,
+      });
+      files = listResponse.result.files || [];
+    } else if (providerName === "Dropbox") {
+      const listResponse = await provider.dbx.filesListFolder({
+        path: "",
+      });
+      files = listResponse.result.entries || [];
+    }
 
-        // Step 1: Get file list without deleting them
-        let files = [];
+    // Generate file list with checkboxes
+    let fileListHtml = "";
+    const fileCheckboxes = new Map(); // Store file data for download/delete
 
-        if (providerType === "gdrive") {
-          // For Google Drive, list files
-          const listResponse = await provider.gapi.client.drive.files.list({
-            spaces: "appDataFolder",
-            fields: "files(id, name, mimeType, modifiedTime, size)",
-            pageSize: 100, // Get up to 100 files
-          });
-          files = listResponse.result.files || [];
-        } else if (providerType === "dropbox") {
-          // For Dropbox, list files in the app folder
-          const listResponse = await provider.dbx.filesListFolder({
-            path: "", // Root of app folder
-          });
-          files = listResponse.result.entries || [];
-        }
+    if (files.length === 0) {
+      fileListHtml = "<p>No files found.</p>";
+    } else {
+      fileListHtml = `
+        <div style="margin-bottom: 10px;">
+          <label>
+            <input type="checkbox" id="select-all-files"> Select All
+          </label>
+        </div>
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+          <div id="file-list">
+      `;
 
-        // Generate file list HTML - limit to showing a reasonable number
-        const MAX_FILES_TO_SHOW = 20;
-        let fileListHtml = "";
+      files.sort((a, b) => {
+        const nameA = a.name || a.path_display || "";
+        const nameB = b.name || b.path_display || "";
+        return nameA.localeCompare(nameB);
+      });
 
-        if (files.length === 0) {
-          fileListHtml = "<p>No files found to delete.</p>";
-        } else {
-          fileListHtml = `<p><strong>${files.length} file${
-            files.length !== 1 ? "s" : ""
-          } found:</strong></p>`;
-          fileListHtml +=
-            '<div style="max-height: 200px; overflow-y: auto; margin: 8px 0; padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 12px;">';
+      files.forEach((file, index) => {
+        const fileName = file.name || file.path_display || "Unknown file";
+        const fileId = file.id || file.path_lower || `file-${index}`;
+        const modifiedDate = file.modifiedTime || file.server_modified || "";
+        const modifiedStr = modifiedDate
+          ? ` (${new Date(modifiedDate).toLocaleString()})`
+          : "";
 
-          // Sort files by name for consistent display
-          files.sort((a, b) => {
-            const nameA = a.name || a.path_display || "";
-            const nameB = b.name || b.path_display || "";
-            return nameA.localeCompare(nameB);
-          });
+        fileCheckboxes.set(fileId, file);
 
-          const filesToShow =
-            files.length > MAX_FILES_TO_SHOW
-              ? files.slice(0, MAX_FILES_TO_SHOW)
-              : files;
+        fileListHtml += `
+          <div style="margin-bottom: 8px;">
+            <label style="display: flex; align-items: center;">
+              <input type="checkbox" class="file-checkbox" data-file-id="${fileId}">
+              <span style="margin-left: 8px; font-family: monospace; font-size: 12px;">
+                ${fileName}${modifiedStr}
+              </span>
+            </label>
+          </div>
+        `;
+      });
 
-          filesToShow.forEach((file) => {
-            // Get file name based on provider
-            const fileName = file.name || file.path_display || "Unknown file";
-            // Format modified date if available
-            const modifiedDate =
-              file.modifiedTime || file.server_modified || "";
-            const modifiedStr = modifiedDate
-              ? ` (modified: ${new Date(modifiedDate).toLocaleString()})`
-              : "";
+      fileListHtml += `
+          </div>
+        </div>
+      `;
+    }
 
-            fileListHtml += `<div>${fileName}${modifiedStr}</div>`;
-          });
+    // Create dialog content
+    const dialogContent = `
+      <div style="margin-bottom: 15px;">
+        <button id="download-selected-btn" class="action-btn" style="margin-right: 10px;">
+          📥 Download Selected
+        </button>
+        <button id="delete-selected-btn" class="action-btn danger-btn">
+          🗑️ Delete Selected
+        </button>
+      </div>
+      ${fileListHtml}
+    `;
 
-          // Add indication if more files exist
-          if (files.length > MAX_FILES_TO_SHOW) {
-            fileListHtml += `<div>... and ${
-              files.length - MAX_FILES_TO_SHOW
-            } more files</div>`;
-          }
+    // Show the dialog
+    uiRenderer.openModal(`${providerName} Files`, dialogContent, {
+      showFooter: true,
+      buttons: [
+        {
+          label: "Close",
+          id: "close-files-btn",
+          class: "primary-btn",
+          onClick: () => uiRenderer.closeModal(),
+        },
+      ],
+    });
 
-          fileListHtml += "</div>";
-        }
+    // Disable buttons if no files
+    const downloadBtn = document.getElementById("download-selected-btn");
+    const deleteBtn = document.getElementById("delete-selected-btn");
 
-        // Show confirmation dialog with file list information
-        const confirmAction = await uiRenderer.showConfirmDialog({
-          title: "Confirm Cloud Data Clear",
-          message: `This will delete ${files.length} app data file${
-            files.length !== 1 ? "s" : ""
-          } from ${
-            providerType === "gdrive" ? "Google Drive" : "Dropbox"
-          } and disable cloud sync.\n\nDo you want to continue?`,
-          confirmText: "Clear Files",
-          cancelText: "Cancel",
-          details: `${fileListHtml}
-                 <p>Provider: ${
-                   providerType === "gdrive" ? "Google Drive" : "Dropbox"
-                 }</p>
-                 <p>Note: You'll need to manually re-enable cloud sync in Settings after this operation.</p>`,
+    if (files.length === 0) {
+      if (downloadBtn) downloadBtn.disabled = true;
+      if (deleteBtn) deleteBtn.disabled = true;
+    }
+
+    // Set up event listeners
+    const selectAllCheckbox = document.getElementById("select-all-files");
+    const fileCheckboxElements = document.querySelectorAll(".file-checkbox");
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener("change", (e) => {
+        fileCheckboxElements.forEach((cb) => {
+          cb.checked = e.target.checked;
         });
+      });
+    }
 
-        if (!confirmAction) {
-          uiRenderer.showToast("Operation cancelled", "info");
-          clearCloudDataBtn.disabled = false;
+    // Download selected button
+    //const downloadBtn = document.getElementById("download-selected-btn");
+    if (downloadBtn) {
+      downloadBtn.addEventListener("click", async () => {
+        const selectedFiles = Array.from(fileCheckboxElements)
+          .filter((cb) => cb.checked)
+          .map((cb) => {
+            const fileId = cb.dataset.fileId;
+            return fileCheckboxes.get(fileId);
+          });
+
+        if (selectedFiles.length === 0) {
+          uiRenderer.showToast("No files selected", "warning");
           return;
         }
 
-        // Close the About dialog before the background operation starts
-        uiRenderer.closeModal();
+        // Handle downloads
+        if (selectedFiles.length === 1) {
+          await downloadCloudFile(selectedFiles[0], providerName);
+        } else {
+          // For multiple files, prompt user for approach
+          const approach = await uiRenderer.showConfirmDialog({
+            title: "Download Multiple Files",
+            message: "How would you like to download the selected files?",
+            confirmText: "One at a time",
+            cancelText: "Cancel",
+            details: `<p>Selected ${selectedFiles.length} files for download.</p>
+                     <p>Note: Some browsers may block multiple automatic downloads.</p>`,
+          });
 
-        // Show a progress toast for the deletion
-        uiRenderer.showToast(
-          `Deleting ${files.length} cloud files...`,
-          "info",
-          { isPersistent: true, showSpinner: true }
-        );
-
-        // Step 2: Actually clear the files
-        const deletedCount = await provider.clearAllAppDataFiles();
-
-        // Disable cloud sync
-        syncEnabled = false;
-        await dataService.savePreference("cloudSyncEnabled", false);
-
-        // If we have an active cloudSync object, clean it up
-        if (cloudSync) {
-          if (cloudSync.autoSyncTimer) {
-            cloudSync.stopAutoSync();
+          if (approach) {
+            // Download one at a time with small delay
+            for (const file of selectedFiles) {
+              await downloadCloudFile(file, providerName);
+              await new Promise((resolve) => setTimeout(resolve, 500)); // Small delay
+            }
           }
-          // Set to null to fully release it
-          cloudSync = null;
+        }
+      });
+    }
+
+    // Delete selected button
+    //const deleteBtn = document.getElementById("delete-selected-btn");
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async () => {
+        const selectedFiles = Array.from(fileCheckboxElements)
+          .filter((cb) => cb.checked)
+          .map((cb) => {
+            const fileId = cb.dataset.fileId;
+            return fileCheckboxes.get(fileId);
+          });
+
+        if (selectedFiles.length === 0) {
+          uiRenderer.showToast("No files selected", "warning");
+          return;
         }
 
-        // Update UI elements to reflect disabled sync
-        updateSyncUIElements();
+        const confirmed = await uiRenderer.showConfirmDialog({
+          title: "Confirm Delete",
+          message: `Are you sure you want to delete ${selectedFiles.length} file(s)?`,
+          confirmText: "Delete",
+          cancelText: "Cancel",
+          details: `<p>This action cannot be undone.</p>`,
+        });
 
-        // Show success toast with longer duration
-        uiRenderer.showToast(
-          `Success! Deleted ${deletedCount} cloud files and disabled sync.`,
-          "success",
-          { duration: 3000 }
-        );
-      } catch (error) {
-        logger.error("Error clearing cloud data:", error);
-        uiRenderer.showToast(
-          `Error clearing cloud files: ${error.message}`,
-          "error",
-          { duration: 5000 }
-        );
-      } finally {
-        clearCloudDataBtn.disabled = false;
-      }
+        if (confirmed) {
+          await deleteCloudFiles(selectedFiles, providerName);
+          // Refresh the dialog
+          // await showViewFilesDialog();
+        }
+      });
+    }
+  } catch (error) {
+    logger.error("Error loading cloud files:", error);
+    uiRenderer.showToast(`Error: ${error.message}`, "error");
+  }
+}
+
+// Helper function to download a cloud file
+async function downloadCloudFile(file, providerName) {
+  try {
+    const fileName = file.name || file.path_display || "unknown-file";
+    const fileId = file.id || file.path_lower;
+
+    uiRenderer.showToast(`Downloading ${fileName}...`, "info", {
+      isPersistent: true,
+      showSpinner: true,
     });
+
+    // Download the file content
+    const content = await cloudSync.provider.downloadFile(fileId);
+
+    // Convert to JSON string
+    const jsonString = JSON.stringify(content, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    // Create download link
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    uiRenderer.showToast(`Downloaded ${fileName}`, "success");
+  } catch (error) {
+    logger.error(`Error downloading file:`, error);
+    uiRenderer.showToast(`Download failed: ${error.message}`, "error");
+  }
+}
+
+// Helper function to delete cloud files
+async function deleteCloudFiles(files, providerName) {
+  let deletedCount = 0;
+
+  try {
+    for (const file of files) {
+      const fileName = file.name || file.path_display || "unknown-file";
+      const fileId = file.id || file.path_lower;
+
+      if (providerName === "Google Drive") {
+        await cloudSync.provider.gapi.client.drive.files.delete({ fileId });
+      } else if (providerName === "Dropbox") {
+        await cloudSync.provider.dbx.filesDelete({ path: fileId });
+      }
+
+      deletedCount++;
+      logger.info(`Deleted file: ${fileName}`);
+    }
+
+    uiRenderer.showToast(`Deleted ${deletedCount} file(s)`, "success");
+  } catch (error) {
+    logger.error("Error deleting files:", error);
+    uiRenderer.showToast(`Delete failed: ${error.message}`, "error");
   }
 }
 
@@ -1980,10 +2093,12 @@ async function syncData() {
     logger.error("Error logging state metadata:", e);
   }
 
-  const providerName = cloudSync.provider.constructor.name.includes("Dropbox") ? "Dropbox" : "Google Drive";
+  const providerName = cloudSync.provider.constructor.name.includes("Dropbox")
+    ? "Dropbox"
+    : "Google Drive";
   uiRenderer.showToast(`Syncing data with ${providerName}...`, "info", {
-      isPersistent: true,
-      showSpinner: true,
+    isPersistent: true,
+    showSpinner: true,
   });
 
   try {
@@ -2222,15 +2337,25 @@ async function showSettings() {
     document
       .querySelectorAll(".section-header.collapsible")
       .forEach((header) => {
-        header.addEventListener("click", () => {
-          // Toggle the section content visibility
-          const content = header.nextElementSibling;
-          content.style.display =
-            content.style.display === "none" ? "block" : "none";
+        const sectionName = header.dataset.section;
 
-          // Toggle the arrow icon
-          const toggle = header.querySelector(".section-toggle");
-          toggle.textContent = content.style.display === "none" ? "▶" : "▼";
+        // Apply saved state or default to collapsed
+        const isExpanded = sectionCollapseState[sectionName] === true;
+        const content = header.nextElementSibling;
+        const toggle = header.querySelector(".section-toggle");
+
+        if (isExpanded) {
+          content.style.display = "block";
+          toggle.textContent = "▼";
+        }
+
+        header.addEventListener("click", () => {
+          const isCurrentlyExpanded = content.style.display !== "none";
+          content.style.display = isCurrentlyExpanded ? "none" : "block";
+          toggle.textContent = isCurrentlyExpanded ? "▶" : "▼";
+
+          // Save the state
+          sectionCollapseState[sectionName] = !isCurrentlyExpanded;
         });
       });
 

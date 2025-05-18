@@ -61,19 +61,18 @@
     <!-- ***** ADD MENU STRUCTURE (Initially Hidden by CSS) ***** -->
     <div id="main-menu" class="main-menu">
         <ul>
-            <li><button id="export-btn">Export Data</button></li>
-            <li><button id="import-btn-trigger">Import Data</button></li>
-            <li><button id="settings-btn">Settings</button></li>
-            <li><button id="user-guide-btn">User Guide</button></li>
-            <li><button id="about-btn">About</button></li>
+            <li><button id="export-btn">📤 Export Data</button></li>
+            <li><button id="import-btn-trigger">📥 Import Data</button></li>
+            <li class="menu-divider"></li>
+            <li><button id="settings-btn">⚙️ Settings</button></li>
+            <li><button id="user-guide-btn">📘 User Guide</button></li>
+            <li><button id="about-btn">ℹ️ About</button></li>
         </ul>
     </div>
     <!-- ********************************************************** -->
 
-    <!-- ***** ADD HIDDEN FILE INPUT FOR IMPORT ***** -->
-    <input type="file" id="import-file-input" accept=".json" style="display: none;">
-    <!-- ****************************************** -->
-   
+    <input type="file" id="import-file-input" accept=".json" style="display:none">
+
     <main id="app-container">
 
         <!-- Daily Tracker View -->
