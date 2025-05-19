@@ -12,3 +12,4 @@ mind-diet*.json
 *.bak
 scratch/*
 archive/*
+@eaDir/*
