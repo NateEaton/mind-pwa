@@ -46,16 +46,15 @@ const LOCAL_STORAGE_KEY = "mindTrackerState";
 
 // Schema version and structure
 const SCHEMA = {
-  VERSION: 2, // Increment from 1 to 2
+  VERSION: 3, // Increment schema version due to significant model change
   CURRENT_STATE: {
-    currentDayDate: String,
-    currentWeekStartDate: String,
-    dailyCounts: Object,
-    weeklyCounts: Object,
+    currentDayDate: String, // YYYY-MM-DD
+    currentWeekStartDate: String, // YYYY-MM-DD (Sunday or Monday based on preference)
+    selectedTrackerDate: String, // YYYY-MM-DD, the date being viewed/edited in tracker
+    dailyCounts: Object, // { "YYYY-MM-DD": { foodGroupId: count, ... }, ... }
+    weeklyCounts: Object, // { foodGroupId: totalCountForWeek, ... }
     lastModified: Number, // Timestamp
-    // Add metadata structure here as a nested object
     metadata: {
-      // Existing fields
       schemaVersion: Number,
       deviceId: String,
       currentWeekDirty: Boolean, // Legacy field for backward compatibility
@@ -63,7 +62,7 @@ const SCHEMA = {
       dateResetPerformed: Boolean,
       dateResetType: String, // "DAILY" or "WEEKLY"
       dateResetTimestamp: Number,
-      // New fields for separate tracking
+      weekStartDay: String, // "Sunday" or "Monday"
       dailyTotalsUpdatedAt: Number,
       dailyTotalsDirty: Boolean,
       dailyResetTimestamp: Number,
@@ -82,15 +81,17 @@ const SCHEMA = {
     id: String, // uuid
     weekStartDate: String, // Primary key
     weekEndDate: String,
-    totals: Object,
+    dailyBreakdown: Object, // { "YYYY-MM-DD": { foodGroupId: count, ... }, ... } for the 7 days of this week
+    totals: Object, // Summed weekly totals { foodGroupId: totalCount, ... }
     targets: Object,
     metadata: {
       createdAt: Number, // Timestamp
       updatedAt: Number, // Timestamp
       schemaVersion: Number,
       deviceInfo: String,
-      syncStatus: String, // 'local', 'synced', 'conflict'
-      mergedAfterReset: Boolean, // New field to track post-reset merges
+      syncStatus: String, // 'local', 'synced', 'conflict', 'imported'
+      mergedAfterReset: Boolean,
+      weekStartDay: String, // "Sunday" or "Monday" at the time of archival
     },
   },
   PREFERENCES: {
@@ -161,32 +162,32 @@ function getDeviceId() {
 /**
  * Get the start date of the week containing the given date
  * @param {Date|string} d - The date to get the week start for
- * @param {string} startDay - Day to start the week on (default: 'Sunday')
+ * @param {string} [startDayPref="Sunday"] - Day to start the week on ("Sunday" or "Monday")
  * @returns {string} YYYY-MM-DD formatted string of the week start date
  */
-function getWeekStartDate(d, startDay = "Sunday") {
-  d = d || getCurrentDate();
-  const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+function getWeekStartDate(d, startDayPref = "Sunday") {
+  // Ensure d is a Date object. If string, assume YYYY-MM-DD and parse in local time.
+  const dateObj =
+    d instanceof Date ? new Date(d.getTime()) : new Date(d + "T00:00:00");
+  const day = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
   let diff;
 
-  if (startDay === "Sunday") {
-    // If Sunday is the start day, the difference is just the current date's day number
-    diff = d.getDate() - day;
+  if (startDayPref === "Sunday") {
+    diff = dateObj.getDate() - day;
   } else {
-    // Default to Monday logic if not Sunday (for future use or if called explicitly)
+    // Monday start
     // Adjust when day is Sunday (0) to go back to the previous Monday (-6 days)
     // Otherwise, go back (day - 1) days to get to Monday
-    diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    diff = dateObj.getDate() - day + (day === 0 ? -6 : 1);
   }
 
-  const weekStart = new Date(d.setDate(diff));
+  const weekStart = new Date(dateObj.setDate(diff));
   weekStart.setHours(0, 0, 0, 0); // Set to midnight
 
-  // Format using local components
   const year = weekStart.getFullYear();
   const month = String(weekStart.getMonth() + 1).padStart(2, "0");
   const dayOfMonth = String(weekStart.getDate()).padStart(2, "0");
-  return `${year}-${month}-${dayOfMonth}`; // Return local YYYY-MM-DD
+  return `${year}-${month}-${dayOfMonth}`;
 }
 
 /**
@@ -366,49 +367,67 @@ async function dbOperation(storeName, mode, operation) {
  * @param {Object} [options.existingRecord] - Existing record for this week if any
  * @param {Object} [options.foodGroups] - Food groups configuration to build targets
  * @param {Object} [options.importInfo] - Information about an import if this is from import
+ * @param {string} [options.weekStartDay="Sunday"] - The week start day setting for this record
  * @returns {Object} Normalized history record
  */
 function normalizeWeekData(weekData, options = {}) {
   const now = getCurrentTimestamp();
   const weekStartDate = weekData.weekStartDate;
+  if (!weekStartDate) {
+    logger.error("normalizeWeekData: weekStartDate is required.", weekData);
+    throw new Error("weekStartDate is required for normalizing week data.");
+  }
   const existingRecord = options.existingRecord || null;
+  const weekStartDayPref = options.weekStartDay || "Sunday"; // Get from options or default
 
-  // Build targets object
   let targets = weekData.targets || {};
-
-  // If targets not provided but we have foodGroups, build them
-  if (Object.keys(targets).length === 0 && options.foodGroups) {
+  if (
+    Object.keys(targets).length === 0 &&
+    options.foodGroups &&
+    Array.isArray(options.foodGroups)
+  ) {
     options.foodGroups.forEach((group) => {
       targets[group.id] = {
         target: group.target,
         frequency: group.frequency,
         type: group.type,
         unit: group.unit,
+        // Optionally store name for historical context if foodGroups config changes
+        name: group.name,
       };
     });
   }
 
-  // Build metadata
   const metadata = {
     createdAt: existingRecord?.metadata?.createdAt || now,
-    updatedAt: options.updatedAt || now, // Use provided timestamp or current time
+    updatedAt: options.updatedAt || now,
     schemaVersion: SCHEMA.VERSION,
     deviceInfo: getDeviceInfo(),
     deviceId: getDeviceId(),
     syncStatus: options.importInfo ? "imported" : options.syncStatus || "local",
+    weekStartDay: weekStartDayPref, // Store the week start day setting
+    mergedAfterReset:
+      existingRecord?.metadata?.mergedAfterReset ||
+      weekData.metadata?.mergedAfterReset ||
+      false,
   };
 
-  // Add import details if available
   if (options.importInfo) {
     metadata.importedFrom = options.importInfo.deviceId || "unknown";
+    metadata.importTimestamp = options.importInfo.timestamp || now;
   }
 
-  // Create normalized record structure
+  // Ensure totals is an object
+  const totals = weekData.totals || weekData.weeklyCounts || {};
+  // Ensure dailyBreakdown is an object if provided, otherwise default to empty
+  const dailyBreakdown = weekData.dailyBreakdown || {};
+
   return {
-    id: existingRecord?.id || generateUUID(),
+    id: existingRecord?.id || weekData.id || generateUUID(),
     weekStartDate: weekStartDate,
-    weekEndDate: getWeekEndDate(weekStartDate),
-    totals: weekData.totals || weekData.weeklyCounts || {},
+    weekEndDate: getWeekEndDate(weekStartDate), // Recalculate based on actual weekStartDate
+    dailyBreakdown: dailyBreakdown, // New: store the daily breakdown
+    totals: totals, // Still store summed weekly totals
     targets: targets,
     metadata: metadata,
   };
@@ -416,14 +435,18 @@ function normalizeWeekData(weekData, options = {}) {
 
 /**
  * Save a week's history data to IndexedDB with normalized structure
- * @param {Object} weekData - The week data to save
- * @param {Object} [options] - Additional options
+ * @param {Object} weekData - The week data to save (should include weekStartDate, totals, and optionally dailyBreakdown)
+ * @param {Object} [options] - Additional options (like foodGroups for targets, weekStartDay preference)
  * @returns {Promise<void>} Promise that resolves when save is complete
  */
 async function saveWeekHistory(weekData, options = {}) {
   const weekStartDate = weekData.weekStartDate;
+  if (!weekStartDate) {
+    return Promise.reject(
+      new Error("weekStartDate is required to save week history.")
+    );
+  }
 
-  // Get the existing record if it exists
   let existingRecord = null;
   try {
     existingRecord = await dbOperation(
@@ -432,54 +455,53 @@ async function saveWeekHistory(weekData, options = {}) {
       (store, transaction, resolve, reject) => {
         const request = store.get(weekStartDate);
         request.onsuccess = () => resolve(request.result);
-        request.onerror = (event) =>
-          reject(
-            new Error(`Error fetching existing record: ${event.target.error}`)
+        request.onerror = (event) => {
+          logger.warn(
+            `Error fetching existing history record for ${weekStartDate}: ${event.target.error?.message}`
           );
+          resolve(null); // Resolve with null instead of rejecting to allow overwrite/creation
+        };
       }
     );
   } catch (error) {
-    logger.warn(`Could not check for existing record: ${error.message}`);
+    logger.warn(
+      `Could not check for existing history record ${weekStartDate}: ${error.message}`
+    );
   }
 
-  // Create normalized record structure
-  const normalizedRecord = normalizeWeekData(weekData, {
+  // Pass the weekStartDay preference to normalizeWeekData
+  const normalizeOptions = {
     existingRecord,
-    ...options,
-  });
+    ...options, // foodGroups, importInfo, etc.
+    weekStartDay:
+      options.weekStartDay || (await getPreference("weekStartDay", "Sunday")), // Get from options or preference
+  };
+  const normalizedRecord = normalizeWeekData(weekData, normalizeOptions);
 
-  // Save the normalized record
   return dbOperation(
     STORES.HISTORY,
     "readwrite",
     (store, transaction, resolve, reject) => {
       const request = store.put(normalizedRecord);
       request.onsuccess = () => {
-        logger.info("Week data saved successfully:", weekStartDate);
-
-        // Log the change for future sync
+        logger.info("Week data saved successfully to history:", weekStartDate);
         logSyncChange(
           "history",
-          "update",
-          normalizedRecord.id,
-          normalizedRecord
+          existingRecord ? "update" : "create", // More specific operation
+          normalizedRecord.id, // Use record ID (UUID)
+          { weekStartDate: normalizedRecord.weekStartDate } // Minimal data for log
         );
-
-        // Mark history as dirty in current state metadata
-        try {
-          const currentState = loadState();
-          if (currentState.metadata) {
-            currentState.metadata.historyDirty = true;
-            saveState(currentState);
-          }
-        } catch (e) {
-          logger.warn("Could not update historyDirty flag:", e);
-        }
-
+        // No need to mark historyDirty in current state metadata here, stateManager will do it.
         resolve();
       };
-      request.onerror = (event) =>
-        reject(new Error(`Error saving week data: ${event.target.error}`));
+      request.onerror = (event) => {
+        logger.error(
+          `Error saving week data for ${weekStartDate} to history: ${event.target.error?.message}`
+        );
+        reject(
+          new Error(`Error saving week data: ${event.target.error?.message}`)
+        );
+      };
     }
   );
 }
@@ -851,74 +873,136 @@ async function getPendingSyncChanges(since = 0) {
  */
 function loadState() {
   try {
-    const savedState =
-      JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || {};
-    const today = getTodayDateString();
-    const currentWeekStart = getWeekStartDate(getCurrentDate());
+    const savedStateString = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const savedState = savedStateString ? JSON.parse(savedStateString) : {};
 
-    // Check if this is a fresh install with no local data
-    const isFreshInstall = !localStorage.getItem(LOCAL_STORAGE_KEY);
+    const today = getTodayDateString(); // Uses dataService.getCurrentDate()
 
-    // Set timestamp - use a very old date (Jan 1, 2025) for fresh installs
-    // This ensures any cloud data will be considered newer
+    // --- Determine weekStartDay Preference ---
+    // This is a bit tricky because preferences are in IndexedDB and might not be loaded yet.
+    // For initial loadState, we might have to rely on a localStorage cache of this specific preference
+    // or use a hardcoded default and let stateManager/app fully initialize it later.
+    // Let's assume a default for now and stateManager will load the actual preference.
+    // The app should call dataService.getPreference('weekStartDay') once DB is up
+    // and potentially re-evaluate/update currentWeekStartDate if needed.
+    const weekStartDayPrefDefault = "Sunday"; // Hardcoded default for this function's scope
+    // If you have a mechanism to quickly get this preference (e.g., cached in localStorage by settings save), use it.
+    // For example: const weekStartDayPref = localStorage.getItem('mindTrackerWeekStartDayPref') || "Sunday";
+
+    const currentWeekStart = getWeekStartDate(
+      getCurrentDate(),
+      savedState.metadata?.weekStartDay || weekStartDayPrefDefault
+    );
+
+    const isFreshInstall = !savedStateString;
     const now = getCurrentTimestamp();
-    const oldTimestamp = new Date("2025-01-01T00:00:00").getTime();
+    const veryOldTimestamp = new Date("2024-01-01T00:00:00").getTime(); // Ensure this is truly old
+
     const lastModified = isFreshInstall
-      ? oldTimestamp
+      ? veryOldTimestamp
       : savedState.lastModified || now;
 
-    // Start with metadata loaded from savedState, default to empty object if none exists
+    // --- Metadata Handling ---
     const loadedMetadata = savedState.metadata || {};
-
-    // For fresh installs, add a special flag to indicate this is initial data
-    if (isFreshInstall) {
-      logger.info(
-        "Fresh install detected - using old timestamp:",
-        new Date(oldTimestamp).toISOString()
-      );
-    }
-
-    // Merge loaded metadata with essential/default metadata properties
-    const normalizedMetadata = {
-      ...loadedMetadata, // Keep all existing metadata properties
+    const defaultMetadataForFreshInstall = {
       schemaVersion: SCHEMA.VERSION,
       deviceId: getDeviceId(),
-      isFreshInstall: isFreshInstall || loadedMetadata.isFreshInstall || false,
+      isFreshInstall: true,
+      weekStartDay: weekStartDayPrefDefault, // Default for fresh install
+      currentWeekDirty: false, // Legacy compatibility, default to false
+      historyDirty: false,
+      dateResetPerformed: false,
+      dateResetType: null,
+      dateResetTimestamp: 0,
+      dailyTotalsUpdatedAt: 0, // Use 0 for fresh install
+      dailyTotalsDirty: false,
+      dailyResetTimestamp: 0,
+      weeklyTotalsUpdatedAt: 0, // Use 0 for fresh install
+      weeklyTotalsDirty: false,
+      weeklyResetTimestamp: 0,
+      previousWeekStartDate: null,
+      pendingDateReset: false,
+      remoteDateWas: null,
     };
 
-    // Apply schema validation and normalization
+    const normalizedMetadata = isFreshInstall
+      ? defaultMetadataForFreshInstall
+      : {
+          ...defaultMetadataForFreshInstall, // Start with defaults to ensure all fields
+          ...loadedMetadata, // Then overwrite with loaded values
+          isFreshInstall: false, // Not a fresh install if we loaded metadata
+          schemaVersion: SCHEMA.VERSION, // Always use current schema version
+          deviceId: getDeviceId(), // Ensure deviceId is current
+          weekStartDay: loadedMetadata.weekStartDay || weekStartDayPrefDefault, // Ensure present
+        };
+
+    // --- State Normalization ---
     const normalizedState = {
       currentDayDate: savedState.currentDayDate || today,
       currentWeekStartDate: savedState.currentWeekStartDate || currentWeekStart,
-      dailyCounts: savedState.dailyCounts || {},
+      selectedTrackerDate: savedState.selectedTrackerDate || today,
+      dailyCounts: savedState.dailyCounts || {}, // Default to empty map
       weeklyCounts: savedState.weeklyCounts || {},
-      lastModified: lastModified, // Use old timestamp for fresh installs
+      lastModified: lastModified,
       metadata: normalizedMetadata,
     };
 
-    logger.debug("Loaded state:", normalizedState);
+    // Ensure an entry for selectedTrackerDate exists in dailyCounts
+    if (!normalizedState.dailyCounts[normalizedState.selectedTrackerDate]) {
+      normalizedState.dailyCounts[normalizedState.selectedTrackerDate] = {};
+    }
+    // If it's a truly fresh install and currentDayDate has no entry after above, add it.
+    if (isFreshInstall && !normalizedState.dailyCounts[today]) {
+      normalizedState.dailyCounts[today] = {};
+    }
+
+    logger.debug("Loaded state:", JSON.parse(JSON.stringify(normalizedState)));
     return normalizedState;
   } catch (error) {
-    logger.error("Error loading state from localStorage:", error);
-    // Return a default state with essential metadata on error
+    logger.error(
+      "Error loading state from localStorage, returning default state:",
+      error
+    );
     const today = getTodayDateString();
-    const currentWeekStart = getWeekStartDate(getCurrentDate());
-    const oldTimestamp = new Date("2025-01-01T00:00:00").getTime();
+    const weekStartDayPrefDefaultOnError = "Sunday"; // Consistent default
+    const currentWeekStartOnError = getWeekStartDate(
+      getCurrentDate(),
+      weekStartDayPrefDefaultOnError
+    );
+    const veryOldTimestampOnError = new Date("2024-01-01T00:00:00").getTime();
+
+    // This is the critical part that needed full expansion
+    const fallbackMetadata = {
+      schemaVersion: SCHEMA.VERSION,
+      deviceId: getDeviceId(),
+      isFreshInstall: true, // Clearly a fresh/error state
+      weekStartDay: weekStartDayPrefDefaultOnError,
+      currentWeekDirty: false, // Legacy
+      historyDirty: false,
+      dateResetPerformed: false,
+      dateResetType: null,
+      dateResetTimestamp: 0,
+      dailyTotalsUpdatedAt: 0,
+      dailyTotalsDirty: false,
+      dailyResetTimestamp: 0,
+      weeklyTotalsUpdatedAt: 0,
+      weeklyTotalsDirty: false,
+      weeklyResetTimestamp: 0,
+      previousWeekStartDate: null,
+      pendingDateReset: false,
+      remoteDateWas: null,
+      // Ensure any other critical metadata fields from your SCHEMA.CURRENT_STATE.metadata
+      // have their default values here.
+    };
 
     return {
       currentDayDate: today,
-      currentWeekStartDate: currentWeekStart,
-      dailyCounts: {},
+      currentWeekStartDate: currentWeekStartOnError,
+      selectedTrackerDate: today,
+      dailyCounts: { [today]: {} }, // Initialize with an empty entry for today
       weeklyCounts: {},
-      lastModified: oldTimestamp, // Very old timestamp for fresh installs
-      metadata: {
-        schemaVersion: SCHEMA.VERSION,
-        deviceId: getDeviceId(),
-        currentWeekDirty: false,
-        historyDirty: false,
-        dateResetPerformed: false,
-        isFreshInstall: true,
-      },
+      lastModified: veryOldTimestampOnError,
+      metadata: fallbackMetadata,
     };
   }
 }
@@ -930,42 +1014,38 @@ function loadState() {
  */
 function saveState(state) {
   try {
-    // Ensure the state has a proper structure before saving
     const now = getCurrentTimestamp();
 
-    // Ensure we preserve the existing metadata
     const normalizedState = {
       currentDayDate: state.currentDayDate,
       currentWeekStartDate: state.currentWeekStartDate,
-      dailyCounts: state.dailyCounts || {},
+      selectedTrackerDate: state.selectedTrackerDate, // Add this
+      dailyCounts: state.dailyCounts || {}, // Add this (the map)
       weeklyCounts: state.weeklyCounts || {},
-      lastModified: now, // Keep this for backward compatibility
-      // Enhanced metadata with separate timestamps
+      lastModified: now, // This represents overall state modification
       metadata: {
-        ...(state.metadata || {}), // Spread existing metadata to preserve all flags
+        ...(state.metadata || {}),
         schemaVersion: SCHEMA.VERSION,
         deviceId: getDeviceId(),
-        // Daily totals timestamps
-        dailyTotalsUpdatedAt: state.metadata?.dailyTotalsUpdatedAt || now,
-        dailyTotalsDirty: state.metadata?.dailyTotalsDirty || false,
-        dailyResetTimestamp: state.metadata?.dailyResetTimestamp || 0,
-        // Weekly totals timestamps
-        weeklyTotalsUpdatedAt: state.metadata?.weeklyTotalsUpdatedAt || now,
-        weeklyTotalsDirty: state.metadata?.weeklyTotalsDirty || false,
-        weeklyResetTimestamp: state.metadata?.weeklyResetTimestamp || 0,
-        // Previous week data (for weekly reset handling)
-        previousWeekStartDate: state.metadata?.previousWeekStartDate || null,
+        weekStartDay: state.metadata?.weekStartDay || "Sunday", // Persist weekStartDay
+        // Update metadata timestamps if they reflect actual data changes
+        // dailyTotalsUpdatedAt, weeklyTotalsUpdatedAt should be updated by stateManager actions
       },
     };
 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedState));
-    logger.debug("Saved state with timestamp:", now);
+    logger.debug(
+      "Saved state with timestamp:",
+      now,
+      "State:",
+      JSON.parse(JSON.stringify(normalizedState))
+    );
 
-    // Log the change for future sync (if sync becomes a feature)
     logSyncChange("currentState", "update", "current", {
       timestamp: now,
       weekStartDate: state.currentWeekStartDate,
-    }).catch((e) => logger.warn("Failed to log current state change"));
+      selectedDate: state.selectedTrackerDate, // Optionally log more detail
+    }).catch((e) => logger.warn("Failed to log current state change:", e));
 
     return true;
   } catch (error) {
@@ -1358,4 +1438,13 @@ export default {
   isTestModeEnabled,
   getCurrentDate,
   getCurrentTimestamp,
+};
+
+window.appDataService = {
+  enableTestMode,
+  getTodayDateString,
+  getCurrentDate,
+  getWeekStartDate,
+  getAllWeekHistory,
+  getPreference,
 };

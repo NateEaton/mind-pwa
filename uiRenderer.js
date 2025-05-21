@@ -190,6 +190,102 @@ function allRequiredElementsCached() {
 }
 
 /**
+ * Renders a day selector bar (S, M, T, W, T, F, S).
+ * @param {HTMLElement} parentElement - The DOM element to append the bar to.
+ * @param {string} activeWeekStartDateStr - The YYYY-MM-DD of the start of the week.
+ * @param {string} selectedDateStr - The YYYY-MM-DD of the currently selected day.
+ * @param {Function} onDaySelectCallback - Function to call when a day button is clicked, passes new selected YYYY-MM-DD.
+ * @param {string} weekStartDayPref - "Sunday" or "Monday", to determine day letters and order.
+ * @param {boolean} [isModal=false] - True if rendering inside a modal for different styling.
+ */
+function renderDaySelectorBar(
+  parentElement,
+  activeWeekStartDateStr,
+  selectedDateStr,
+  onDaySelectCallback,
+  weekStartDayPref = "Sunday",
+  isModal = false
+) {
+  if (
+    !parentElement ||
+    !activeWeekStartDateStr ||
+    !selectedDateStr ||
+    typeof onDaySelectCallback !== "function"
+  ) {
+    logger.error("renderDaySelectorBar: Missing required parameters.", {
+      parentElement,
+      activeWeekStartDateStr,
+      selectedDateStr,
+      onDaySelectCallback,
+    });
+    return;
+  }
+
+  parentElement.innerHTML = ""; // Clear previous bar
+
+  const dayLetters =
+    weekStartDayPref === "Monday"
+      ? ["M", "T", "W", "T", "F", "S", "S"]
+      : ["S", "M", "T", "W", "T", "F", "S"];
+
+  const dayAriaLabels =
+    weekStartDayPref === "Monday"
+      ? [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday",
+        ]
+      : [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+        ];
+
+  const weekStartDateObj = new Date(activeWeekStartDateStr + "T00:00:00");
+
+  for (let i = 0; i < 7; i++) {
+    const dayInWeekObj = new Date(weekStartDateObj);
+    dayInWeekObj.setDate(weekStartDateObj.getDate() + i);
+
+    const year = dayInWeekObj.getFullYear();
+    const month = String(dayInWeekObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dayInWeekObj.getDate()).padStart(2, "0");
+    const dayDateStr = `${year}-${month}-${day}`;
+
+    const button = document.createElement("button");
+    button.className = "day-selector-btn";
+    if (isModal) {
+      button.classList.add("modal-day-selector-btn"); // For specific modal styling if needed
+    }
+    button.textContent = dayLetters[i];
+    button.dataset.date = dayDateStr;
+    button.setAttribute("aria-label", dayAriaLabels[i]);
+
+    if (dayDateStr === selectedDateStr) {
+      button.classList.add("active");
+    }
+
+    button.addEventListener("click", () => {
+      // Visually update active button immediately for responsiveness before state change propagates
+      parentElement
+        .querySelectorAll(".day-selector-btn")
+        .forEach((btn) => btn.classList.remove("active"));
+      button.classList.add("active");
+      onDaySelectCallback(dayDateStr);
+    });
+    parentElement.appendChild(button);
+  }
+}
+
+/**
  * Handle state changes by updating the UI
  * @param {Object} state - The current state
  * @param {Object} action - The action that caused the state change
@@ -204,23 +300,29 @@ function handleStateChange(state, action) {
       break;
 
     case stateManager.ACTION_TYPES.UPDATE_DAILY_COUNT:
-    case stateManager.ACTION_TYPES.UPDATE_WEEKLY_COUNT:
+      // case stateManager.ACTION_TYPES.UPDATE_WEEKLY_COUNT:
       renderTrackerItems();
       renderCurrentWeekSummary();
       break;
 
     case stateManager.ACTION_TYPES.RESET_DAILY_COUNTS:
       renderTrackerItems();
+      renderCurrentWeekSummary();
       break;
 
     case stateManager.ACTION_TYPES.RESET_WEEKLY_COUNTS:
+    case stateManager.ACTION_TYPES.RECALCULATE_WEEKLY_TOTALS:
+      renderDateElements(); // Date might have changed as part of weekly reset
       renderTrackerItems();
       renderCurrentWeekSummary();
       break;
 
     case stateManager.ACTION_TYPES.SET_CURRENT_DAY:
     case stateManager.ACTION_TYPES.SET_CURRENT_WEEK:
-      renderDateElements();
+    case stateManager.ACTION_TYPES.SET_SELECTED_TRACKER_DATE: // New case
+      renderDateElements(); // Update main date display
+      renderTrackerItems(); // Re-render list for new selected date
+      // Current week summary doesn't change on selectedTrackerDate change alone
       break;
 
     case stateManager.ACTION_TYPES.SET_HISTORY:
@@ -259,26 +361,34 @@ function renderDateElements() {
   try {
     const state = stateManager.getState();
 
-    // Format the current day date
-    const displayDate = new Date(`${state.currentDayDate}T00:00:00`);
-
-    // Update daily goals date element
-    if (domElements.trackerElements.trackerDateEl) {
+    // Use selectedTrackerDate for the Daily Tracker view's main date display
+    if (
+      domElements.trackerElements.trackerDateEl &&
+      state.selectedTrackerDate
+    ) {
+      const selectedDateForDisplay = new Date(
+        `${state.selectedTrackerDate}T00:00:00`
+      );
       domElements.trackerElements.trackerDateEl.textContent =
-        `${displayDate.toLocaleDateString(undefined, { weekday: "short" })}, ` +
-        `${displayDate.toLocaleDateString(undefined, {
+        `Servings for ${selectedDateForDisplay.toLocaleDateString(undefined, {
+          weekday: "long",
+        })}, ` + // Use "long" weekday
+        `${selectedDateForDisplay.toLocaleDateString(undefined, {
           month: "short",
           day: "numeric",
         })}`;
+    } else if (domElements.trackerElements.trackerDateEl) {
+      domElements.trackerElements.trackerDateEl.textContent = "Date not set";
     }
 
-    // Format the week start date
-    const weekStartDateDisplay = new Date(
-      `${state.currentWeekStartDate}T00:00:00`
-    );
-
-    // Update current week start date element
-    if (domElements.currentWeekElements.currentWeekStartDateEl) {
+    // Current Week Summary date display remains based on currentWeekStartDate
+    if (
+      domElements.currentWeekElements.currentWeekStartDateEl &&
+      state.currentWeekStartDate
+    ) {
+      const weekStartDateDisplay = new Date(
+        `${state.currentWeekStartDate}T00:00:00`
+      );
       domElements.currentWeekElements.currentWeekStartDateEl.textContent =
         `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, {
           weekday: "short",
@@ -287,13 +397,15 @@ function renderDateElements() {
           month: "short",
           day: "numeric",
         })}`;
+    } else if (domElements.currentWeekElements.currentWeekStartDateEl) {
+      domElements.currentWeekElements.currentWeekStartDateEl.textContent =
+        "Week not set";
     }
   } catch (error) {
     logger.error("Error rendering date elements:", error);
-
-    // Handle error display
     if (domElements.trackerElements.trackerDateEl) {
-      domElements.trackerElements.trackerDateEl.textContent = "(Error)";
+      domElements.trackerElements.trackerDateEl.textContent =
+        "(Error displaying date)";
     }
   }
 }
@@ -305,87 +417,101 @@ function renderTrackerItems() {
   const state = stateManager.getState();
   const foodItemsList = document.getElementById("food-items-list");
   const foodGroupTemplate = document.getElementById("food-group-item-template");
-  const dateElement = document.getElementById("tracker-date");
+  // const dateElement = document.getElementById("tracker-date"); // Main date handled by renderDateElements
+  const daySelectorBarElement = document.getElementById(
+    "tracker-day-selector-bar"
+  );
 
-  // Ensure we have the required elements
-  if (!foodItemsList || !foodGroupTemplate) {
-    logger.error("Missing required elements for renderTrackerItems");
+  if (!foodItemsList || !foodGroupTemplate || !daySelectorBarElement) {
+    logger.error(
+      "Missing required elements for renderTrackerItems (foodItemsList, template, or daySelectorBarElement)"
+    );
+    return;
+  }
+  if (!state.selectedTrackerDate || !state.currentWeekStartDate) {
+    logger.warn(
+      "renderTrackerItems: selectedTrackerDate or currentWeekStartDate is not set in state. Skipping render."
+    );
+    foodItemsList.innerHTML = "<p>Select a date to view items.</p>"; // Or some placeholder
+    daySelectorBarElement.innerHTML = ""; // Clear day selector if dates are missing
     return;
   }
 
-  // Update date display
-  if (dateElement) {
-    const displayDate = new Date(`${state.currentDayDate}T00:00:00`);
-    dateElement.textContent =
-      `${displayDate.toLocaleDateString(undefined, { weekday: "short" })}, ` +
-      `${displayDate.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      })}`;
-  }
+  // Render the Day Selector Bar for the Daily Tracker
+  renderDaySelectorBar(
+    daySelectorBarElement,
+    state.currentWeekStartDate,
+    state.selectedTrackerDate,
+    (newSelectedDateStr) => {
+      // onDaySelectCallback
+      // This callback will be defined in app.js and passed to uiRenderer.initialize or similar
+      // For now, we'll assume app.js wires this up to dispatch SET_SELECTED_TRACKER_DATE
+      if (
+        window.app &&
+        typeof window.app.handleTrackerDaySelect === "function"
+      ) {
+        window.app.handleTrackerDaySelect(newSelectedDateStr);
+      } else {
+        logger.warn(
+          "window.app.handleTrackerDaySelect not found. Day selection might not work."
+        );
+      }
+    },
+    state.metadata?.weekStartDay || "Sunday" // Pass the week start day preference
+  );
 
   // Clear the list
   foodItemsList.innerHTML = "";
 
-  // Render each food group
+  // Get daily counts for the selected date
+  const dailyCountsForSelectedDate =
+    state.dailyCounts[state.selectedTrackerDate] || {};
+
   state.foodGroups.forEach((group) => {
-    // Clone the template
     const item = foodGroupTemplate.content
       .cloneNode(true)
       .querySelector(".food-group-item");
-
-    // Set basic properties
     item.dataset.id = group.id;
 
-    // Get elements
     const nameElement = item.querySelector(".name");
-    const weeklyBadge = item.querySelector(".weekly-badge");
-    const weeklyBadgeValue = item.querySelector(".weekly-badge .wk-val");
+    const weeklyBadge = item.querySelector(".weekly-badge"); // This is for the weekly total
+    const weeklyBadgeValue = weeklyBadge
+      ? weeklyBadge.querySelector(".wk-val")
+      : null;
 
-    // Set name
     nameElement.textContent = group.name;
-
-    // Set info button data
     const infoBtn = item.querySelector(".info-btn");
-    if (infoBtn) {
-      infoBtn.dataset.groupId = group.id;
-    }
+    if (infoBtn) infoBtn.dataset.groupId = group.id;
 
-    // Format target description
-    let targetDesc = "";
+    let targetDesc = ""; // (Target description logic remains the same)
+    // ... (copy existing target description logic) ...
     const targetVal = group.target;
     const freqText = group.frequency === "day" ? "day" : "week";
     const unitText = group.unit || "servings";
-
     if (group.type === "positive") {
       targetDesc = `Target: ≥ ${targetVal} ${unitText}/${freqText}`;
     } else {
       targetDesc = `Limit: ≤ ${targetVal} ${unitText}/${freqText}`;
       if (group.isOptional) targetDesc += " (optional)";
     }
-
     item.querySelector(".target").textContent = targetDesc;
 
-    // Set up count input
     const countInput = item.querySelector(".count-input");
-    const frequency = group.frequency; // 'day' or 'week'
-
-    // Always show today's count (daily) in the input
-    countInput.value = state.dailyCounts[group.id] || 0;
-    countInput.dataset.frequency = frequency;
+    // Count input ALWAYS reflects the count for the state.selectedTrackerDate
+    countInput.value = dailyCountsForSelectedDate[group.id] || 0;
     countInput.dataset.groupid = group.id;
+    // No need for data-frequency on input if all interactions update selectedTrackerDate's counts
 
-    // Always show weekly badge for all items
-    if (weeklyBadge) {
-      const weeklyCount = state.weeklyCounts[group.id] || 0;
-      weeklyBadgeValue.textContent = weeklyCount;
-      weeklyBadge.style.display = "inline-flex";
-
-      // Apply color coding to the badge based on progress
-      updateBadgeColor(weeklyBadge, group, weeklyCount);
+    // Weekly badge ALWAYS shows the total for state.weeklyCounts for the current week
+    if (weeklyBadge && weeklyBadgeValue) {
+      const weeklyTotalForGroup = state.weeklyCounts[group.id] || 0;
+      weeklyBadgeValue.textContent = weeklyTotalForGroup;
+      weeklyBadge.style.display = "inline-flex"; // Ensure it's visible
+      updateBadgeColor(weeklyBadge, group, weeklyTotalForGroup); // updateBadgeColor uses weekly total
+    } else if (weeklyBadge) {
+      weeklyBadge.style.display = "none"; // Hide if value span not found
     }
 
-    // Add the item to the list
     foodItemsList.appendChild(item);
   });
 }

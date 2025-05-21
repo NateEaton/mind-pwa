@@ -505,19 +505,13 @@ async function initializeApp() {
   logger.info("Initializing app...");
 
   try {
-    // 1. Initialize data service first
+    // Initialize data service first
     await dataService.initialize();
 
-    // 2. Initialize state manager with food groups configuration
+    // Initialize state manager with food groups configuration
     await stateManager.initialize(foodGroups);
 
-    // 3. Check for date/week changes and perform resets if needed
-    const dateChanged = await stateManager.checkDateAndReset();
-    if (dateChanged) {
-      logger.info("Date or week changed and state was updated");
-    }
-
-    // 4. Initialize UI renderer
+    // Initialize UI renderer
     uiRenderer.initialize();
 
     // Render all UI components after initialization
@@ -762,6 +756,50 @@ function setupSyncButton() {
 }
 
 /**
+ * Callback for when a day is selected in the Daily Tracker's day navigation bar.
+ * @param {string} newSelectedDateStr - The YYYY-MM-DD string of the newly selected date.
+ */
+function handleTrackerDaySelect(newSelectedDateStr) {
+  logger.debug(`Tracker day selected: ${newSelectedDateStr}`);
+  const currentState = stateManager.getState();
+
+  // Basic validation: ensure the newSelectedDateStr is within the current week
+  const weekStartDateObj = new Date(
+    currentState.currentWeekStartDate + "T00:00:00"
+  );
+  const weekEndDateObj = new Date(weekStartDateObj);
+  weekEndDateObj.setDate(weekStartDateObj.getDate() + 6);
+  const newSelectedDateObj = new Date(newSelectedDateStr + "T00:00:00");
+
+  if (
+    newSelectedDateObj >= weekStartDateObj &&
+    newSelectedDateObj <= weekEndDateObj
+  ) {
+    stateManager.dispatch({
+      type: stateManager.ACTION_TYPES.SET_SELECTED_TRACKER_DATE,
+      payload: { date: newSelectedDateStr },
+    });
+  } else {
+    logger.warn(
+      `Attempted to select date ${newSelectedDateStr} outside of current week ${currentState.currentWeekStartDate}. Ignoring.`
+    );
+    // Optionally, provide feedback to the user or revert the visual selection in UI
+    // For now, uiRenderer will re-render based on state, so if state doesn't change, UI won't either.
+    // However, the button clicked might stay 'active' visually until next state-driven render.
+    // To fix this, uiRenderer.renderDaySelectorBar might need to be called again with current state.selectedTrackerDate
+    // if the selection is invalid. Or, the click handler in renderDaySelectorBar could be smarter.
+    // For Phase 1, this level of edge case handling might be deferred.
+  }
+}
+
+// Expose it for uiRenderer (TEMPORARY - better to pass via initialize or a proper interface)
+// If uiRenderer.initialize can take callbacks:
+// uiRenderer.initialize({ onTrackerDaySelect: handleTrackerDaySelect });
+// For now, using a temporary window object:
+if (!window.app) window.app = {};
+window.app.handleTrackerDaySelect = handleTrackerDaySelect;
+
+/**
  * Setup all event listeners for the application
  */
 function setupEventListeners() {
@@ -984,7 +1022,20 @@ function handleCounterClick(event) {
 
   const groupId = item.dataset.id;
   const input = item.querySelector(".count-input");
-  const frequency = input.dataset.frequency; // 'day' or 'week'
+  // const frequency = input.dataset.frequency; // No longer needed from input dataset for this logic
+
+  // Get the currently selected date from the state manager
+  const currentState = stateManager.getState();
+  const selectedDate = currentState.selectedTrackerDate;
+
+  if (!selectedDate) {
+    logger.error(
+      "handleCounterClick: selectedTrackerDate is not available in state. Cannot update count."
+    );
+    uiRenderer.showToast("Error: No date selected to update.", "error");
+    return;
+  }
+
   let currentValue = parseInt(input.value, 10) || 0;
   let valueChanged = false;
 
@@ -994,18 +1045,19 @@ function handleCounterClick(event) {
   } else if (button.classList.contains("decrement-btn")) {
     const oldValue = currentValue;
     currentValue = Math.max(0, currentValue - 1);
-    valueChanged = currentValue < oldValue;
+    valueChanged = currentValue < oldValue; // Only true if value actually decreased
   }
 
   if (valueChanged) {
-    // Trigger haptic feedback
+    logger.debug(
+      `handleCounterClick: Updating count for date: ${selectedDate}, group: ${groupId}, new value: ${currentValue}`
+    );
     appUtils.triggerHapticFeedback(30);
 
-    // Always update the daily counts
-    stateManager.updateDailyCount(groupId, currentValue);
-
-    // Note: updateDailyCount will also update the weekly counts, so we don't
-    // need to call updateWeeklyCount separately
+    // Call stateManager.updateDailyCount with the selectedDate
+    stateManager.updateDailyCount(selectedDate, groupId, currentValue);
+    // The stateManager.updateDailyCount action creator will handle dispatch and metadata updates.
+    // UI will re-render via subscription.
   }
 }
 
@@ -1023,14 +1075,32 @@ function handleCounterInputChange(event) {
   const groupId = item.dataset.id;
   let newValue = parseInt(input.value, 10);
 
+  // Get the currently selected date from the state manager
+  const currentState = stateManager.getState();
+  const selectedDate = currentState.selectedTrackerDate;
+
+  if (!selectedDate) {
+    logger.error(
+      "handleCounterInputChange: selectedTrackerDate is not available in state. Cannot update count."
+    );
+    // Potentially revert input or show error, but stateManager call will be skipped
+    return;
+  }
+
   // Validate input
   if (isNaN(newValue) || newValue < 0) {
     newValue = 0;
-    input.value = newValue;
+    // No, do not set input.value = newValue here. Let the UI re-render from state.
+    // If the state doesn't change because the parsed value is the same as current,
+    // the input might flicker if we set it here. The source of truth is the state.
   }
 
-  // Always update daily counts, which will also update weekly
-  stateManager.updateDailyCount(groupId, newValue);
+  logger.debug(
+    `handleCounterInputChange: Updating count for date: ${selectedDate}, group: ${groupId}, new value: ${newValue}`
+  );
+  // Call stateManager.updateDailyCount with the selectedDate
+  stateManager.updateDailyCount(selectedDate, groupId, newValue);
+  // UI will re-render via subscription.
 }
 
 /**

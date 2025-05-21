@@ -77,9 +77,11 @@
 
         <!-- Daily Tracker View -->
         <section id="tracker-view" class="view active-view">
-            <h2>Today's Servings <span id="tracker-date" class="heading-date"></span></h2>
+            <h2><span id="tracker-date"></span></h2> <!-- Main date display -->
+            <div id="tracker-day-selector-bar" class="day-selector-bar">
+                <!-- Day selector buttons will be rendered here by uiRenderer.js -->
+            </div>
             <div id="food-tracker">
-                <!-- All food items will go here -->
                 <div id="food-items-list"></div>
             </div>
         </section>
@@ -90,26 +92,30 @@
             <div id="current-week-summary-content">
                 <!-- Summary content will be generated here -->
             </div>
-            <!-- Add Edit Button for Current Week -->
-            <button id="edit-current-week-btn" style="margin-top: 1rem;">Edit Weekly Totals</button>
         </section>
 
         <!-- History View -->
         <section id="history-view" class="view">
             <h2>Weekly History</h2>
             <div class="history-nav">
-                <button id="prev-week-btn" disabled>&lt; Prev Week</button>
+                <button id="prev-week-btn" class="icon-btn round-btn" disabled aria-label="Previous Week">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                    </svg>
+                </button>
                 <span id="history-week-label">Select a week</span>
-                <button id="next-week-btn" disabled>Next Week &gt;</button>
+                <button id="next-week-btn" class="icon-btn round-btn" disabled aria-label="Next Week">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                    </svg>
+                </button>
                 <input type="date" id="history-date-picker" title="Go to week containing this date">
-
             </div>
             <div id="history-content">
                 <p>Loading history...</p>
                 <!-- History details will be generated here -->
             </div>
-            <!-- Add Edit Button for History Week -->
-            <button id="edit-history-week-btn" disabled style="margin-top: 0.5rem; margin-bottom: 1rem;">Edit This Week's Totals</button>
+            <button id="edit-history-week-btn" disabled style="margin-top: 0.5rem; margin-bottom: 1rem;">View/Edit Daily Details</button>
         </section>
 
     </main>
@@ -119,18 +125,25 @@
     </footer>
 
     <!-- Edit Totals Modal Structure (Initially Hidden) -->
-    <div id="edit-totals-modal" class="modal">
+    <div id="edit-totals-modal" class="modal"> <!-- Or rename ID to #edit-history-daily-details-modal -->
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="edit-totals-title" class="modal-title">Edit Weekly Totals</h3>
+                <!-- Title Line 1 (Week) will be set by JS -->
+                <h3 id="edit-totals-title" class="modal-title">Week of ...</h3> 
+                <!-- Title Line 2 (Selected Day in Modal) & Day Selector Bar -->
+                <div id="modal-selected-day-display" class="modal-subheader-date" style="font-size: 0.9em; color: #f0f0f0; margin-top: -8px; margin-bottom: 5px;">Mon, 3/8</div>
+                <div id="modal-day-selector-bar" class="day-selector-bar modal-day-selector">
+                    <!-- Day selector buttons will be rendered here by uiRenderer.js -->
+                </div>
                 <button id="edit-totals-close-btn" class="modal-close-btn" aria-label="Close editor">×</button>
             </div>
             <div id="edit-totals-list" class="modal-body edit-totals-body">
-                <!-- Items will be generated here -->
+                <!-- Items for the selected day in the modal will be generated here -->
             </div>
             <div class="modal-actions">
                 <button id="edit-totals-cancel-btn" class="secondary-btn">Cancel</button>
-                <button id="edit-totals-save-btn" class="primary-btn">Save Changes</button>
+                <!-- Button text will change -->
+                <button id="edit-totals-save-btn" class="primary-btn">Save Changes to Week</button>
             </div>
         </div>
     </div>
