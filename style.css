@@ -1141,6 +1141,7 @@ h3.modal-title {
     overflow-y: auto;
     position: relative;
     /* For pseudo-elements if used */
+    background-color: #fff;
 }
 
 /* Modal Header Specifics for #edit-totals-modal */
@@ -1160,7 +1161,8 @@ h3.modal-title {
 }
 
 #edit-totals-modal .modal-content {
-    background-color: var(--modal-bg);
+    /* background-color: var(--modal-bg); */
+    background-color: #fff;
     /* Or your modal background */
     padding: var(--spacing-lg);
     border-radius: var(--border-radius-lg);
@@ -1191,6 +1193,7 @@ h3.modal-title {
     /* Allows the body to take available space and scroll */
     padding: 0 var(--spacing-xs);
     /* Optional: slight horizontal padding if items are too close to edge */
+
 }
 
 #edit-totals-modal #edit-totals-title {
@@ -1259,6 +1262,7 @@ h3.modal-title {
     border-bottom: 1px solid var(--border-color);
     border-radius: 4px;
     /* Slight rounding to match card design */
+    background-color: #fff;
 }
 
 .edit-totals-item:last-child {
