@@ -17,6 +17,7 @@
  */
 
 import dataService from "./dataService.js";
+import appUtils from "./appUtils.js";
 import logger from "./logger.js";
 
 /**
@@ -732,7 +733,9 @@ async function checkDateAndReset() {
       for (let i = 0; i < 7; i++) {
         const dayToProcess = new Date(startDateForArchive);
         dayToProcess.setDate(startDateForArchive.getDate() + i);
-        const dateStr = dataService.getTodayDateString(dayToProcess);
+
+        const dateStr = appUtils.formatDateToYYYYMMDD(dayToProcess);
+
         if (completedWeekState.dailyCounts[dateStr]) {
           for (const foodId in completedWeekState.dailyCounts[dateStr]) {
             accurateWeeklyTotalsForArchive[foodId] =
@@ -1080,6 +1083,7 @@ export default {
   setCurrentDay,
   setCurrentWeek,
   recalculateWeeklyTotals,
+  updateMetadata,
 
   // Date check & reset
   checkDateAndReset,

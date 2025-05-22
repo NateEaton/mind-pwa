@@ -70,59 +70,27 @@ import CloudSyncManager from "./cloudSync.js";
 import { createLogger, configure, LOG_LEVELS } from "./logger.js";
 const logger = createLogger("app");
 
-// Initialize logger configuration
 (function initializeLogger() {
   try {
-    // Try to read from localStorage first for persistence
     const storedLogLevel = localStorage.getItem("appLogLevel");
 
-    // Check if we're in development mode
-    let isDevMode = false;
-    try {
-      // First try to dynamically import config
-      import("./config.js")
-        .then((config) => {
-          isDevMode = config.CONFIG?.DEV_MODE || false;
-        })
-        .catch(() => {
-          // Config import failed, ignore
-        });
-    } catch (error) {
-      // Ignore error, default to false
-    }
-
-    // Set initial configuration
+    // Initial setup using stored level or fallback to INFO
     configure({
-      // Use stored level or default based on mode
       defaultLevel: storedLogLevel
         ? LOG_LEVELS[storedLogLevel]
-        : isDevMode
-        ? LOG_LEVELS.DEBUG
         : LOG_LEVELS.INFO,
-
-      // Enable colors in console output
       useColors: true,
-
-      // Include timestamps in development mode
       showTimestamp: true,
-
-      // Module-specific overrides (optional initial settings)
       moduleConfig: {
-        // Important modules with potential troubleshooting needs
         cloudSync: LOG_LEVELS.INFO,
         googleDriveProvider: LOG_LEVELS.INFO,
         dropboxProvider: LOG_LEVELS.INFO,
       },
     });
 
-    logger.debug(
-      `Logger initialized with default level: ${
-        storedLogLevel || (isDevMode ? "DEBUG" : "INFO")
-      }`
-    );
+    logger.debug(`Logger bootstrapped with level: ${storedLogLevel || "INFO"}`);
   } catch (error) {
-    // Fallback if configuration fails
-    console.error("Logger initialization failed:", error);
+    console.error("Logger bootstrap failed:", error);
   }
 })();
 
@@ -294,6 +262,10 @@ let cloudSync = null;
 let syncEnabled = false;
 let syncReady = false;
 let sectionCollapseState = {}; // Track which sections are expanded/collapsed
+let editingHistoryWeekDataRef = null; // -> The original history record from stateManager.state.history
+let tempEditedDailyBreakdown = {}; // -> A deep copy of dailyBreakdown being modified in the modal
+let selectedDayInHistoryModal = null; // -> YYYY-MM-DD string of the day currently active in the modal's day selector
+let historyModalFoodGroups = []; // -> foodGroups array to use when rendering the modal list
 
 function setSyncReady(ready) {
   syncReady = ready;
@@ -391,10 +363,10 @@ function updateSyncUIElements() {
 
     // Optionally update button text based on state
     if (syncInProgress) {
-      menuSyncBtn.textContent = "🔄 Syncing...";
+      menuSyncBtn.textContent = "ߔ䠓yncing...";
       menuSyncBtn.classList.add("syncing");
     } else {
-      menuSyncBtn.textContent = "🔄 Sync Now";
+      menuSyncBtn.textContent = "ߔ䠓ync Now";
       menuSyncBtn.classList.remove("syncing");
     }
   }
@@ -498,11 +470,51 @@ function setupNetworkListeners() {
   }
 }
 
+async function finalizeLoggerConfig() {
+  try {
+    const configModule = await import("./config.js");
+    const isDevMode = configModule.CONFIG?.DEV_MODE || false;
+
+    const storedLogLevel = localStorage.getItem("appLogLevel");
+    const effectiveLevel = storedLogLevel
+      ? LOG_LEVELS[storedLogLevel]
+      : isDevMode
+      ? LOG_LEVELS.DEBUG
+      : LOG_LEVELS.INFO;
+
+    // Apply logger configuration
+    configure({ defaultLevel: effectiveLevel });
+
+    // If no level was stored, persist the one we just applied
+    if (!storedLogLevel) {
+      const effectiveLevelName =
+        Object.entries(LOG_LEVELS).find(
+          ([, val]) => val === effectiveLevel
+        )?.[0] || "INFO";
+
+      localStorage.setItem("appLogLevel", effectiveLevelName);
+      logger.debug(
+        `Persisted log level '${effectiveLevelName}' to localStorage`
+      );
+    }
+
+    logger.debug(
+      `Logger finalized with level: ${
+        storedLogLevel || (isDevMode ? "DEBUG" : "INFO")
+      }`
+    );
+  } catch (err) {
+    logger.warn("Could not finalize logger config with config.js:", err);
+  }
+}
+
 /**
  * Initialize the application
  */
 async function initializeApp() {
   logger.info("Initializing app...");
+
+  await finalizeLoggerConfig(); // Ensures DEV_MODE-aware logging early
 
   try {
     // Initialize data service first
@@ -722,7 +734,7 @@ function setupSyncButton() {
   if (!syncBtn) {
     syncBtn = document.createElement("button");
     syncBtn.id = "sync-btn";
-    syncBtn.textContent = "🔄 Sync Now";
+    syncBtn.textContent = "ߔ䠓ync Now";
 
     syncBtn.addEventListener("click", () => {
       logger.info("Sync button clicked");
@@ -855,41 +867,50 @@ function setupEventListeners() {
     });
 
   // Edit totals modal
-  if (domElements.editCurrentWeekBtn) {
-    domElements.editCurrentWeekBtn.addEventListener("click", () =>
-      openEditTotalsModal("current")
-    );
-  }
-
   if (domElements.editHistoryWeekBtn) {
-    domElements.editHistoryWeekBtn.addEventListener("click", () =>
-      openEditTotalsModal("history")
-    );
-  }
-
-  if (domElements.editTotalsCloseBtn) {
-    domElements.editTotalsCloseBtn.addEventListener(
+    domElements.editHistoryWeekBtn.addEventListener(
       "click",
-      closeEditTotalsModal
+      openEditHistoryDailyDetailsModal
     );
   }
 
-  if (domElements.editTotalsCancelBtn) {
-    domElements.editTotalsCancelBtn.addEventListener(
+  // Listeners for the "Edit History Daily Details" Modal (repurposed #edit-totals-modal)
+  const modalFoodList = uiRenderer.domElements.modalElements.editTotalsList;
+  if (modalFoodList) {
+    modalFoodList.addEventListener("click", handleModalDailyDetailChange);
+    // If you add direct input fields to this list later, add 'input' or 'change' listeners too
+  }
+
+  const modalSaveBtn = uiRenderer.domElements.modalElements.editTotalsSaveBtn;
+  if (modalSaveBtn) {
+    modalSaveBtn.addEventListener("click", saveEditedHistoryDailyDetails);
+  }
+
+  const modalCancelBtn =
+    uiRenderer.domElements.modalElements.editTotalsCancelBtn;
+  if (modalCancelBtn) {
+    modalCancelBtn.addEventListener("click", closeEditHistoryDailyDetailsModal);
+  }
+
+  const modalCloseIconBtn =
+    uiRenderer.domElements.modalElements.editTotalsCloseBtn;
+  if (modalCloseIconBtn) {
+    modalCloseIconBtn.addEventListener(
       "click",
-      closeEditTotalsModal
+      closeEditHistoryDailyDetailsModal
     );
   }
 
-  if (domElements.editTotalsSaveBtn) {
-    domElements.editTotalsSaveBtn.addEventListener("click", saveEditedTotals);
-  }
-
-  if (domElements.editTotalsList) {
-    domElements.editTotalsList.addEventListener(
-      "click",
-      handleEditTotalsItemClick
-    );
+  // Listener for clicking outside the modal content to close (if desired for this specific modal)
+  const editModalContainer =
+    uiRenderer.domElements.modalElements.editTotalsModal;
+  if (editModalContainer) {
+    editModalContainer.addEventListener("click", (event) => {
+      if (event.target === editModalContainer) {
+        // Clicked on the overlay itself
+        closeEditHistoryDailyDetailsModal();
+      }
+    });
   }
 
   // User Guide button
@@ -1539,10 +1560,10 @@ async function showViewFilesDialog() {
     const dialogContent = `
       <div style="margin-bottom: 15px;">
         <button id="download-selected-btn" class="action-btn" style="margin-right: 10px;">
-          📥 Download Selected
+          ߓ堄ownload Selected
         </button>
         <button id="delete-selected-btn" class="action-btn danger-btn">
-          🗑️ Delete Selected
+          ߗ᯸elete Selected
         </button>
       </div>
       ${fileListHtml}
@@ -2954,6 +2975,329 @@ function closeEditTotalsModal() {
   if (domElements.editTotalsList) {
     domElements.editTotalsList.innerHTML = "";
   }
+}
+
+/**
+ * Opens and initializes the modal for viewing/editing daily details of a historical week.
+ */
+function openEditHistoryDailyDetailsModal() {
+  const state = stateManager.getState();
+  if (
+    state.currentHistoryIndex === -1 ||
+    !state.history ||
+    !state.history[state.currentHistoryIndex]
+  ) {
+    uiRenderer.showToast("No history week selected to edit.", "error");
+    return;
+  }
+
+  editingHistoryWeekDataRef = state.history[state.currentHistoryIndex];
+  historyModalFoodGroups = state.foodGroups; // Store foodGroups for use in modal rendering
+
+  // Deep copy the dailyBreakdown for temporary editing.
+  // Ensure that if dailyBreakdown is null or undefined on the history record, we start with an empty object.
+  tempEditedDailyBreakdown = JSON.parse(
+    JSON.stringify(editingHistoryWeekDataRef.dailyBreakdown || {})
+  );
+
+  const weekStartDateObj = new Date(
+    editingHistoryWeekDataRef.weekStartDate + "T00:00:00"
+  );
+  const daysOfThisHistoricalWeek = [];
+
+  // Ensure tempEditedDailyBreakdown has entries for all 7 days of the week
+  for (let i = 0; i < 7; i++) {
+    const dayObj = new Date(weekStartDateObj);
+    dayObj.setDate(weekStartDateObj.getDate() + i);
+    const dayStr = appUtils.formatDateToYYYYMMDD(dayObj);
+    daysOfThisHistoricalWeek.push(dayStr);
+    if (!tempEditedDailyBreakdown[dayStr]) {
+      tempEditedDailyBreakdown[dayStr] = {}; // Initialize if day is missing
+    }
+  }
+
+  selectedDayInHistoryModal = daysOfThisHistoricalWeek[0]; // Default to first day
+
+  const mainModalTitle = `Week of ${weekStartDateObj.toLocaleDateString(
+    undefined,
+    { month: "short", day: "numeric", year: "numeric" }
+  )}`;
+
+  // 1. Show the modal shell using uiRenderer
+  uiRenderer.showEditHistoryModalShell(mainModalTitle, "Save Changes to Week");
+
+  // 2. Get references to the modal's internal placeholders (cached in uiRenderer.domElements)
+  //    We assume uiRenderer.domElements.modalElements.modalDaySelectorBar and .editTotalsList are correct.
+  const modalDaySelectorBarEl =
+    uiRenderer.domElements.modalElements.modalDaySelectorBar;
+  // const modalDayDisplayEl = uiRenderer.domElements.modalElements.modalSelectedDayDisplay; // updated by updateModalSelectedDayDisplay
+  // const modalFoodListEl = uiRenderer.domElements.modalElements.editTotalsList; // updated by renderModalDayDetailsList
+
+  // 3. Populate the dynamic content using other uiRenderer functions
+  uiRenderer.updateModalSelectedDayDisplay(selectedDayInHistoryModal);
+
+  if (modalDaySelectorBarEl) {
+    uiRenderer.renderDaySelectorBar(
+      modalDaySelectorBarEl,
+      editingHistoryWeekDataRef.weekStartDate,
+      selectedDayInHistoryModal,
+      handleModalDayNavigation, // Callback in app.js
+      editingHistoryWeekDataRef.metadata?.weekStartDay ||
+        state.metadata.weekStartDay ||
+        "Sunday", // Use record's, then state's, then default
+      true // isModal = true
+    );
+  } else {
+    logger.error(
+      "Modal day selector bar element not found for history edit modal."
+    );
+  }
+
+  uiRenderer.renderModalDayDetailsList(
+    historyModalFoodGroups,
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {}
+  );
+
+  // Optional: Set focus, e.g., to the first day selector button or close button
+  // document.querySelector('#modal-day-selector-bar .day-selector-btn.active')?.focus();
+}
+
+/**
+ * Handles navigation between days within the "Edit History Daily Details" modal.
+ * @param {string} newSelectedDayStr - The YYYY-MM-DD of the day selected in the modal's day bar.
+ */
+function handleModalDayNavigation(newSelectedDayStr) {
+  if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
+    logger.warn(
+      "handleModalDayNavigation called without active editing context."
+    );
+    return;
+  }
+
+  selectedDayInHistoryModal = newSelectedDayStr;
+  logger.debug(
+    `History Modal: Day navigation changed to ${selectedDayInHistoryModal}`
+  );
+
+  // Update the "Mon, 3/8" display in the modal header
+  uiRenderer.updateModalSelectedDayDisplay(selectedDayInHistoryModal);
+
+  // Re-render the food item list for the newly selected day
+  uiRenderer.renderModalDayDetailsList(
+    historyModalFoodGroups, // Use the stored foodGroups for the modal
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {}
+  );
+
+  // The uiRenderer.renderDaySelectorBar already visually updates the active button
+  // on click, but if we need to ensure it's correct after any programmatic change:
+  const modalDaySelectorBarEl =
+    uiRenderer.domElements.modalElements.modalDaySelectorBar;
+  if (modalDaySelectorBarEl) {
+    uiRenderer.updateDaySelectorActiveState(
+      modalDaySelectorBarEl,
+      selectedDayInHistoryModal
+    );
+  }
+}
+
+/**
+ * Handles +/- clicks or input changes for food items within the "Edit History Daily Details" modal.
+ * Updates the temporary 'tempEditedDailyBreakdown'.
+ * @param {Event} event - The click event from +/- buttons or change event from input.
+ */
+function handleModalDailyDetailChange(event) {
+  const button = event.target.closest(
+    ".edit-decrement-btn, .edit-increment-btn"
+  );
+  // TODO: Later, also handle direct input change if you add number inputs to the modal list
+
+  if (
+    !button ||
+    !selectedDayInHistoryModal ||
+    !tempEditedDailyBreakdown ||
+    !editingHistoryWeekDataRef
+  ) {
+    // logger.warn("handleModalDailyDetailChange: Missing context (button, selectedDay, or tempBreakdown).");
+    return;
+  }
+
+  const itemElement = button.closest(".edit-totals-item"); // Assuming same item structure
+  const groupId = itemElement?.dataset.id;
+
+  if (!groupId) {
+    logger.warn("handleModalDailyDetailChange: groupId not found on item.");
+    return;
+  }
+
+  // Ensure the day's entry and food group entry exist in our temporary breakdown
+  if (!tempEditedDailyBreakdown[selectedDayInHistoryModal]) {
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] = {}; // Should have been initialized by openEditHistoryDailyDetailsModal
+  }
+
+  let currentValue =
+    parseInt(
+      tempEditedDailyBreakdown[selectedDayInHistoryModal][groupId],
+      10
+    ) || 0;
+
+  if (button.classList.contains("edit-increment-btn")) {
+    currentValue++;
+  } else if (button.classList.contains("edit-decrement-btn")) {
+    currentValue = Math.max(0, currentValue - 1);
+  }
+
+  tempEditedDailyBreakdown[selectedDayInHistoryModal][groupId] = currentValue;
+  appUtils.triggerHapticFeedback(20); // Softer haptic for modal edits
+  logger.debug(
+    `History Modal Change: Day ${selectedDayInHistoryModal}, Group ${groupId}, New Count ${currentValue}`
+  );
+
+  // Re-render just the count span for that item to be efficient, or the whole list if simpler.
+  // For simplicity, re-rendering the list for now.
+  const currentTotalSpan = itemElement.querySelector(".edit-current-total");
+  if (currentTotalSpan) {
+    currentTotalSpan.textContent = currentValue;
+  } else {
+    // Fallback to re-rendering the whole list if specific span not found
+    uiRenderer.renderModalDayDetailsList(
+      historyModalFoodGroups,
+      tempEditedDailyBreakdown[selectedDayInHistoryModal] || {}
+    );
+  }
+}
+
+/**
+ * Saves the changes made in the "Edit History Daily Details" modal
+ * to the stateManager and IndexedDB.
+ */
+async function saveEditedHistoryDailyDetails() {
+  if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
+    logger.error(
+      "saveEditedHistoryDailyDetails: Cannot save, editing context is missing."
+    );
+    uiRenderer.showToast("Error saving changes. No editing context.", "error");
+    closeEditHistoryDailyDetailsModal(); // Use the specific close function
+    return;
+  }
+
+  try {
+    logger.info(
+      `Saving daily details for history week: ${editingHistoryWeekDataRef.weekStartDate}`
+    );
+    logger.debug(
+      "Temporary daily breakdown being saved:",
+      JSON.parse(JSON.stringify(tempEditedDailyBreakdown))
+    );
+
+    // 1. Update the original history record's dailyBreakdown with our temporary copy
+    //    Make sure to create a new object to avoid reference issues if tempEditedDailyBreakdown is reused.
+    editingHistoryWeekDataRef.dailyBreakdown = JSON.parse(
+      JSON.stringify(tempEditedDailyBreakdown)
+    );
+
+    // 2. Recalculate totals for this history record based on the new dailyBreakdown
+    const newTotalsForHistoryRecord = {};
+    const weekStartDateForTotals = editingHistoryWeekDataRef.weekStartDate;
+    const startDateObj = new Date(weekStartDateForTotals + "T00:00:00");
+
+    for (let i = 0; i < 7; i++) {
+      const dayToProcess = new Date(startDateObj);
+      dayToProcess.setDate(startDateObj.getDate() + i);
+      const dateStr = appUtils.formatDateToYYYYMMDD(dayToProcess);
+
+      if (editingHistoryWeekDataRef.dailyBreakdown[dateStr]) {
+        for (const foodId in editingHistoryWeekDataRef.dailyBreakdown[
+          dateStr
+        ]) {
+          if (
+            editingHistoryWeekDataRef.dailyBreakdown[dateStr].hasOwnProperty(
+              foodId
+            )
+          ) {
+            newTotalsForHistoryRecord[foodId] =
+              (newTotalsForHistoryRecord[foodId] || 0) +
+              (editingHistoryWeekDataRef.dailyBreakdown[dateStr][foodId] || 0);
+          }
+        }
+      }
+    }
+    editingHistoryWeekDataRef.totals = newTotalsForHistoryRecord;
+    logger.debug(
+      "Recalculated totals for history record:",
+      JSON.parse(JSON.stringify(newTotalsForHistoryRecord))
+    );
+
+    // 3. Update metadata for the history record
+    if (!editingHistoryWeekDataRef.metadata)
+      editingHistoryWeekDataRef.metadata = {};
+    editingHistoryWeekDataRef.metadata.updatedAt =
+      dataService.getCurrentTimestamp();
+    // Ensure weekStartDay from original record is preserved. It was set on archival.
+    // It should not change during an edit of daily details.
+    editingHistoryWeekDataRef.metadata.weekStartDay =
+      editingHistoryWeekDataRef.metadata.weekStartDay ||
+      stateManager.getState().metadata.weekStartDay || // Fallback to current app pref
+      "Sunday"; // Ultimate fallback
+
+    // 4. Save the modified history record to dataService
+    // We need to pass foodGroups in case normalizeWeekData needs to rebuild targets
+    // if they were missing from an old history record.
+    await dataService.saveWeekHistory(editingHistoryWeekDataRef, {
+      foodGroups: stateManager.getState().foodGroups,
+      weekStartDay: editingHistoryWeekDataRef.metadata.weekStartDay, // Pass the record's specific weekStartDay
+    });
+
+    // 5. Refresh history data in stateManager (this will trigger UI update for history view)
+    const updatedHistoryData = await dataService.getAllWeekHistory();
+    stateManager.dispatch({
+      type: stateManager.ACTION_TYPES.SET_HISTORY,
+      payload: { history: updatedHistoryData || [] },
+    });
+    // The currentHistoryIndex should still point to the edited week,
+    // so uiRenderer.renderHistory() (called via subscription) will show updated data.
+
+    // 6. Update app-level metadata
+    stateManager.updateMetadata({
+      historyDirty: true, // Mark history as dirty for potential sync
+      lastModified: dataService.getCurrentTimestamp(), // General app data modification
+    });
+
+    uiRenderer.showToast(
+      `Daily details updated for week of ${new Date(
+        editingHistoryWeekDataRef.weekStartDate + "T00:00:00"
+      ).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.`,
+      "success"
+    );
+    closeEditHistoryDailyDetailsModal();
+  } catch (error) {
+    logger.error(
+      `Error saving edited history daily details for week ${editingHistoryWeekDataRef.weekStartDate}:`,
+      error
+    );
+    uiRenderer.showToast(`Failed to save changes: ${error.message}`, "error");
+    // Optionally, don't close the modal on error so user can retry or see data.
+  }
+}
+
+/**
+ * Closes the "Edit History Daily Details" modal and resets its temporary state.
+ */
+function closeEditHistoryDailyDetailsModal() {
+  uiRenderer.closeEditTotalsModal(); // Call the uiRenderer function to hide the modal
+
+  // Reset temporary editing state variables in app.js
+  editingHistoryWeekDataRef = null;
+  tempEditedDailyBreakdown = {};
+  selectedDayInHistoryModal = null;
+  historyModalFoodGroups = [];
+
+  logger.debug("Closed Edit History Daily Details modal and reset temp state.");
+
+  // Optional: Reset the modal's internal DOM structure if uiRenderer.closeEditTotalsModal doesn't
+  // For example, clear the list element:
+  // const listEl = uiRenderer.domElements.modalElements.editTotalsList;
+  // if (listEl) listEl.innerHTML = "";
+  // However, showEditHistoryModalShell already clears these areas upon opening.
 }
 
 // Initialize the application when the DOM is loaded

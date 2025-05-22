@@ -102,6 +102,15 @@ function formatDate(date, options = {}) {
   }
 }
 
+// Format date to YYYY-MM-DD
+function formatDateToYYYYMMDD(dateObj) {
+  if (!dateObj || !(dateObj instanceof Date)) return "";
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * Debounce a function to limit how often it can be called
  * @param {Function} func - The function to debounce
@@ -262,4 +271,5 @@ export default {
   addTestModeBanner,
   removeTestModeBanner,
   loadAppVersion,
+  formatDateToYYYYMMDD,
 };

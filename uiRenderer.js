@@ -55,8 +55,13 @@ const domElements = {
     modalCloseBtn: null,
     editTotalsModal: null,
     editTotalsTitle: null,
+    modalSelectedDayDisplay: null,
+    modalDaySelectorBar: null,
     editTotalsList: null,
     editTotalsItemTemplate: null,
+    editTotalsCloseBtn: null,
+    editTotalsCancelBtn: null,
+    editTotalsSaveBtn: null,
   },
   toastElements: {
     toastContainer: null,
@@ -119,11 +124,18 @@ function initialize() {
     modalBody: document.getElementById("modal-body"),
     modalCloseBtn: document.getElementById("modal-close-btn"),
     editTotalsModal: document.getElementById("edit-totals-modal"),
-    editTotalsTitle: document.getElementById("edit-totals-title"),
-    editTotalsList: document.getElementById("edit-totals-list"),
+    editTotalsTitle: document.getElementById("edit-totals-title"), // For "Week of..."
+    modalSelectedDayDisplay: document.getElementById(
+      "modal-selected-day-display"
+    ), // For "Mon, 3/8"
+    modalDaySelectorBar: document.getElementById("modal-day-selector-bar"), // Container for SMTWTFS buttons
+    editTotalsList: document.getElementById("edit-totals-list"), // Where food group items go
     editTotalsItemTemplate: document.getElementById(
       "edit-totals-item-template"
-    ),
+    ), // Template for items in the list
+    editTotalsCloseBtn: document.getElementById("edit-totals-close-btn"),
+    editTotalsCancelBtn: document.getElementById("edit-totals-cancel-btn"),
+    editTotalsSaveBtn: document.getElementById("edit-totals-save-btn"),
   };
 
   // Cache toast elements
@@ -371,8 +383,8 @@ function renderDateElements() {
       );
       domElements.trackerElements.trackerDateEl.textContent =
         `Servings for ${selectedDateForDisplay.toLocaleDateString(undefined, {
-          weekday: "long",
-        })}, ` + // Use "long" weekday
+          weekday: "short",
+        })}, ` + // Use "short" weekday
         `${selectedDateForDisplay.toLocaleDateString(undefined, {
           month: "short",
           day: "numeric",
@@ -1138,8 +1150,192 @@ function closeEditTotalsModal() {
   }
 }
 
+/**
+ * Opens and prepares the modal shell used for editing history daily details.
+ * app.js will then call other uiRenderer functions to populate its dynamic content.
+ * @param {string} mainTitle - The main title for the modal (e.g., "Week of March 10, 2025").
+ * @param {string} saveButtonText - Text for the primary save action button.
+ */
+function showEditHistoryModalShell(mainTitle, saveButtonText = "Save Changes") {
+  const modal = domElements.modalElements.editTotalsModal;
+  const titleEl = domElements.modalElements.editTotalsTitle;
+  const saveBtnEl = domElements.modalElements.editTotalsSaveBtn;
+  const dayDisplayEl = domElements.modalElements.modalSelectedDayDisplay;
+  const daySelectorEl = domElements.modalElements.modalDaySelectorBar;
+  const listEl = domElements.modalElements.editTotalsList;
+
+  if (
+    !modal ||
+    !titleEl ||
+    !saveBtnEl ||
+    !dayDisplayEl ||
+    !daySelectorEl ||
+    !listEl
+  ) {
+    logger.error(
+      "uiRenderer.showEditHistoryModalShell: One or more required modal elements are missing from DOM cache."
+    );
+    // Optionally, show a generic error toast to the user
+    showToast("Error: Cannot open details editor.", "error");
+    return;
+  }
+
+  // Set main title (e.g., "Week of...")
+  titleEl.textContent = mainTitle;
+
+  // Set save button text (e.g., "Save Changes to Week")
+  saveBtnEl.textContent = saveButtonText;
+
+  // Clear dynamic content areas, preparing them for fresh population
+  dayDisplayEl.textContent = ""; // Will be set by updateModalSelectedDayDisplay
+  daySelectorEl.innerHTML = ""; // Will be populated by renderDaySelectorBar
+  listEl.innerHTML = ""; // Will be populated by renderModalDayDetailsList
+
+  // Ensure modal is visible
+  modal.classList.add("modal-open");
+
+  logger.info(`Edit History Modal Shell shown with title: ${mainTitle}`);
+  // Note: Focus management can be handled by app.js after content is fully rendered,
+  // or a default focus (e.g., close button) can be set here.
+}
+
+/**
+ * Updates the subheader date display within the "Edit History Daily Details" modal.
+ * @param {string} dateStr - The YYYY-MM-DD string of the selected day in the modal.
+ */
+function updateModalSelectedDayDisplay(dateStr) {
+  const displayElement = domElements.modalElements.modalSelectedDayDisplay;
+  if (!displayElement) {
+    logger.warn(
+      "uiRenderer.updateModalSelectedDayDisplay: modalSelectedDayDisplay element not found."
+    );
+    return;
+  }
+
+  if (dateStr) {
+    try {
+      const dateObj = new Date(dateStr + "T00:00:00"); // Ensure parsing in local timezone
+      displayElement.textContent = dateObj.toLocaleDateString(undefined, {
+        weekday: "short", // e.g., "Mon"
+        month: "numeric", // e.g., "3"
+        day: "numeric", // e.g., "8"
+      });
+    } catch (e) {
+      logger.error(
+        "uiRenderer.updateModalSelectedDayDisplay: Error formatting date string:",
+        dateStr,
+        e
+      );
+      displayElement.textContent = "Invalid Date";
+    }
+  } else {
+    displayElement.textContent = "Select a day";
+  }
+}
+
+/**
+ * Renders the list of food items with counts for a specific day within the
+ * "Edit Daily Details for Historical Week" modal.
+ * Assumes +/- button event listeners will be handled by app.js delegation on #edit-totals-list.
+ * @param {Array} foodGroups - The global food groups array.
+ * @param {Object} dailyCountsForSelectedDayInModal - Object like { foodGroupId: count } for the selected day.
+ */
+function renderModalDayDetailsList(
+  foodGroups,
+  dailyCountsForSelectedDayInModal
+) {
+  const listElement = domElements.modalElements.editTotalsList;
+  const itemTemplate = domElements.modalElements.editTotalsItemTemplate;
+
+  if (!listElement) {
+    logger.error(
+      "uiRenderer.renderModalDayDetailsList: editTotalsList element not found."
+    );
+    return;
+  }
+  if (!itemTemplate) {
+    logger.error(
+      "uiRenderer.renderModalDayDetailsList: editTotalsItemTemplate element not found."
+    );
+    listElement.innerHTML = "<p>Error: Item template missing.</p>";
+    return;
+  }
+  if (!foodGroups || !Array.isArray(foodGroups)) {
+    logger.error(
+      "uiRenderer.renderModalDayDetailsList: foodGroups array is missing or invalid."
+    );
+    listElement.innerHTML = "<p>Error: Food groups not available.</p>";
+    return;
+  }
+
+  listElement.innerHTML = ""; // Clear previous items
+
+  const counts = dailyCountsForSelectedDayInModal || {}; // Ensure counts is an object
+
+  foodGroups.forEach((group) => {
+    const itemFragment = itemTemplate.content.cloneNode(true);
+    const item = itemFragment.querySelector(".edit-totals-item"); // Get the actual item element
+
+    if (!item) {
+      logger.warn(
+        "uiRenderer.renderModalDayDetailsList: Could not find .edit-totals-item in template."
+      );
+      return; // Skip this item if template is broken
+    }
+
+    item.dataset.id = group.id;
+
+    const nameSpan = item.querySelector(".edit-item-name");
+    const totalSpan = item.querySelector(".edit-current-total");
+    const decBtn = item.querySelector(".edit-decrement-btn");
+    const incBtn = item.querySelector(".edit-increment-btn");
+
+    if (nameSpan) nameSpan.textContent = group.name;
+    if (totalSpan) totalSpan.textContent = counts[group.id] || 0;
+
+    // Ensure buttons have dataset for groupId for app.js event handlers
+    if (decBtn) decBtn.dataset.groupId = group.id;
+    if (incBtn) incBtn.dataset.groupId = group.id;
+
+    listElement.appendChild(itemFragment); // Append the fragment containing the item
+  });
+}
+
+/**
+ * Updates the active state of the day selector buttons within a given bar.
+ * Removes 'active' class from all buttons, then adds it to the button matching selectedDateStr.
+ * @param {HTMLElement} daySelectorBarElement - The container of the day selector buttons.
+ * @param {string} selectedDateStr - The YYYY-MM-DD string of the date that should be active.
+ */
+function updateDaySelectorActiveState(daySelectorBarElement, selectedDateStr) {
+  if (!daySelectorBarElement) {
+    logger.warn(
+      "uiRenderer.updateDaySelectorActiveState: daySelectorBarElement not provided."
+    );
+    return;
+  }
+  if (typeof selectedDateStr !== "string") {
+    logger.warn(
+      "uiRenderer.updateDaySelectorActiveState: selectedDateStr is not a string."
+    );
+    // Potentially clear all active states if selectedDateStr is invalid
+    // daySelectorBarElement.querySelectorAll('.day-selector-btn').forEach(btn => btn.classList.remove('active'));
+    return;
+  }
+
+  const buttons = daySelectorBarElement.querySelectorAll(".day-selector-btn");
+  buttons.forEach((btn) => {
+    if (btn.dataset.date === selectedDateStr) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+}
+
 // Export public API
 export default {
+  initialize,
   initialize,
   renderEverything,
   renderTrackerItems,
@@ -1151,5 +1347,13 @@ export default {
   openModal,
   showConfirmDialog,
   closeModal,
-  closeEditTotalsModal,
+
+  // Functions for the "Edit Daily Details for Historical Week" Modal:
+  showEditHistoryModalShell, // To show the modal shell
+  closeEditTotalsModal, // To close this specific modal (renamed from generic closeModal if it was too confusing)
+  renderDaySelectorBar, // For app.js to populate the modal's day selector
+  updateModalSelectedDayDisplay, // For app.js to update the modal's selected day text
+  renderModalDayDetailsList, // For app.js to populate the modal's food item list
+  updateDaySelectorActiveState, // For app.js to manage active state in modal's day selector
+  domElements,
 };
