@@ -382,7 +382,7 @@ function renderDateElements() {
         `${state.selectedTrackerDate}T00:00:00`
       );
       domElements.trackerElements.trackerDateEl.textContent =
-        `Servings for ${selectedDateForDisplay.toLocaleDateString(undefined, {
+        `${selectedDateForDisplay.toLocaleDateString(undefined, {
           weekday: "short",
         })}, ` + // Use "short" weekday
         `${selectedDateForDisplay.toLocaleDateString(undefined, {
@@ -401,12 +401,13 @@ function renderDateElements() {
       const weekStartDateDisplay = new Date(
         `${state.currentWeekStartDate}T00:00:00`
       );
+      // The "Week of " part is now static in HTML. We only set the date part.
       domElements.currentWeekElements.currentWeekStartDateEl.textContent =
-        `Starts ${weekStartDateDisplay.toLocaleDateString(undefined, {
+        `${weekStartDateDisplay.toLocaleDateString(undefined, {
           weekday: "short",
         })}, ` +
         `${weekStartDateDisplay.toLocaleDateString(undefined, {
-          month: "short",
+          month: "short", // MMM format
           day: "numeric",
         })}`;
     } else if (domElements.currentWeekElements.currentWeekStartDateEl) {
@@ -698,13 +699,32 @@ function renderHistory(weekIndex) {
   } = domElements.historyElements;
 
   // Ensure we have the required element
-  if (!historyContent) {
-    logger.error("Missing required element for renderHistory");
+  const mainHistoryTitleEl = document.getElementById("history-main-title"); // Get the h2 element
+
+  // Ensure we have the required element
+  if (!historyContent || !mainHistoryTitleEl) {
+    // Added mainHistoryTitleEl check
+    logger.error(
+      "Missing required element for renderHistory (historyContent or history-main-title)"
+    );
     return;
   }
 
   // Clear previous content
   historyContent.innerHTML = "";
+  if (editHistoryWeekBtn) editHistoryWeekBtn.disabled = true;
+
+  // Reset nav UI elements (date picker might still be useful but label is gone)
+  // if (historyWeekLabel) historyWeekLabel.textContent = "Select a week"; // REMOVE THIS LINE
+  if (prevWeekBtn) prevWeekBtn.disabled = true;
+  if (nextWeekBtn) nextWeekBtn.disabled = true;
+  if (historyDatePicker) historyDatePicker.value = "";
+
+  if (!state.history || state.history.length === 0) {
+    historyContent.innerHTML = "<p>No history data available yet.</p>";
+    mainHistoryTitleEl.textContent = "No History"; // Set title for no history
+    return;
+  }
 
   // Default to disabled edit button
   if (editHistoryWeekBtn) {
@@ -744,9 +764,21 @@ function renderHistory(weekIndex) {
   if (!weekData) {
     historyContent.innerHTML =
       "<p>Error: Could not load selected week data.</p>";
-    if (historyWeekLabel) historyWeekLabel.textContent = "Error";
+    mainHistoryTitleEl.textContent = "Error Loading History"; // Set title for error
     return;
   }
+
+  // Update the main history title with the week's date
+  const weekStartDateForTitle = new Date(`${weekData.weekStartDate}T00:00:00`);
+  mainHistoryTitleEl.textContent = `Week of ${weekStartDateForTitle.toLocaleDateString(
+    undefined,
+    {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric", // Add year for clarity in history
+    }
+  )}`;
 
   // Enable the edit button now that we have valid data
   if (editHistoryWeekBtn) {
@@ -754,20 +786,6 @@ function renderHistory(weekIndex) {
   }
 
   // Update navigation UI
-  const weekStartDate = new Date(`${weekData.weekStartDate}T00:00:00`);
-
-  if (historyWeekLabel) {
-    historyWeekLabel.textContent = `Week of ${weekStartDate.toLocaleDateString(
-      undefined,
-      {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }
-    )}`;
-  }
-
   if (prevWeekBtn) {
     prevWeekBtn.disabled = displayIndex >= state.history.length - 1;
   }

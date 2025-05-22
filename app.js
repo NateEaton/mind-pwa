@@ -734,7 +734,7 @@ function setupSyncButton() {
   if (!syncBtn) {
     syncBtn = document.createElement("button");
     syncBtn.id = "sync-btn";
-    syncBtn.textContent = "ߔ䠓ync Now";
+    syncBtn.textContent = "🔄 Sync Now";
 
     syncBtn.addEventListener("click", () => {
       logger.info("Sync button clicked");

@@ -40,7 +40,7 @@
             <nav class="tab-bar">
                 <button data-view="tracker" class="tab-item">
                     <span class="tab-icon">📋</span>
-                    <span class="tab-label">Daily Tracker</span>
+                    <span class="tab-label">Daily</span>
                 </button>
                 <button data-view="current-week" class="tab-item">
                     <span class="tab-icon">📊</span>
@@ -88,7 +88,7 @@
 
         <!-- Current Week Summary View -->
         <section id="current-week-view" class="view">
-            <h2>Weekly Summary <span id="current-week-start-date" class="heading-date"></span></h2>
+            <h2>Week of <span id="current-week-start-date" class="heading-date"></span></h2>
             <div id="current-week-summary-content">
                 <!-- Summary content will be generated here -->
             </div>
@@ -96,26 +96,24 @@
 
         <!-- History View -->
         <section id="history-view" class="view">
-            <h2>Weekly History</h2>
+            <h2 id="history-main-title">Weekly History</h2>
             <div class="history-nav">
                 <button id="prev-week-btn" class="icon-btn round-btn" disabled aria-label="Previous Week">
                     <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-                    </svg>
-                </button>
-                <span id="history-week-label">Select a week</span>
-                <button id="next-week-btn" class="icon-btn round-btn" disabled aria-label="Next Week">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>  <!-- <<< ADD THIS PATH FOR PREVIOUS ARROW -->
                     </svg>
                 </button>
                 <input type="date" id="history-date-picker" title="Go to week containing this date">
+                <button id="next-week-btn" class="icon-btn round-btn" disabled aria-label="Next Week">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/> <!-- <<< ADD THIS PATH FOR NEXT ARROW -->
+                    </svg>
+                </button>
             </div>
             <div id="history-content">
                 <p>Loading history...</p>
-                <!-- History details will be generated here -->
             </div>
-            <button id="edit-history-week-btn" disabled style="margin-top: 0.5rem; margin-bottom: 1rem;">View/Edit Daily Details</button>
+            <button id="edit-history-week-btn" disabled>View/Edit Daily Details</button>
         </section>
 
     </main>

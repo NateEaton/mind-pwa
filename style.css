@@ -404,10 +404,19 @@ h3:first-child {
 
 .history-nav {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-lg);
     flex-wrap: wrap;
+    /* Allow items to wrap to the next line */
+    align-items: center;
+    /* Align items vertically */
+    justify-content: space-between;
+    /* Distribute space nicely on wider screens */
+    gap: var(--spacing-sm);
+    /* Add some gap between items */
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background-color: var(--background-alt);
+    /* Optional: subtle background */
+    border-radius: var(--border-radius-md);
 }
 
 .history-nav button,
@@ -416,10 +425,38 @@ h3:first-child {
     margin: var(--spacing-xs);
 }
 
-.history-nav span {
+/* .history-nav span {
     font-weight: bold;
     text-align: center;
     flex-grow: 1;
+} */
+
+#history-week-label {
+    flex-grow: 1;
+    /* Allow label to take up available space */
+    text-align: center;
+    font-weight: bold;
+    white-space: nowrap;
+    /* Prevent the label itself from wrapping if possible */
+    overflow: hidden;
+    /* Hide overflow if label is too long */
+    text-overflow: ellipsis;
+    /* Add ... if label is too long */
+    min-width: 150px;
+    /* Give it some minimum width */
+}
+
+#history-date-picker {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    font-size: 0.9em;
+    /* Default width, can be adjusted by flexbox or media queries */
+    /* Consider making it take up less initial space or be more flexible */
+    max-width: 140px;
+    /* Prevent it from being too wide */
+    flex-shrink: 0;
+    /* Prevent it from shrinking too much if label needs space */
 }
 
 #history-content ul,
@@ -637,6 +674,45 @@ h3:first-child {
 .limit-exceeded {
     background-color: var(--missed-goal-color);
     border-left: 5px solid var(--error-color);
+}
+
+/* Ensure icon buttons have a decent size */
+.history-nav .icon-btn.round-btn {
+    width: 40px;
+    /* Or your preferred size */
+    height: 40px;
+}
+
+/* Style for the Weekly View Header */
+#current-week-view h2 {
+    /* This is where your base font for "Week of" comes from */
+    /* e.g., font-size: 1.5em; font-weight: bold; color: var(--header-color); */
+    /* Ensure it's styled as you like */
+    display: flex;
+    /* Helps if you want to align "Week of" and the date precisely */
+    align-items: baseline;
+    /* Aligns text along their baseline */
+    flex-wrap: nowrap;
+    /* Prevent "Week of" and date from wrapping if h2 is too narrow */
+}
+
+#current-week-view h2 .heading-date {
+    /* Target the span specifically */
+    /* Option 1: Explicitly set font properties to match h2 */
+    font-size: inherit;
+    /* Inherit font-size from parent h2 */
+    font-weight: inherit;
+    /* Inherit font-weight from parent h2 */
+    color: inherit;
+    /* Inherit color from parent h2 */
+    /* line-height: inherit; /* Inherit line-height */
+
+    /* Option 2: If inherit doesn't work due to specificity, set them directly */
+    /* font-size: 1em; /* Relative to the h2's font size, so effectively the same */
+    /* font-weight: bold; /* Or whatever the h2's weight is */
+
+    margin-left: 0.3em;
+    /* Add a small space after "Week of " */
 }
 
 /* Edit buttons for weekly views */
@@ -1065,6 +1141,101 @@ h3.modal-title {
     overflow-y: auto;
     position: relative;
     /* For pseudo-elements if used */
+}
+
+/* Modal Header Specifics for #edit-totals-modal */
+#edit-totals-modal .modal-header {
+    padding: var(--spacing-md) var(--spacing-lg);
+    /* Increase padding */
+    display: flex;
+    /* Use flexbox for better control */
+    flex-direction: column;
+    /* Stack items vertically */
+    align-items: center;
+    /* Center items horizontally by default, or use align-items: flex-start; */
+    position: relative;
+    /* For absolute positioning of close button if needed */
+    text-align: center;
+    /* Center text for titles */
+}
+
+#edit-totals-modal .modal-content {
+    background-color: var(--modal-bg);
+    /* Or your modal background */
+    padding: var(--spacing-lg);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-xl);
+
+    width: 90vw;
+    /* Use viewport width percentage */
+    max-width: 500px;
+    /* Set a maximum width for larger screens */
+    min-width: 280px;
+    /* Optional: prevent it from becoming too narrow */
+
+    margin: var(--spacing-xl) auto;
+    /* This centers it and provides top/bottom margin */
+    /* If you had fixed left/right margins, remove them */
+
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    /* Allow modal to take most of the screen height */
+}
+
+/* The modal body should be the scrollable part if content overflows */
+#edit-totals-modal .modal-body {
+    /* This is #edit-totals-list */
+    overflow-y: auto;
+    flex-grow: 1;
+    /* Allows the body to take available space and scroll */
+    padding: 0 var(--spacing-xs);
+    /* Optional: slight horizontal padding if items are too close to edge */
+}
+
+#edit-totals-modal #edit-totals-title {
+    /* Main "Week of..." title */
+    margin-bottom: var(--spacing-xs);
+    /* Space below main title */
+    font-size: 1.1em;
+    /* Or keep as is, ensure it's distinct */
+    width: 100%;
+    /* Ensure it can take full width for centering */
+}
+
+#edit-totals-modal #modal-selected-day-display {
+    /* "Thu, 5/22" */
+    font-size: 0.95em;
+    /* Slightly smaller */
+    color: var(--text-muted);
+    /* Or a slightly lighter color than main title */
+    margin-bottom: var(--spacing-md);
+    /* More space below this before day selector */
+    width: 100%;
+    /* Ensure it can take full width for centering */
+}
+
+#edit-totals-modal #modal-day-selector-bar {
+    /* margin-top: var(--spacing-sm); /* Already has margin-top in .modal-day-selector */
+    width: 100%;
+    /* Make the bar take full width for centering its content */
+    max-width: 300px;
+    /* Optional: constrain max width on larger screens */
+    margin-left: auto;
+    /* Center the bar itself if max-width is used */
+    margin-right: auto;
+}
+
+#edit-totals-modal .modal-close-btn {
+    /* The 'X' button */
+    position: absolute;
+    top: var(--spacing-sm);
+    /* Adjust to desired position */
+    right: var(--spacing-md);
+    font-size: 1.8em;
+    /* Make it a bit larger if needed */
+    padding: 0 var(--spacing-xs);
+    /* Adjust padding for better click area */
 }
 
 #modal-body p {
@@ -1572,9 +1743,6 @@ h3.modal-title {
     margin-top: var(--spacing-sm);
     margin-bottom: var(--spacing-md);
     padding: var(--spacing-xs);
-    background-color: transparent;
-    /* Or match modal header/body context */
-    box-shadow: none;
 }
 
 .modal-day-selector .day-selector-btn {
@@ -1633,6 +1801,69 @@ footer {
 /* ================================== */
 /* === Responsive Styles === */
 /* ================================== */
+
+@media (max-width: 360px) {
+    .history-nav {
+        flex-wrap: wrap;
+        /* Allow wrapping for very small screens */
+        justify-content: center;
+    }
+
+    #history-date-picker {
+        order: 1;
+        /* Optional: put date picker first if it wraps */
+        width: 100%;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    /* You might hide prev/next buttons or make them smaller on very tiny screens */
+}
+
+@media (max-width: 400px) {
+
+    /* Adjust breakpoint as needed */
+    .history-nav {
+        justify-content: center;
+        /* Center items when they stack */
+    }
+
+    #history-week-label {
+        order: -1;
+        /* Move label to the top if it helps */
+        width: 100%;
+        /* Make label take full width on its own line */
+        margin-bottom: var(--spacing-sm);
+        text-align: center;
+    }
+
+    #history-date-picker {
+        width: 100%;
+        /* Make date picker take full width on its own line */
+        max-width: none;
+        /* Allow it to be full width */
+        margin-top: var(--spacing-sm);
+        /* Add space if it wraps below buttons */
+    }
+
+    #edit-totals-modal .modal-content {
+        width: 95vw;
+        /* Take up even more width */
+        padding: var(--spacing-md);
+        margin-top: var(--spacing-md);
+        margin-bottom: var(--spacing-md);
+        max-height: 90vh;
+    }
+
+    #edit-totals-modal .modal-header {
+        padding: var(--spacing-md);
+        /* Adjust header padding too */
+    }
+
+    /* You might also consider stacking prev/next buttons on either side of the date picker
+       or making the label and date picker a column, and buttons another column.
+       Flexbox offers many possibilities.
+    */
+}
 
 @media (max-width: 480px) {
 
@@ -1723,6 +1954,48 @@ footer {
         display: block;
         width: 100%;
         margin-bottom: var(--spacing-sm);
+    }
+
+    @media (max-width: 480px) {
+
+        /* Adjust this breakpoint */
+        .history-nav {
+            flex-direction: column;
+            /* Stack everything */
+            align-items: center;
+        }
+
+        #history-week-label {
+            order: 1;
+            /* Label first */
+            margin-bottom: var(--spacing-sm);
+        }
+
+        /* Container for prev/next buttons to keep them side-by-side */
+        .history-week-button-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 200px;
+            /* Or some other suitable width */
+            order: 2;
+            /* Buttons second */
+            margin-bottom: var(--spacing-sm);
+        }
+
+        /* You'd need to wrap #prev-week-btn and #next-week-btn in this container in HTML:
+       <div class="history-week-button-container">
+           <button id="prev-week-btn">...</button>
+           <button id="next-week-btn">...</button>
+       </div>
+    */
+
+        #history-date-picker {
+            order: 3;
+            /* Date picker last */
+            width: 80%;
+            /* Or appropriate width */
+        }
     }
 
 }
