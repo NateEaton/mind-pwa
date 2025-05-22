@@ -363,10 +363,10 @@ function updateSyncUIElements() {
 
     // Optionally update button text based on state
     if (syncInProgress) {
-      menuSyncBtn.textContent = "ߔ䠓yncing...";
+      menuSyncBtn.textContent = "🔄 Syncing...";
       menuSyncBtn.classList.add("syncing");
     } else {
-      menuSyncBtn.textContent = "ߔ䠓ync Now";
+      menuSyncBtn.textContent = "🔄 Sync Now";
       menuSyncBtn.classList.remove("syncing");
     }
   }
