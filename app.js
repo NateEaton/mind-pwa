@@ -1940,52 +1940,47 @@ async function handleImportFileSelect(event) {
 }
 
 /**
- * Process the import operation based on date relationship
- * @param {Object} importedData - The imported data
- * @param {string} dateRelationship - Relationship to current date (SAME_DAY, SAME_WEEK, etc)
+ * Process the import operation based on date relationship.
+ * @param {Object} importedData - The parsed data from the imported JSON file.
+ * @param {string} dateRelationship - Relationship of imported currentState to local current date.
+ * @returns {Promise<Object>} An object indicating success and any relevant import counts.
  */
 async function processImport(importedData, dateRelationship) {
   try {
     let importResult = { success: false };
 
     if (dateRelationship === "PAST_WEEK") {
-      // Save the current app state
       const currentState = stateManager.getState();
       const currentDailyCounts = { ...currentState.dailyCounts };
       const currentWeeklyCounts = { ...currentState.weeklyCounts };
       const currentDayDate = currentState.currentDayDate;
       const currentWeekStartDate = currentState.currentWeekStartDate;
 
-      // Get food groups for targets
       const foodGroups =
         currentState.foodGroups || stateManager.getFoodGroups();
 
-      // Create a history entry from the imported "currentState" with targets
       const importedCurrentWeek = dataService.createHistoryFromCurrentState(
         importedData.currentState,
         importedData.appInfo,
         foodGroups
       );
 
-      // Create a combined history array with imported current week and history
       const combinedHistory = [importedCurrentWeek, ...importedData.history];
-
-      // Calculate the actual count of weeks being imported
       const importedHistoryCount = combinedHistory.length;
 
       const historyOnly = {
         appInfo: {
           ...importedData.appInfo,
-          historyCount: importedHistoryCount, // Store the ACTUAL count
+          historyCount: importedHistoryCount,
         },
         currentState: {
-          currentDayDate: currentDayDate,
-          currentWeekStartDate: currentWeekStartDate,
+          currentDayDate,
+          currentWeekStartDate,
           dailyCounts: currentDailyCounts,
           weeklyCounts: currentWeeklyCounts,
           lastModified: Date.now(),
           metadata: {
-            schemaVersion: 1,
+            schemaVersion: 3,
             partialImport: true,
             historyDirty: true,
           },
@@ -1997,46 +1992,61 @@ async function processImport(importedData, dateRelationship) {
       await dataService.importData(historyOnly);
       importResult = { success: true, importedCount: importedHistoryCount };
     } else if (dateRelationship === "SAME_WEEK") {
-      // For same week, merge the weekly counts from the import with current counts
       const currentState = stateManager.getState();
       const currentDailyCounts = { ...currentState.dailyCounts };
       const currentWeeklyCounts = { ...currentState.weeklyCounts };
+      const importedDailyCounts = { ...importedData.currentState.dailyCounts };
       const importedWeeklyCounts = {
         ...importedData.currentState.weeklyCounts,
       };
 
-      // Merge weekly counts (taking the higher value for each food group)
-      const mergedWeeklyCounts = {};
+      // Merge daily counts
+      const mergedDailyCounts = { ...currentDailyCounts };
+      Object.keys(importedDailyCounts).forEach((date) => {
+        mergedDailyCounts[date] = mergedDailyCounts[date] || {};
+        Object.keys(importedDailyCounts[date]).forEach((groupId) => {
+          const currentCount = mergedDailyCounts[date][groupId] || 0;
+          const importedCount = importedDailyCounts[date][groupId] || 0;
+          mergedDailyCounts[date][groupId] = Math.max(
+            currentCount,
+            importedCount
+          );
+        });
+      });
 
-      // Include all food groups from both current and imported data
-      const allFoodGroupIds = [
+      // Merge weekly counts
+      const mergedWeeklyCounts = {};
+      const allGroupIds = [
         ...new Set([
           ...Object.keys(currentWeeklyCounts),
           ...Object.keys(importedWeeklyCounts),
         ]),
       ];
 
-      // For each food group, take the higher value between current and imported
-      allFoodGroupIds.forEach((groupId) => {
+      allGroupIds.forEach((groupId) => {
         const currentCount = currentWeeklyCounts[groupId] || 0;
         const importedCount = importedWeeklyCounts[groupId] || 0;
         mergedWeeklyCounts[groupId] = Math.max(currentCount, importedCount);
       });
 
-      // Create merged import data
+      const now = Date.now();
       const mergedImport = {
         appInfo: importedData.appInfo,
         currentState: {
           currentDayDate: currentState.currentDayDate,
           currentWeekStartDate: currentState.currentWeekStartDate,
-          dailyCounts: currentDailyCounts,
+          dailyCounts: mergedDailyCounts,
           weeklyCounts: mergedWeeklyCounts,
-          lastModified: Date.now(),
+          lastModified: now,
           metadata: {
-            schemaVersion: 1,
+            schemaVersion: 3,
             partialImport: true,
             currentWeekDirty: true,
             historyDirty: true,
+            dailyTotalsDirty: true,
+            dailyTotalsUpdatedAt: now,
+            weeklyTotalsDirty: true,
+            weeklyTotalsUpdatedAt: now,
           },
         },
         history: importedData.history,
@@ -2044,16 +2054,15 @@ async function processImport(importedData, dateRelationship) {
       };
 
       await dataService.importData(mergedImport);
+
+      // TODO: add call to have stateManager recalculate weekly totals from daily counts read in from import file
       importResult = { success: true };
     } else {
-      // For other import types (SAME_DAY or FUTURE_WEEK), proceed with normal full import
-      // Before importing, set metadata with dirty flags
-      if (!importedData.currentState.metadata) {
-        importedData.currentState.metadata = {};
-      }
-
-      // Set appropriate flags based on what is being imported
-      importedData.currentState.metadata.currentWeekDirty = true;
+      // SAME_DAY or FUTURE_WEEK – full import
+      importedData.currentState.metadata = {
+        ...(importedData.currentState.metadata || {}),
+        currentWeekDirty: true,
+      };
 
       if (importedData.history && importedData.history.length > 0) {
         importedData.currentState.metadata.historyDirty = true;
@@ -2063,7 +2072,8 @@ async function processImport(importedData, dateRelationship) {
       importResult = { success: true };
     }
 
-    // After import, reload application state
+    const foodGroups =
+      stateManager.getState().foodGroups || stateManager.getFoodGroups();
     await stateManager.initialize(foodGroups);
 
     return importResult;

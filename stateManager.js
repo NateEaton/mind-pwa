@@ -906,7 +906,7 @@ function getNextWeekStartDate(weekStartDateStr) {
  * @returns {Promise<void>} Promise that resolves when archive is complete.
  */
 async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
-  const stateToArchive = completedWeekState || getState(); // Fallback, but completedWeekState is preferred
+  const stateToArchive = completedWeekState || getState();
   const timestamp = archiveTimestamp || dataService.getCurrentTimestamp();
 
   if (!stateToArchive.currentWeekStartDate) {
@@ -918,49 +918,86 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
     );
   }
 
-  // Prepare the data for the history record
+  // --- Filter dailyCounts to only include days within the archived week ---
+  const filteredDailyBreakdown = {};
+  const weekStartDateObj = new Date(
+    stateToArchive.currentWeekStartDate + "T00:00:00"
+  );
+
+  for (let i = 0; i < 7; i++) {
+    const dayInArchivedWeekObj = new Date(weekStartDateObj);
+    dayInArchivedWeekObj.setDate(weekStartDateObj.getDate() + i);
+
+    const dayStr = appUtils.formatDateToYYYYMMDD(dayInArchivedWeekObj); // Use the imported utility
+
+    if (dayStr === "") {
+      logger.error(
+        "Failed to format date in archiveCurrentWeek, skipping day:",
+        dayInArchivedWeekObj
+      );
+      continue;
+    }
+
+    // Check the original dailyCounts from the state being archived
+    if (
+      stateToArchive.dailyCounts &&
+      stateToArchive.dailyCounts.hasOwnProperty(dayStr)
+    ) {
+      filteredDailyBreakdown[dayStr] =
+        typeof stateToArchive.dailyCounts[dayStr] === "object"
+          ? { ...stateToArchive.dailyCounts[dayStr] }
+          : {};
+    } else {
+      // Ensure all 7 days have an entry, even if empty
+      filteredDailyBreakdown[dayStr] = {};
+    }
+  }
+  // --- End of filtering ---
+
   const weekDataForHistory = {
     weekStartDate: stateToArchive.currentWeekStartDate,
-    dailyBreakdown: { ...stateToArchive.dailyCounts }, // Pass the entire dailyCounts map for the completed week
-    totals: { ...stateToArchive.weeklyCounts }, // Pass the summed weeklyCounts for the completed week
-    // `targets` will be constructed by normalizeWeekData using stateToArchive.foodGroups
-    // `metadata.updatedAt` will be set by normalizeWeekData
+    dailyBreakdown: filteredDailyBreakdown, // <<< USE THE FILTERED OBJECT HERE
+    totals: { ...stateToArchive.weeklyCounts }, // This should be correct now due to fixes in checkDateAndReset
   };
 
   logger.info(
     `Archiving week: ${stateToArchive.currentWeekStartDate}`,
-    `DailyBreakdown keys: ${
-      Object.keys(weekDataForHistory.dailyBreakdown || {}).length
-    }`,
+    `DailyBreakdown keys being archived: ${
+      Object.keys(weekDataForHistory.dailyBreakdown).length
+    }`, // Should now be 7
     `Weekly Totals keys: ${Object.keys(weekDataForHistory.totals || {}).length}`
+  );
+  logger.debug(
+    "Full dailyBreakdown for archive:",
+    JSON.parse(JSON.stringify(weekDataForHistory.dailyBreakdown))
+  );
+  logger.debug(
+    "Full totals for archive:",
+    JSON.parse(JSON.stringify(weekDataForHistory.totals))
   );
 
   try {
     await dataService.saveWeekHistory(weekDataForHistory, {
-      foodGroups: stateToArchive.foodGroups, // Pass foodGroups to build targets
-      updatedAt: timestamp, // Explicitly set updatedAt for the archive action
-      weekStartDay: stateToArchive.metadata?.weekStartDay || "Sunday", // Pass the week start day preference
+      foodGroups: stateToArchive.foodGroups,
+      updatedAt: timestamp,
+      weekStartDay: stateToArchive.metadata?.weekStartDay || "Sunday",
     });
     logger.info(
       `Archived week ${stateToArchive.currentWeekStartDate} with timestamp ${timestamp}`
     );
 
-    // Refresh history data in state after successful save
     const historyData = await dataService.getAllWeekHistory();
     dispatch({
       type: ACTION_TYPES.SET_HISTORY,
       payload: { history: historyData || [] },
     });
 
-    // Set history dirty flag and update lastModified
     updateMetadata({
+      // This function is defined and exported in your stateManager.js
       historyDirty: true,
       lastModified: timestamp,
-      // weeklyTotalsDirty might be considered false for the *completed* week as it's now archived.
-      // The new current week will start fresh.
     });
 
-    // Reset history index to show most recent if history is not empty
     if (historyData && historyData.length > 0) {
       dispatch({
         type: ACTION_TYPES.SET_HISTORY_INDEX,
@@ -972,8 +1009,6 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
       `Failed to archive week ${stateToArchive.currentWeekStartDate}:`,
       error
     );
-    // Decide if to re-throw or handle (e.g., show toast to user)
-    // For now, re-throwing allows checkDateAndReset to know if archival failed.
     throw error;
   }
 }

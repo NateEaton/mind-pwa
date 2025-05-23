@@ -525,25 +525,100 @@ async function getWeekHistory(weekStartDate) {
 }
 
 /**
- * Create a history record from imported current state data
- * @param {Object} currentStateData - The current state data to convert
- * @param {Object} importInfo - Import related information
- * @param {Array} foodGroups - The food groups configuration with targets
- * @returns {Object} A properly formatted history record
+ * Create a history record from imported current state data.
+ * This new version handles dailyCounts -> dailyBreakdown and recalculates totals.
+ * @param {Object} importedCurrentStateData - The current state data to convert (must have .currentWeekStartDate and .dailyCounts).
+ * @param {Object} importInfo - appInfo from the import file (for deviceId, timestamp context).
+ * @param {Array} foodGroupsConfig - The application's current food groups configuration (for building targets).
+ * @param {string} [weekStartDayPrefForRecord="Sunday"] - The week start day preference to associate with this new history record.
+ * @returns {Object} A properly formatted history record, or null if input is invalid.
  */
 function createHistoryFromCurrentState(
-  currentStateData,
+  importedCurrentStateData,
   importInfo,
-  foodGroups
+  foodGroupsConfig,
+  weekStartDayPrefForRecord = "Sunday"
 ) {
-  const weekData = {
-    weekStartDate: currentStateData.currentWeekStartDate,
-    totals: currentStateData.weeklyCounts,
+  if (
+    !importedCurrentStateData ||
+    !importedCurrentStateData.currentWeekStartDate ||
+    typeof importedCurrentStateData.dailyCounts !== "object"
+  ) {
+    logger.error(
+      "dataService.createHistoryFromCurrentState: Missing required fields (currentWeekStartDate, dailyCounts) in importedCurrentStateData.",
+      importedCurrentStateData
+    );
+    // throw new Error("Invalid data for creating history from current state."); // Or return null
+    return null;
+  }
+
+  // The dailyCounts from the imported currentState become the dailyBreakdown for the history record.
+  // Filter to ensure only the 7 days of that specific week are included.
+  const dailyBreakdownForHistory = {};
+  const weekStartDate = importedCurrentStateData.currentWeekStartDate;
+  const startDateObj = new Date(weekStartDate + "T00:00:00");
+
+  for (let i = 0; i < 7; i++) {
+    const dayToProcess = new Date(startDateObj);
+    dayToProcess.setDate(startDateObj.getDate() + i);
+
+    // Use a local formatter or appUtils if dataService doesn't have a direct formatter for specific dates
+    const year = dayToProcess.getFullYear();
+    const month = String(dayToProcess.getMonth() + 1).padStart(2, "0");
+    const day = String(dayToProcess.getDate()).padStart(2, "0");
+    const dateStr = `${year}-${month}-${day}`;
+
+    if (importedCurrentStateData.dailyCounts.hasOwnProperty(dateStr)) {
+      dailyBreakdownForHistory[dateStr] = {
+        ...(importedCurrentStateData.dailyCounts[dateStr] || {}),
+      };
+    } else {
+      dailyBreakdownForHistory[dateStr] = {}; // Ensure all 7 days exist
+    }
+  }
+  logger.debug(
+    "createHistoryFromCurrentState: Created dailyBreakdownForHistory:",
+    JSON.parse(JSON.stringify(dailyBreakdownForHistory))
+  );
+
+  // Recalculate totals based on this dailyBreakdown
+  const newTotals = {};
+  for (const dateKey in dailyBreakdownForHistory) {
+    if (dailyBreakdownForHistory.hasOwnProperty(dateKey)) {
+      const dayData = dailyBreakdownForHistory[dateKey];
+      for (const foodId in dayData) {
+        if (dayData.hasOwnProperty(foodId)) {
+          newTotals[foodId] = (newTotals[foodId] || 0) + (dayData[foodId] || 0);
+        }
+      }
+    }
+  }
+  logger.debug(
+    "createHistoryFromCurrentState: Recalculated newTotals:",
+    JSON.parse(JSON.stringify(newTotals))
+  );
+
+  const weekDataForNormalization = {
+    weekStartDate: importedCurrentStateData.currentWeekStartDate, // From the imported state
+    dailyBreakdown: dailyBreakdownForHistory,
+    totals: newTotals,
+    id: generateUUID(), // Generate a new ID for this new history record
+    metadata: {
+      // Pass relevant metadata from importInfo
+      syncStatus: "imported",
+      createdAt: importInfo?.exportTimestamp || getCurrentTimestamp(), // Use export time as creation time if available
+      // updatedAt will be set by normalizeWeekData or saveWeekHistory
+      // deviceId & deviceInfo will be set by normalizeWeekData to current device
+    },
   };
 
-  return normalizeWeekData(weekData, {
-    foodGroups,
-    importInfo,
+  // Normalize to full history record structure
+  // normalizeWeekData will build targets using foodGroupsConfig and set other metadata
+  return normalizeWeekData(weekDataForNormalization, {
+    foodGroups: foodGroupsConfig,
+    importInfo: importInfo, // Pass original appInfo for context if normalizeWeekData uses it
+    weekStartDay: weekStartDayPrefForRecord, // Associate this preference with the record
+    updatedAt: importInfo?.exportTimestamp || getCurrentTimestamp(), // Ensure updatedAt reflects import time or original export
   });
 }
 
@@ -1425,6 +1500,7 @@ export default {
   exportData,
   importData,
   createHistoryFromCurrentState,
+  getDeviceId,
 
   // Diagnostics
   getDBStats,
