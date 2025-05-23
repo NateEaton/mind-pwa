@@ -26,6 +26,7 @@
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"> <!-- For older compatibility -->
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.3.67/css/materialdesignicons.min.css"> <!-- Material Design Icons -->
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png"> <!-- Basic iOS support -->
 </head>
@@ -38,22 +39,22 @@
         <!-- Move navigation to its own container below the header title -->
         <div class="tab-bar-container">
             <nav class="tab-bar">
-                <button data-view="tracker" class="tab-item">
-                    <span class="tab-icon">📋</span>
-                    <span class="tab-label">Daily</span>
-                </button>
-                <button data-view="current-week" class="tab-item">
-                    <span class="tab-icon">📊</span>
-                    <span class="tab-label">Weekly</span>
-                </button>
-                <button data-view="history" class="tab-item">
-                    <span class="tab-icon">📅</span>
-                    <span class="tab-label">History</span>
-                </button>
-                <button id="tab-menu-btn" class="tab-item">
-                    <span class="tab-icon">⋮</span>
-                    <span class="tab-label">Menu</span>
-                </button>
+            <button data-view="tracker" class="tab-item">
+                <i class="mdi mdi-calendar-today"></i>
+                <span class="tab-label">Daily</span>
+            </button>
+            <button data-view="current-week" class="tab-item">
+                <i class="mdi mdi-chart-bar"></i>
+                <span class="tab-label">Weekly</span>
+            </button>
+            <button data-view="history" class="tab-item">
+                <i class="mdi mdi-archive-clock-outline"></i>
+                <span class="tab-label">History</span>
+            </button>
+            <button id="tab-menu-btn" class="tab-item">
+                <i class="mdi mdi-dots-vertical"></i>
+                <span class="tab-label">Menu</span>
+            </button>
             </nav>
         </div>
     </header>
@@ -61,12 +62,12 @@
     <!-- ***** ADD MENU STRUCTURE (Initially Hidden by CSS) ***** -->
     <div id="main-menu" class="main-menu">
         <ul>
-            <li><button id="export-btn">📤 Export Data</button></li>
-            <li><button id="import-btn-trigger">📥 Import Data</button></li>
-            <li class="menu-divider"></li>
-            <li><button id="settings-btn">⚙️ Settings</button></li>
-            <li><button id="user-guide-btn">📘 User Guide</button></li>
-            <li><button id="about-btn">ℹ️ About</button></li>
+        <li><button id="export-btn"><i class="mdi mdi-tray-arrow-down"></i> Export Data</button></li>
+        <li><button id="import-btn-trigger"><i class="mdi mdi-tray-arrow-up"></i> Import Data</button></li>
+        <li class="menu-divider"></li>
+        <li><button id="settings-btn"><i class="mdi mdi-cog-outline"></i> Settings</button></li>
+        <li><button id="user-guide-btn"><i class="mdi mdi-book-open-variant"></i> User Guide</button></li>
+        <li><button id="about-btn"><i class="mdi mdi-information-outline"></i> About</button></li>
         </ul>
     </div>
     <!-- ********************************************************** -->

@@ -361,12 +361,11 @@ function updateSyncUIElements() {
   if (menuSyncBtn) {
     menuSyncBtn.disabled = !syncButtonEnabled;
 
-    // Optionally update button text based on state
     if (syncInProgress) {
-      menuSyncBtn.textContent = "🔄 Syncing...";
+      menuSyncBtn.innerHTML = `<i class="mdi mdi-sync mdi-spin"></i> Syncing...`;
       menuSyncBtn.classList.add("syncing");
     } else {
-      menuSyncBtn.textContent = "🔄 Sync Now";
+      menuSyncBtn.innerHTML = `<i class="mdi mdi-cloud-sync-outline"></i> Sync Now`;
       menuSyncBtn.classList.remove("syncing");
     }
   }
@@ -734,7 +733,7 @@ function setupSyncButton() {
   if (!syncBtn) {
     syncBtn = document.createElement("button");
     syncBtn.id = "sync-btn";
-    syncBtn.textContent = "🔄 Sync Now";
+    syncBtn.innerHTML = `<i class="mdi mdi-cloud-sync-outline"></i> Sync Now`;
 
     syncBtn.addEventListener("click", () => {
       logger.info("Sync button clicked");
@@ -1560,10 +1559,10 @@ async function showViewFilesDialog() {
     const dialogContent = `
       <div style="margin-bottom: 15px;">
         <button id="download-selected-btn" class="action-btn" style="margin-right: 10px;">
-          ߓ堄ownload Selected
+          <i class="mdi mdi-cloud-download-outline"></i> Download Selected
         </button>
         <button id="delete-selected-btn" class="action-btn danger-btn">
-          ߗ᯸elete Selected
+          <i class="mdi mdi-trash-can-outline"></i> Delete Selected
         </button>
       </div>
       ${fileListHtml}

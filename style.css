@@ -122,6 +122,7 @@ header nav button {
 
 .tab-bar .tab-item {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     background: none;
@@ -134,15 +135,23 @@ header nav button {
     transition: all 0.2s ease;
 }
 
-.tab-bar .tab-item:hover,
+.tab-bar .tab-item:hover {
+    opacity: 1;
+    background-color: var(--secondary-dark);
+}
+
 .tab-bar .tab-item.active {
     opacity: 1;
     background-color: rgba(255, 255, 255, 0.15);
 }
 
-.tab-bar .tab-icon {
-    margin-right: var(--spacing-xs);
-    font-size: 1.1em;
+.tab-bar .mdi {
+    font-size: 1.4em;
+    /* larger size for visual prominence */
+    margin-bottom: 4px;
+    /* spacing between icon and label */
+    display: block;
+    color: yellow;
 }
 
 main {
@@ -700,6 +709,13 @@ h3:first-child {
     color: #888888;
     cursor: not-allowed;
     opacity: 0.7;
+}
+
+#sync-btn .mdi,
+#download-selected-btn .mdi,
+#delete-selected-btn .mdi {
+    margin-right: 0.4em;
+    vertical-align: middle;
 }
 
 #toast-container {
@@ -1419,6 +1435,26 @@ footer {
 }
 
 /* ================================== */
+/* === Material Design Icons === */
+/* ================================== */
+
+.mdi {
+    color: var(--primary-color);
+    font-size: 1.2em;
+    vertical-align: middle;
+    margin-right: 0.4em;
+}
+
+.action-btn .mdi {
+    color: white;
+}
+
+.danger-btn .mdi {
+    color: white;
+}
+
+
+/* ================================== */
 /* === Responsive Styles === */
 /* ================================== */
 
@@ -1440,6 +1476,7 @@ footer {
 
     .tab-bar .tab-label {
         font-size: var(--font-xs);
+        line-height: 1.2;
     }
 
     .main-menu {
@@ -1449,6 +1486,11 @@ footer {
     .modal-content {
         width: 90%;
     }
+
+    .mdi {
+        font-size: 1em;
+    }
+
 }
 
 
