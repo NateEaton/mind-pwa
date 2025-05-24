@@ -1558,11 +1558,11 @@ async function showViewFilesDialog() {
     // Create dialog content
     const dialogContent = `
       <div style="margin-bottom: 15px;">
-        <button id="download-selected-btn" class="action-btn" style="margin-right: 10px;">
-          <i class="mdi mdi-cloud-download-outline"></i> Download Selected
+        <button id="download-selected-btn" class="action-btn" style="margin-right: 8px;">
+          <i class="mdi mdi-cloud-download-outline"></i> Download
         </button>
         <button id="delete-selected-btn" class="action-btn danger-btn">
-          <i class="mdi mdi-trash-can-outline"></i> Delete Selected
+          <i class="mdi mdi-trash-can-outline"></i> Delete
         </button>
       </div>
       ${fileListHtml}
