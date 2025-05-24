@@ -1619,11 +1619,11 @@ h3:first-child {
         margin-right: 0;
         /* Since flex-direction is column */
         margin-bottom: 2px;
-        font-size: 1.1em;
+        font-size: 1.4em;
     }
 
     .tab-bar .tab-label {
-        font-size: calc(var(--font-xs) - 1px);
+        font-size: calc(var(--font-md));
         line-height: 1.1;
     }
 
