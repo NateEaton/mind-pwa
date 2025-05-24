@@ -78,50 +78,66 @@
 
         <!-- Daily Tracker View -->
         <section id="tracker-view" class="view active-view">
-            <h2><span id="tracker-date"></span></h2> <!-- Main date display -->
-            <div id="tracker-day-selector-bar" class="day-selector-bar">
-                <!-- Day selector buttons will be rendered here by uiRenderer.js -->
-            </div>
-            <div id="food-tracker">
-                <div id="food-items-list"></div>
-            </div>
+            <div class="view-header-sticky">
+                <h2><span id="tracker-date"></span></h2> <!-- Main date display -->
+                <div id="tracker-day-selector-bar" class="day-selector-bar">
+                    <!-- Day selector buttons will be rendered here by uiRenderer.js -->
+                </div>
+            </div> <!-- end view-header-sticky -->
+            <div class="view-content-scrollable">
+                <div id="food-tracker">
+                    <div id="food-items-list"></div>
+                </div>
+            </div> <!-- end view-content-scrollable -->
         </section>
 
         <!-- Current Week Summary View -->
         <section id="current-week-view" class="view">
-            <h2>Week of <span id="current-week-start-date" class="heading-date"></span></h2>
-            <div id="current-week-summary-content">
-                <!-- Summary content will be generated here -->
-            </div>
+            <div class="view-header-sticky">
+                <h2>Week of <span id="current-week-start-date" class="heading-date"></span></h2>
+            </div> <!-- end view-header-sticky -->
+            <div class="view-content-scrollable">
+                <div id="current-week-summary-content">
+                    <!-- Summary content will be generated here -->
+                </div>
+                <!-- If you add #edit-current-week-btn, it would likely go here or in sticky -->
+            </div> <!-- end view-content-scrollable -->
         </section>
 
         <!-- History View -->
         <section id="history-view" class="view">
-            <h2 id="history-main-title">Weekly History</h2>
-            <div class="history-nav">
-                <button id="prev-week-btn" class="icon-btn round-btn" disabled aria-label="Previous Week">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>  <!-- <<< ADD THIS PATH FOR PREVIOUS ARROW -->
-                    </svg>
-                </button>
-                <input type="date" id="history-date-picker" title="Go to week containing this date">
-                <button id="next-week-btn" class="icon-btn round-btn" disabled aria-label="Next Week">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/> <!-- <<< ADD THIS PATH FOR NEXT ARROW -->
-                    </svg>
-                </button>
+            <div class="view-header-sticky">
+                <h2 id="history-main-title">Weekly History</h2>
+                <div class="history-nav">
+                    <div class="history-date-controls">
+                        <button id="prev-week-btn" class="icon-btn round-btn" disabled aria-label="Previous Week">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                            </svg>
+                        </button>
+                        <input type="date" id="history-date-picker" title="Go to week containing this date">
+                        <button id="next-week-btn" class="icon-btn round-btn" disabled aria-label="Next Week">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <!-- NEW LOCATION FOR THE EDIT BUTTON -->
+                    <button id="edit-history-week-btn" class="icon-btn text-btn" disabled aria-label="Edit daily details for this week">
+                        <i class="mdi mdi-pencil-outline"></i>
+                        <span>Edit</span>
+                    </button>
+                </div>
             </div>
-            <div id="history-content">
-                <p>Loading history...</p>
+            <div class="view-content-scrollable">
+                <div id="history-content">
+                    <p>Loading history...</p>
+                </div>
+                <!-- BUTTON REMOVED FROM HERE -->
             </div>
-            <button id="edit-history-week-btn" disabled>View/Edit Daily Details</button>
         </section>
 
     </main>
-
-    <footer>
-        <p>MIND Diet Tracker PWA <span id="app-version"></span></p>
-    </footer>
 
     <!-- Edit Totals Modal Structure (Initially Hidden) -->
     <div id="edit-totals-modal" class="modal"> <!-- Or rename ID to #edit-history-daily-details-modal -->

@@ -59,6 +59,9 @@
     --border-radius-sm: 4px;
     --border-radius-md: 8px;
     --background-alt: #f9f9f9;
+
+    /* THIS IS THE NEW VARIABLE - INSPECT YOUR HEADER AND UPDATE THIS VALUE! */
+    --main-app-header-height: 88px;
 }
 
 /* ================================== */
@@ -71,12 +74,15 @@ body {
     background-color: var(--bg-color);
     color: var(--text-color);
     line-height: 1.6;
+    overflow: hidden;
+    /* Prevent body scroll */
 }
 
 header {
     background-color: var(--primary-color);
     color: white;
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md);
+    /* MODIFIED from --spacing-lg */
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     position: sticky;
     top: 0;
@@ -88,7 +94,8 @@ header {
 
 header h1 {
     margin: 0;
-    font-size: 1.6rem;
+    font-size: 1.5rem;
+    /* MODIFIED from 1.6rem (and original 1.4rem in your last paste) */
     width: 100%;
     text-align: center;
 }
@@ -102,7 +109,8 @@ header nav button {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: var(--spacing-sm) var(--spacing-lg);
+    /* padding: var(--spacing-sm) var(--spacing-lg); This was in your paste, but might be redundant if header itself has padding */
+    /* If header-top is meant to contain only the h1, its padding might not be needed if header has padding */
 }
 
 .tab-bar-container {
@@ -129,7 +137,8 @@ header nav button {
     border: none;
     color: white;
     opacity: 0.8;
-    padding: var(--spacing-sm) var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-xs);
+    /* MODIFIED */
     flex: 1;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -146,32 +155,74 @@ header nav button {
 }
 
 .tab-bar .mdi {
-    font-size: 1.4em;
-    /* larger size for visual prominence */
-    margin-bottom: 4px;
-    /* spacing between icon and label */
+    font-size: 1.3em;
+    /* MODIFIED */
+    margin-bottom: 2px;
+    /* MODIFIED */
     display: block;
     color: yellow;
 }
 
 main {
-    padding: var(--spacing-lg);
+    padding-left: var(--spacing-lg);
+    padding-right: var(--spacing-lg);
     max-width: 800px;
-    margin: var(--spacing-lg) auto;
+    margin: 0 auto;
+    /* Removed top/bottom margin */
+    height: calc(100vh - var(--main-app-header-height));
+    /* Fill available space */
+    overflow: hidden;
+    /* Prevent main from scrolling */
+    display: flex;
+    flex-direction: column;
 }
 
 .view {
     display: none;
     background-color: var(--card-bg);
-    padding: var(--spacing-xl);
-    margin-bottom: var(--spacing-lg);
+    /* padding: var(--spacing-xl); REMOVED - applied to sub-elements */
+    /* margin-bottom: var(--spacing-lg); REMOVED - view fills main */
     border-radius: var(--border-radius-md);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+    /* NEW styles for internal sticky header/scrollable content */
+    flex-direction: column;
+    /* Stack header and content vertically */
+    width: 100%;
+    /* Take full width of parent (main) */
+    height: 100%;
+    /* Take full height of parent (main) */
+    overflow: hidden;
+    /* Crucial: The view itself should not scroll */
 }
 
 .view.active-view {
-    display: block;
+    display: flex;
+    /* MODIFIED from block, to enable flex behaviors */
 }
+
+/* NEW: Styles for sticky header and scrollable content within a view */
+.view-header-sticky {
+    padding: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    /* Can be adjusted per view */
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    /* Prevent this part from shrinking */
+    position: relative;
+    z-index: 1;
+    background-color: var(--card-bg);
+    /* Ensure background matches */
+}
+
+.view-content-scrollable {
+    flex-grow: 1;
+    /* Takes up all remaining vertical space in the .view */
+    overflow-y: auto;
+    /* Enables vertical scrolling for this part only */
+    padding: var(--spacing-lg);
+}
+
 
 /* ================================== */
 /* === Typography & Headings === */
@@ -184,16 +235,24 @@ h3 {
     padding-bottom: var(--spacing-xs);
     margin-top: var(--spacing-xl);
     margin-bottom: var(--spacing-lg);
-    line-height: 1.3;
+    line-height: 1.2;
 }
 
+/* This ensures h2/h3 in .view-header-sticky don't have excessive top margin */
+.view-header-sticky h2:first-child,
+.view-header-sticky h3:first-child {
+    margin-top: 0;
+}
+
+/* Keep original rule for general cases */
 h2:first-child,
 h3:first-child {
     margin-top: 0;
 }
 
+
 .heading-date {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: normal;
     color: var(--primary-color);
     margin-left: var(--spacing-sm);
@@ -202,6 +261,7 @@ h3:first-child {
 
 /* Style for the Weekly View Header (ensure date matches h2 style) */
 #current-week-view h2 {
+    /* This rule now applies to the h2 inside .view-header-sticky */
     display: flex;
     align-items: baseline;
     flex-wrap: nowrap;
@@ -227,6 +287,7 @@ h3:first-child {
     justify-content: space-between;
     align-items: center;
     padding: var(--spacing-md) 0;
+    /* Keep vertical padding for items */
     border-bottom: 1px solid var(--border-color);
     flex-wrap: nowrap;
 }
@@ -380,7 +441,6 @@ h3:first-child {
     margin: 0;
 }
 
-/* This class is not in the template, but style is here from original */
 .food-group-item .current-week-total {
     font-size: var(--font-xs);
     color: var(--text-muted);
@@ -394,15 +454,17 @@ h3:first-child {
 
 .history-nav {
     display: flex;
-    /* MODIFICATION: Default to nowrap to keep items on one line */
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
-    padding: var(--spacing-sm);
-    background-color: var(--background-alt);
-    border-radius: var(--border-radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.history-date-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
 .history-nav button,
@@ -410,15 +472,74 @@ h3:first-child {
     padding: var(--spacing-sm);
 }
 
-#history-date-picker {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border: 1px solid var(--border-color);
+/* Style for the new text button with icon */
+.history-nav #edit-history-week-btn.icon-btn.text-btn {
+    /* More specific selector */
+    background-color: var(--secondary-color);
+    /* Original button color */
+    color: white;
+    /* White text */
+    border: none;
+    /* No border, consistent with old style */
     border-radius: var(--border-radius-sm);
-    font-size: 1.0em;
-    max-width: 130px;
-    flex-shrink: 0;
-    flex-grow: 1;
-    min-width: 120px;
+    /* Same as date picker/old button */
+    padding: var(--spacing-xs) var(--spacing-sm);
+    /* Adjust padding for compactness */
+    font-size: var(--font-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+    /* min-width: 70px; REMOVED - let content define width */
+    height: 36px;
+    /* Match other icon buttons height if desired, or make it fit content */
+    box-sizing: border-box;
+    line-height: 1;
+    /* For better vertical alignment of text */
+    white-space: nowrap;
+    /* Prevent "Edit" from wrapping if space is tight */
+}
+
+.history-nav #edit-history-week-btn.icon-btn.text-btn .mdi {
+    color: white;
+    /* White icon */
+    font-size: 1.1em;
+    /* Adjust icon size as needed */
+    margin-right: 4px;
+    /* Slightly reduced space between icon and text (was var(--spacing-xs)) */
+    vertical-align: middle;
+    /* Better align icon with text */
+}
+
+.history-nav #edit-history-week-btn.icon-btn.text-btn span {
+    vertical-align: middle;
+    /* Better align text with icon */
+}
+
+.history-nav #edit-history-week-btn.icon-btn.text-btn:hover {
+    background-color: var(--secondary-dark);
+    /* Original hover color */
+}
+
+.history-nav #edit-history-week-btn.icon-btn.text-btn:disabled {
+    background-color: #ccc;
+    /* Original disabled color */
+    color: #888;
+    /* Original disabled text color */
+    cursor: not-allowed;
+}
+
+.history-nav #edit-history-week-btn.icon-btn.text-btn:disabled .mdi {
+    color: #888;
+    /* Original disabled icon color */
+}
+
+#history-date-picker {
+    flex-grow: 2;
+    /* Allow date picker to take more space if available */
+    max-width: 150px;
+    /* Slightly more width if needed */
 }
 
 .icon-btn.round-btn {
@@ -453,6 +574,7 @@ h3:first-child {
 }
 
 #history-content ul,
+/* These uls are inside .view-content-scrollable */
 #current-week-summary-content ul {
     list-style: none;
     padding: 0;
@@ -620,32 +742,28 @@ h3:first-child {
     background-color: var(--near-limit-color);
 }
 
-
-#edit-current-week-btn,
 #edit-history-week-btn {
-    background-color: var(--secondary-color);
-    color: white;
-    border: none;
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-    transition: background-color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4em 0.8em;
     font-size: var(--font-sm);
-    margin: var(--spacing-lg) auto;
-    display: block;
-    width: 80%;
-    max-width: 250px;
+    border: 1px solid var(--secondary-color);
+    background-color: transparent;
+    color: var(--secondary-dark);
+    border-radius: var(--border-radius-md);
+    transition: background-color 0.2s, color 0.2s;
 }
 
-#edit-current-week-btn:hover,
-#edit-history-week-btn:hover {
-    background-color: var(--secondary-dark);
+/* Hover and disabled state */
+#edit-history-week-btn:hover:not(:disabled) {
+    background: var(--secondary-color);
+    color: white;
 }
 
-#edit-current-week-btn:disabled,
 #edit-history-week-btn:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+    opacity: 0.5;
+    border-color: #ccc;
+    color: #aaa;
 }
 
 /* ================================== */
@@ -655,9 +773,10 @@ h3:first-child {
 .main-menu {
     display: none;
     position: fixed;
-    top: 110px;
-    right: 10px;
+    /* top: 110px; JS will set this */
+    /* right: 10px; JS will set this */
     left: auto;
+    /* Ensure JS can override */
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-sm);
@@ -805,6 +924,7 @@ h3:first-child {
     width: 100%;
     height: 100%;
     overflow: auto;
+    /* Modal itself can scroll if content is too tall */
     background-color: rgba(0, 0, 0, 0.55);
 }
 
@@ -817,6 +937,7 @@ h3:first-child {
 .modal-content {
     background-color: var(--card-bg);
     margin: auto;
+    /* Keep auto margin for centering */
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-md);
     width: 85%;
@@ -824,6 +945,7 @@ h3:first-child {
     position: relative;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     overflow: hidden;
+    /* Prevent modal-content itself from scrolling, modal-body handles it */
     display: flex;
     flex-direction: column;
     padding: 0;
@@ -834,8 +956,11 @@ h3:first-child {
     color: white;
     padding: 15px 20px;
     position: relative;
+    /* Keep for close button positioning */
     width: 100%;
     box-sizing: border-box;
+    flex-shrink: 0;
+    /* Prevent header from shrinking */
 }
 
 .modal-title {
@@ -865,10 +990,13 @@ h3:first-child {
     font-size: var(--font-sm);
     color: var(--text-color);
     max-height: 60vh;
+    /* Limit height and allow scrolling */
     overflow-y: auto;
     line-height: 1.6;
     width: 100%;
     box-sizing: border-box;
+    flex-grow: 1;
+    /* Allow body to take remaining space */
 }
 
 .modal-body p {
@@ -910,6 +1038,8 @@ h3:first-child {
     width: 100%;
     box-sizing: border-box;
     margin: 0;
+    flex-shrink: 0;
+    /* Prevent actions from shrinking */
 }
 
 .modal-actions button {
@@ -969,6 +1099,7 @@ h3:first-child {
 }
 
 #edit-totals-list.modal-body {
+    /* This already targets a modal-body */
     padding: 10px;
 }
 
@@ -1095,13 +1226,16 @@ h3:first-child {
     padding: 15px 20px;
     font-weight: bold;
     font-size: var(--font-lg);
+    flex-shrink: 0;
 }
 
 .custom-dialog-body {
     padding: 20px;
     overflow-y: auto;
     max-height: 60vh;
+    /* Or adjust based on overall dialog height */
     line-height: 1.5;
+    flex-grow: 1;
 }
 
 .custom-dialog-message {
@@ -1115,6 +1249,7 @@ h3:first-child {
     justify-content: flex-end;
     border-top: 1px solid var(--border-color);
     background-color: #f8f8f8;
+    flex-shrink: 0;
 }
 
 .custom-dialog-footer button {
@@ -1193,7 +1328,7 @@ h3:first-child {
     border-top: 1px solid var(--border-color);
 }
 
-.settings-section.collapsible>.section-header+.section-content {}
+/* .settings-section.collapsible>.section-header+.section-content {} - This empty rule can be removed */
 
 
 .settings-row {
@@ -1368,10 +1503,12 @@ h3:first-child {
 
 /* === Day Selector Bar === */
 .day-selector-bar {
+    /* Applies to both tracker and modal day selectors */
     display: flex;
     justify-content: space-around;
     align-items: center;
     margin-bottom: var(--spacing-lg);
+    /* Fine for .view-header-sticky */
     padding: var(--spacing-xs) 0;
     background-color: #e9e9e9;
     border-radius: 20px;
@@ -1408,30 +1545,22 @@ h3:first-child {
     font-weight: bold;
 }
 
+/* Specific to the modal's day selector, if needed */
 .modal-day-selector {
+    /* This class is on the #modal-day-selector-bar div */
     margin-top: var(--spacing-sm);
     margin-bottom: var(--spacing-md);
+    /* Overrides general .day-selector-bar margin */
     padding: var(--spacing-xs);
+    /* Overrides general .day-selector-bar padding if needed */
 }
 
 .modal-day-selector .day-selector-btn {
+    /* Targets buttons inside the modal's bar */
     font-size: var(--font-xs);
     width: 28px;
     height: 28px;
     padding: var(--spacing-xs);
-}
-
-
-/* ================================== */
-/* === Footer === */
-/* ================================== */
-
-footer {
-    text-align: center;
-    margin-top: var(--spacing-xl);
-    padding: var(--spacing-lg);
-    font-size: var(--font-sm);
-    color: #777;
 }
 
 /* ================================== */
@@ -1439,18 +1568,24 @@ footer {
 /* ================================== */
 
 .mdi {
+    /* General MDI styling */
     color: var(--primary-color);
+    /* Default color for MDI icons */
     font-size: 1.2em;
     vertical-align: middle;
     margin-right: 0.4em;
 }
 
 .action-btn .mdi {
+    /* MDI icons inside action buttons */
     color: white;
+    /* Override default if needed */
 }
 
 .danger-btn .mdi {
+    /* MDI icons inside danger buttons */
     color: white;
+    /* Override default if needed */
 }
 
 
@@ -1460,37 +1595,62 @@ footer {
 
 @media (max-width: 600px) {
     header h1 {
-        font-size: 1.4rem;
+        font-size: 1.3rem;
+        /* MODIFIED from 1.5rem (original 1.4rem in your last paste) */
     }
 
-    .tab-bar .tab-item {
-        flex-direction: column;
-        padding: var(--spacing-sm) var(--spacing-xs);
-    }
+    /* .tab-bar .tab-item padding already adjusted to var(--spacing-xs) var(--spacing-xs) */
+    /* .tab-bar .tab-item {
+        padding: var(--spacing-xs) var(--spacing-xs);
+    } */
 
-    .tab-bar .tab-icon {
+    /* This selector for .tab-icon was in your previous paste,
+       but .tab-bar .mdi is more specific for the current HTML.
+       If .tab-icon exists elsewhere, keep it. Otherwise, rely on .tab-bar .mdi below.
+    */
+    /* .tab-bar .tab-icon {
         margin-right: 0;
         margin-bottom: 4px;
         font-size: 1.2em;
+    } */
+
+    /* This targets the .mdi icon specifically inside .tab-item */
+    .tab-bar .tab-item .mdi {
+        margin-right: 0;
+        /* Since flex-direction is column */
+        margin-bottom: 2px;
+        font-size: 1.1em;
     }
 
     .tab-bar .tab-label {
-        font-size: var(--font-xs);
-        line-height: 1.2;
+        font-size: calc(var(--font-xs) - 1px);
+        line-height: 1.1;
     }
 
     .main-menu {
-        top: 100px;
+        /* top: 100px; JS handles positioning, this can be a fallback or removed */
     }
 
     .modal-content {
         width: 90%;
+        /* This is fine */
     }
 
     .mdi {
+        /* General MDI adjustment for smaller screens */
         font-size: 1em;
+        /* margin-right: 0.3em; /* Optionally reduce margin */
     }
 
+    /* Adjust padding for view sticky headers and scrollable content on smaller screens */
+    .view-header-sticky,
+    .view-content-scrollable {
+        padding: var(--spacing-md);
+    }
+
+    .view-header-sticky {
+        padding-bottom: var(--spacing-sm);
+    }
 }
 
 
@@ -1498,21 +1658,34 @@ footer {
 
     /* General Mobile Adjustments */
     main {
+        padding-left: var(--spacing-md);
+        padding-right: var(--spacing-md);
+    }
+
+    /* .view {
+        padding: var(--spacing-lg); REMOVED - padding is on children
+    } */
+    .view-header-sticky,
+    .view-content-scrollable {
         padding: var(--spacing-md);
+        /* Consistent with 600px or further reduced if needed */
     }
 
-    .view {
-        padding: var(--spacing-lg);
+    .view-header-sticky {
+        /* Specific adjustment for tighter spacing */
+        padding-top: var(--spacing-sm);
+        padding-bottom: var(--spacing-xs);
     }
 
-    h2,
-    h3 {
-        font-size: var(--font-lg);
+    .view-content-scrollable {
+        padding-top: var(--spacing-sm);
     }
+
 
     /* Food Group Item Compactness */
     .food-group-item {
         align-items: flex-start;
+        /* This is fine */
     }
 
     .food-group-item .info {
@@ -1542,32 +1715,15 @@ footer {
         margin-right: var(--spacing-xs);
     }
 
-    /* MODIFICATION: Removed .history-nav specific stacking rules from 480px.
-       It will now remain nowrap (single line) until 360px as per new requirement.
-    */
-    /*
-    .history-nav {
-        flex-direction: column; 
-        align-items: stretch; 
-    }
-    #history-date-picker {
-        max-width: none; 
-        width: 100%;
-        margin-bottom: var(--spacing-sm); 
-        order: 1; 
-    }
-    .history-nav .icon-btn.round-btn { 
-        order: 2;
-    }
-    */
-
-
     .modal-content {
         width: 95%;
         max-width: none;
+        /* Allow full width on very small screens */
         margin-top: var(--spacing-sm);
+        /* Reduce modal margins */
         margin-bottom: var(--spacing-sm);
         max-height: 90vh;
+        /* Ensure modal doesn't exceed viewport height */
     }
 
     .modal-header {
@@ -1588,7 +1744,9 @@ footer {
     }
 
     #edit-totals-modal .modal-content {
+        /* Specific modal if needed */
         width: 95vw;
+        /* Use viewport width */
     }
 
     .summary-table {
@@ -1633,6 +1791,7 @@ footer {
     .settings-row label {
         margin-bottom: var(--spacing-xs);
         min-width: auto;
+        /* Allow label to take natural width */
     }
 
     .settings-row select,
@@ -1640,7 +1799,9 @@ footer {
     .settings-row .action-btn {
         width: 100%;
         max-width: none;
+        /* Allow full width */
         margin-left: 0;
+        /* Reset margin if any */
     }
 
     .settings-row .action-btn {
@@ -1649,6 +1810,7 @@ footer {
 
     .connection-status {
         margin: var(--spacing-sm) 0;
+        /* Adjust margins */
         width: 100%;
         justify-content: space-between;
     }
@@ -1656,12 +1818,14 @@ footer {
     .provider-row .small-btn {
         margin-top: var(--spacing-sm);
         width: 100%;
+        /* Full width buttons */
     }
 
     #toast-message.toast {
         padding: 10px 20px;
         font-size: 0.9em;
         max-width: 90%;
+        /* Toast can be wider */
     }
 }
 
@@ -1678,23 +1842,30 @@ footer {
         font-size: calc(var(--font-xs) - 1px);
     }
 
-    /* MODIFICATION: .history-nav wraps at this breakpoint */
     .history-nav {
         flex-wrap: wrap;
         justify-content: center;
-        /* Center wrapped items */
+        gap: var(--spacing-xs);
+        /* Maybe reduce gap when wrapped */
     }
 
     #history-date-picker {
-        width: 90%;
-        /* Maintain existing width for very small screens */
-        /* Override base flex properties to ensure 90% width is respected when wrapped */
-        min-width: 0;
-        max-width: none;
-        flex-grow: 0;
-        flex-shrink: 1;
-        /* Allow shrinking if parent is too small for 90% */
+        order: 1;
+        /* Ensure date picker comes first if wrapped */
+        width: 100%;
+        /* Take full width when wrapped */
         margin-bottom: var(--spacing-sm);
-        /* Add space if it wraps to its own line */
+        /* flex-grow, flex-shrink already set from base */
+    }
+
+    .history-nav .icon-btn {
+        /* prev, next, edit buttons */
+        order: 2;
+    }
+
+    .history-nav .icon-btn.text-btn {
+        /* Optional: Make edit button full width when wrapped if desired */
+        /* width: 100%; */
+        /* margin-top: var(--spacing-xs); */
     }
 }
