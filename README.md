@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Track servings of key food groups, view summaries, and browse your history. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
+A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet.  Record servings of key food groups each day, view weekly summaries, and browse your historical data. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
 
 [**Live Demo**](https://mind-pwa-fawn.vercel.app/) | [**View Wiki for Complete Documentation**](../../wiki)
 
@@ -17,15 +17,16 @@ If you'd like to test these features, open an issue or contact me with the email
 ## App Screenshots
 
 <div align="center">
-  <p><strong>Main Views</strong></p>
+  <p><strong>Main Views & Menu</strong></p>
   <table>
     <tr valign="top">
       <td><img src="./screenshots/daily-tracker.png" width="180" alt="Daily Tracker View"/></td>
       <td><img src="./screenshots/weekly-summary.png" width="180" alt="Weekly Summary View"/></td>
       <td><img src="./screenshots/history-view.png" width="180" alt="History View"/></td>
+      <td><img src="./screenshots/menu.png" width="180" alt="Menu"/></td>
     </tr>
   </table>
-  
+
   <p><strong>Modal Dialogs</strong></p>
   <table>
     <tr valign="top">
@@ -39,23 +40,24 @@ If you'd like to test these features, open an issue or contact me with the email
 
 ## Quick Start
 
-1. **Open the app** in any modern web browser or install it to your home screen as a PWA
-2. Use the **Daily Tracker** to record servings for each food group
-3. Check the **Weekly** view to monitor your progress toward targets
-4. Browse past weeks in the **History** view
-5. (Optional) Enable **Cloud Sync** in Settings to synchronize data across devices
+1. **Open the app** in any modern web browser or install it to your home screen as a PWA.
+2. Use the **Daily** view to record servings for each food group for a given day.  Use the date navigation to select a different date, as needed.
+3. Check the **Weekly** view to monitor your progress toward targets.
+4. Browse past weeks in the **History** view, and use the *Edit* button to modify daily entries for a past week.
+5. (Optional) Enable **Cloud Sync** in Settings to synchronize data across devices.
 
 ## Core Features
 
-- Daily tracking of MIND Diet food groups
-- Weekly summary by food group
-- Historical data archiving and review
-- Food information tooltips with serving size details
-- Color coding to highlight when targets met or limits exceeded
-- Edit functionality for weekly totals (both current and historical)
-- Cloud synchronization with Google Drive or Dropbox
-- Import/export data capabilities
-- PWA features (offline use, installable)
+- Date-specific tracking of MIND Diet food groups with daily and weekly totals.
+- Weekly summary by food group.
+- Historical data archiving and review.
+- Edit function to directly change the daily entries in historical weeks.
+- Food information tooltips with serving size details.
+- Color coding to highlight when targets met or limits exceeded.
+- Cloud synchronization with Google Drive or Dropbox.
+- Import/export data capabilities.
+- PWA features (offline use, installable).
+- Responsive design optimized for mobile and desktop use.
 
 ## Technology Stack
 
@@ -65,6 +67,7 @@ If you'd like to test these features, open an issue or contact me with the email
 - localStorage (for storing current daily/weekly state)
 - Service Workers (for PWA offline caching)
 - Manifest.json (for PWA installability)
+- Material Design Icons
 - Google Drive & Dropbox APIs (for cloud synchronization)
 - Node.js (for Git hook version generation during development)
 
@@ -95,29 +98,29 @@ For detailed installation instructions, see the [Installation Guide](../../wiki/
 
 This app supports optional cloud synchronization with two providers:
 
-- **Google Drive**: Data is stored in the app's private space, not visible in your Drive file listing
-- **Dropbox**: Similar to Google Drive, data is stored in the app's folder
+- **Google Drive**: Data is stored in the app's private space, not visible in your Drive file listing.
+- **Dropbox**: Similar to Google Drive, data is stored in the app's folder.
 
 To enable cloud sync:
 
-1. Open the **Settings** from the app menu
-2. Check "Enable cloud sync"
-3. Select your preferred provider
-4. Click "Connect" to authenticate
-5. Your data will now automatically sync between devices
+1. Open the **Settings** from the app menu.
+2. Check "Enable cloud sync".
+3. Select your preferred provider.
+4. Click "Connect" to authenticate.
+5. Your data will now automatically sync between devices.
 
 For detailed cloud sync documentation, see the [Cloud Sync Guide](../../wiki/Cloud-Sync-Guide) in the wiki.
 
 ## Data Privacy
 
-- All data is stored locally on your device by default
-- If cloud sync is enabled, data is transferred to your personal Google Drive or Dropbox account
-- The app does not collect or transmit any data to third parties
-- Export functionality allows you to create backups of your data at any time
+- All data is stored locally on your device by default.
+- If cloud sync is enabled, data is transferred to your personal Google Drive or Dropbox account.
+- The app does not collect or transmit any data to third parties.
+- Export functionality allows you to create backups of your data at any time.
 
 ## Development Acknowledgments
 
-This project was developed with assistance from several AI tools following the [vibe coding approach](https://en.wikipedia.org/wiki/Vibe_coding):
+This project was developed with assistance from several AI tools following the [vibe coding approach](https://en.wikipedia.org/wiki/vibe_coding):
 
 - **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro Preview.
 - **Refactoring and Enhancement**: Major refactoring, code organization improvements, UI enhancements, and cloud synchronization features were developed with assistance from Anthropic's Claude Sonnet 3.7.
