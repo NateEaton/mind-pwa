@@ -67,6 +67,7 @@ If you'd like to test these features, open an issue or contact me with the email
 - localStorage (for storing current daily/weekly state)
 - Service Workers (for PWA offline caching)
 - Manifest.json (for PWA installability)
+- Centralized logging (for troubleshooting)
 - Material Design Icons
 - Google Drive & Dropbox APIs (for cloud synchronization)
 - Node.js (for Git hook version generation during development)
