@@ -1,6 +1,7 @@
 # MIND Diet Tracker PWA
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Node.js: >=18.0.0](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
 A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet.  Record servings of key food groups each day, view weekly summaries, and browse your historical data. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
 

@@ -1257,10 +1257,12 @@ function updateModalSelectedDayDisplay(dateStr) {
  * Assumes +/- button event listeners will be handled by app.js delegation on #edit-totals-list.
  * @param {Array} foodGroups - The global food groups array.
  * @param {Object} dailyCountsForSelectedDayInModal - Object like { foodGroupId: count } for the selected day.
+ * @param {Object} tempEditedDailyBreakdown - The complete daily breakdown being edited
  */
 function renderModalDayDetailsList(
   foodGroups,
-  dailyCountsForSelectedDayInModal
+  dailyCountsForSelectedDayInModal,
+  tempEditedDailyBreakdown
 ) {
   const listElement = domElements.modalElements.editTotalsList;
   const itemTemplate = domElements.modalElements.editTotalsItemTemplate;
@@ -1288,7 +1290,21 @@ function renderModalDayDetailsList(
 
   listElement.innerHTML = ""; // Clear previous items
 
-  const counts = dailyCountsForSelectedDayInModal || {}; // Ensure counts is an object
+  const counts = dailyCountsForSelectedDayInModal || {};
+
+  // Calculate weekly totals from tempEditedDailyBreakdown
+  const weeklyTotals = {};
+  logger.debug("Calculating weekly totals from tempEditedDailyBreakdown:", tempEditedDailyBreakdown);
+  
+  if (tempEditedDailyBreakdown) {
+    Object.values(tempEditedDailyBreakdown).forEach((dayData) => {
+      Object.entries(dayData).forEach(([groupId, count]) => {
+        weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
+      });
+    });
+  }
+  
+  logger.debug("Calculated weekly totals:", weeklyTotals);
 
   foodGroups.forEach((group) => {
     const itemFragment = itemTemplate.content.cloneNode(true);
@@ -1303,15 +1319,62 @@ function renderModalDayDetailsList(
 
     item.dataset.id = group.id;
 
-    const nameSpan = item.querySelector(".edit-item-name");
+    // Create name container div for name and weekly badge
+    const nameContainer = document.createElement('div');
+    nameContainer.className = 'name-row';
+
+    // Add name span
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'edit-item-name';
+    nameSpan.textContent = group.name;
+    nameContainer.appendChild(nameSpan);
+
+    // Add weekly badge
+    const weeklyBadge = document.createElement('div');
+    weeklyBadge.className = 'weekly-badge';
+    const weeklyTotal = weeklyTotals[group.id] || 0;
+    weeklyBadge.innerHTML = `<span class="wk-val">${weeklyTotal}</span>`;
+
+    // Calculate effective weekly target
+    let effectiveWeeklyTarget;
+    if (group.frequency === "week") {
+      effectiveWeeklyTarget = group.target;
+    } else if (group.frequency === "day") {
+      effectiveWeeklyTarget = group.target * 7;
+    } else {
+      effectiveWeeklyTarget = group.target;
+    }
+
+    // Update badge color based on progress
+    if (group.type === "positive") {
+      if (weeklyTotal >= effectiveWeeklyTarget) {
+        weeklyBadge.classList.add("badge-primary");
+      }
+    } else {
+      // For limits
+      if (weeklyTotal > effectiveWeeklyTarget) {
+        weeklyBadge.classList.add("badge-danger");
+      } else if (weeklyTotal > effectiveWeeklyTarget * 0.75) {
+        weeklyBadge.classList.add("badge-warning");
+      }
+    }
+
+    nameContainer.appendChild(weeklyBadge);
+
+    // Replace the original name span with our new container
+    const oldNameSpan = item.querySelector(".edit-item-name");
+    if (oldNameSpan) {
+      oldNameSpan.replaceWith(nameContainer);
+    } else {
+      item.insertBefore(nameContainer, item.firstChild);
+    }
+
+    // Set up the count display and controls
     const totalSpan = item.querySelector(".edit-current-total");
     const decBtn = item.querySelector(".edit-decrement-btn");
     const incBtn = item.querySelector(".edit-increment-btn");
 
-    if (nameSpan) nameSpan.textContent = group.name;
     if (totalSpan) totalSpan.textContent = counts[group.id] || 0;
-
-    // Ensure buttons have dataset for groupId for app.js event handlers
     if (decBtn) decBtn.dataset.groupId = group.id;
     if (incBtn) incBtn.dataset.groupId = group.id;
 

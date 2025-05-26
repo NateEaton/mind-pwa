@@ -1880,3 +1880,57 @@ h3:first-child {
         /* margin-top: var(--spacing-xs); */
     }
 }
+
+#edit-totals-modal .edit-totals-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#edit-totals-modal .edit-totals-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+#edit-totals-modal .name-row {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    margin-right: 12px;
+}
+
+#edit-totals-modal .edit-item-name {
+    flex-grow: 1;
+    margin-right: 8px;
+    font-weight: 500;
+}
+
+#edit-totals-modal .weekly-badge {
+    background-color: var(--secondary-color);
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 18px;
+    margin-right: var(--spacing-sm);
+}
+
+#edit-totals-modal .weekly-badge.badge-primary {
+    background-color: var(--primary-color);
+}
+
+#edit-totals-modal .weekly-badge.badge-warning {
+    background-color: var(--limit-color);
+}
+
+#edit-totals-modal .weekly-badge.badge-danger {
+    background-color: var(--error-color);
+}

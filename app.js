@@ -3025,6 +3025,18 @@ function openEditHistoryDailyDetailsModal() {
     }
   }
 
+  // Calculate initial weekly totals from dailyBreakdown
+  const initialWeeklyTotals = {};
+  Object.values(tempEditedDailyBreakdown).forEach((dayData) => {
+    Object.entries(dayData).forEach(([groupId, count]) => {
+      initialWeeklyTotals[groupId] =
+        (initialWeeklyTotals[groupId] || 0) + count;
+    });
+  });
+
+  // Update the history record's totals
+  editingHistoryWeekDataRef.totals = initialWeeklyTotals;
+
   selectedDayInHistoryModal = daysOfThisHistoricalWeek[0]; // Default to first day
 
   const mainModalTitle = `Week of ${weekStartDateObj.toLocaleDateString(
@@ -3064,11 +3076,9 @@ function openEditHistoryDailyDetailsModal() {
 
   uiRenderer.renderModalDayDetailsList(
     historyModalFoodGroups,
-    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {}
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {},
+    tempEditedDailyBreakdown
   );
-
-  // Optional: Set focus, e.g., to the first day selector button or close button
-  // document.querySelector('#modal-day-selector-bar .day-selector-btn.active')?.focus();
 }
 
 /**
@@ -3091,10 +3101,20 @@ function handleModalDayNavigation(newSelectedDayStr) {
   // Update the "Mon, 3/8" display in the modal header
   uiRenderer.updateModalSelectedDayDisplay(selectedDayInHistoryModal);
 
+  // Ensure weekly totals are up to date before re-rendering
+  const weeklyTotals = {};
+  Object.values(tempEditedDailyBreakdown).forEach((dayData) => {
+    Object.entries(dayData).forEach(([groupId, count]) => {
+      weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
+    });
+  });
+  editingHistoryWeekDataRef.totals = weeklyTotals;
+
   // Re-render the food item list for the newly selected day
   uiRenderer.renderModalDayDetailsList(
-    historyModalFoodGroups, // Use the stored foodGroups for the modal
-    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {}
+    historyModalFoodGroups,
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {},
+    tempEditedDailyBreakdown
   );
 
   // The uiRenderer.renderDaySelectorBar already visually updates the active button
@@ -3126,11 +3146,10 @@ function handleModalDailyDetailChange(event) {
     !tempEditedDailyBreakdown ||
     !editingHistoryWeekDataRef
   ) {
-    // logger.warn("handleModalDailyDetailChange: Missing context (button, selectedDay, or tempBreakdown).");
     return;
   }
 
-  const itemElement = button.closest(".edit-totals-item"); // Assuming same item structure
+  const itemElement = button.closest(".edit-totals-item");
   const groupId = itemElement?.dataset.id;
 
   if (!groupId) {
@@ -3140,7 +3159,7 @@ function handleModalDailyDetailChange(event) {
 
   // Ensure the day's entry and food group entry exist in our temporary breakdown
   if (!tempEditedDailyBreakdown[selectedDayInHistoryModal]) {
-    tempEditedDailyBreakdown[selectedDayInHistoryModal] = {}; // Should have been initialized by openEditHistoryDailyDetailsModal
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] = {};
   }
 
   let currentValue =
@@ -3156,23 +3175,14 @@ function handleModalDailyDetailChange(event) {
   }
 
   tempEditedDailyBreakdown[selectedDayInHistoryModal][groupId] = currentValue;
-  appUtils.triggerHapticFeedback(20); // Softer haptic for modal edits
-  logger.debug(
-    `History Modal Change: Day ${selectedDayInHistoryModal}, Group ${groupId}, New Count ${currentValue}`
-  );
+  appUtils.triggerHapticFeedback(20);
 
-  // Re-render just the count span for that item to be efficient, or the whole list if simpler.
-  // For simplicity, re-rendering the list for now.
-  const currentTotalSpan = itemElement.querySelector(".edit-current-total");
-  if (currentTotalSpan) {
-    currentTotalSpan.textContent = currentValue;
-  } else {
-    // Fallback to re-rendering the whole list if specific span not found
-    uiRenderer.renderModalDayDetailsList(
-      historyModalFoodGroups,
-      tempEditedDailyBreakdown[selectedDayInHistoryModal] || {}
-    );
-  }
+  // Re-render the entire list to update all weekly badges
+  uiRenderer.renderModalDayDetailsList(
+    historyModalFoodGroups,
+    tempEditedDailyBreakdown[selectedDayInHistoryModal] || {},
+    tempEditedDailyBreakdown
+  );
 }
 
 /**
