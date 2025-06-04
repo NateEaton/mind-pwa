@@ -92,14 +92,37 @@ class DropboxProvider {
           this.dbx = new window.Dropbox.Dropbox({
             accessToken: this.ACCESS_TOKEN,
           });
-          // Verify token is still valid
+
+          // Store token creation time if not already stored
+          const tokenCreationTime = localStorage.getItem(
+            "dropbox_token_created_at"
+          );
+          if (!tokenCreationTime) {
+            localStorage.setItem(
+              "dropbox_token_created_at",
+              Date.now().toString()
+            );
+          }
+
+          // Check token age
+          const tokenAge =
+            Date.now() - parseInt(tokenCreationTime || Date.now(), 10);
+          const TOKEN_MAX_AGE = 3 * 24 * 60 * 60 * 1000; // 3 days in milliseconds
+
+          if (tokenAge > TOKEN_MAX_AGE) {
+            logger.info("Dropbox token is old, forcing refresh");
+            throw new Error("Token expired due to age");
+          }
+
+          // Verify token is still valid with API call
           await this.dbx.usersGetCurrentAccount();
           logger.info("Dropbox token is valid");
           return true;
         } catch (error) {
-          logger.warn("Stored Dropbox token is invalid:", error);
+          logger.warn("Stored Dropbox token is invalid or expired:", error);
           this.ACCESS_TOKEN = null;
           localStorage.removeItem("dropbox_access_token");
+          localStorage.removeItem("dropbox_token_created_at");
           return false;
         }
       }
@@ -121,6 +144,14 @@ class DropboxProvider {
         this.ACCESS_TOKEN = storedToken;
         this.dbx = new window.Dropbox.Dropbox({ accessToken: storedToken });
 
+        // Store token creation time if not already stored
+        if (!localStorage.getItem("dropbox_token_created_at")) {
+          localStorage.setItem(
+            "dropbox_token_created_at",
+            Date.now().toString()
+          );
+        }
+
         // Verify token is valid with a test call
         await this.dbx.usersGetCurrentAccount();
 
@@ -129,6 +160,7 @@ class DropboxProvider {
       } catch (error) {
         logger.warn("Stored token is invalid, will request new one:", error);
         localStorage.removeItem("dropbox_access_token");
+        localStorage.removeItem("dropbox_token_created_at");
       }
     }
 
@@ -483,6 +515,40 @@ class DropboxProvider {
       return deletedCount;
     } catch (error) {
       logger.error("Error clearing Dropbox app folder files:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search for a file in Dropbox without creating it
+   * @param {string} filename - The filename to search for
+   * @returns {Promise<Object|null>} The file information or null if not found
+   */
+  async searchFile(filename) {
+    try {
+      logger.debug(`Searching for Dropbox file '${filename}'...`);
+      const path = `/${filename}`;
+
+      try {
+        const response = await this.dbx.filesGetMetadata({ path });
+        logger.debug(
+          `Found existing file: ${response.result.name} (ID: ${response.result.id})`
+        );
+        return {
+          id: response.result.id,
+          name: response.result.name,
+          modifiedTime: response.result.server_modified,
+        };
+      } catch (error) {
+        // Check specifically for "not found" error from Dropbox API
+        if (error.status === 409) {
+          logger.info(`File '${filename}' not found in Dropbox`);
+          return null;
+        }
+        throw error;
+      }
+    } catch (error) {
+      logger.error("Error in Dropbox searchFile:", error);
       throw error;
     }
   }

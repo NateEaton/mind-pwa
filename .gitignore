@@ -13,3 +13,5 @@ mind-diet*.json
 scratch/*
 archive/*
 @eaDir/*
+screenshots/@eaDir/*
+cloudProviders/@eaDir/*

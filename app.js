@@ -267,6 +267,14 @@ let tempEditedDailyBreakdown = {}; // -> A deep copy of dailyBreakdown being mod
 let selectedDayInHistoryModal = null; // -> YYYY-MM-DD string of the day currently active in the modal's day selector
 let historyModalFoodGroups = []; // -> foodGroups array to use when rendering the modal list
 
+// Add at the top of the file with other variables
+let lastSyncTime = 0;
+let lastFocusChangeTime = 0;
+let visibilityChangeTimeout = null;
+let pendingInitialSync = false;
+let initialSyncInProgress = false;
+const MIN_SYNC_INTERVAL = 1 * 60 * 1000; // 1 minute between auto-syncs
+
 function setSyncReady(ready) {
   syncReady = ready;
   updateSyncUIElements();
@@ -341,7 +349,6 @@ function updateSyncUIElements() {
     isOnline &&
     hasSyncManager &&
     isAuthenticated &&
-    isReady &&
     !syncInProgress &&
     syncEnabled;
 
@@ -708,6 +715,16 @@ async function initializeCloudSync() {
     // Update UI elements
     updateSyncUIElements();
 
+    // Set flag to indicate we're doing initial sync
+    initialSyncInProgress = true;
+
+    // Perform initial sync if enabled and initialized
+    if (syncEnabled && syncReady) {
+      logger.info("Performing initial sync");
+      await syncData(true); // Pass true to indicate this is initial sync
+    }
+
+    initialSyncInProgress = false;
     return true;
   } catch (error) {
     logger.error("Failed to initialize cloud sync:", error);
@@ -738,7 +755,7 @@ function setupSyncButton() {
     syncBtn.addEventListener("click", () => {
       logger.info("Sync button clicked");
       closeMenu();
-      syncData();
+      syncData(false, true); // Not initial sync, but is manual sync
     });
 
     // Add li element to menu
@@ -760,6 +777,13 @@ function setupSyncButton() {
         menuList.appendChild(syncLi);
       }
     }
+  } else {
+    // If button exists, update its click handler
+    syncBtn.addEventListener("click", () => {
+      logger.info("Sync button clicked");
+      closeMenu();
+      syncData(false, true); // Not initial sync, but is manual sync
+    });
   }
 
   // Initial button state
@@ -925,6 +949,74 @@ function setupEventListeners() {
     }
   });
 
+  // Sync on visibility change (tab focus/blur)
+  document.addEventListener("visibilitychange", () => {
+    // Clear any pending timeout
+    if (visibilityChangeTimeout) {
+      clearTimeout(visibilityChangeTimeout);
+      visibilityChangeTimeout = null;
+    }
+
+    const now = Date.now();
+    const timeSinceLastSync = now - lastSyncTime;
+    const timeSinceLastFocusChange = now - lastFocusChangeTime;
+    lastFocusChangeTime = now;
+
+    // Skip visibility change handling during initial sync
+    if (initialSyncInProgress) {
+      logger.debug("Skipping visibility change sync during initial sync");
+      return;
+    }
+
+    if (document.hidden) {
+      // App is being hidden/minimized - check for changes
+      if (syncEnabled && cloudSync) {
+        const state = stateManager.getState();
+        const hasDirtyFlags =
+          state.metadata?.currentWeekDirty ||
+          state.metadata?.historyDirty ||
+          state.metadata?.dailyTotalsDirty ||
+          state.metadata?.weeklyTotalsDirty;
+
+        if (hasDirtyFlags) {
+          // If there are unsaved changes, sync immediately regardless of time
+          logger.info(
+            "App being hidden with unsaved changes, syncing immediately"
+          );
+          syncData();
+        } else if (timeSinceLastSync >= MIN_SYNC_INTERVAL) {
+          // No unsaved changes, but it's been long enough since last sync
+          logger.info("App being hidden, periodic sync triggered");
+          syncData();
+        } else {
+          logger.debug("No changes and too soon since last sync, skipping");
+        }
+      }
+    } else {
+      // App is becoming visible
+      if (syncEnabled && cloudSync) {
+        // Only sync on becoming visible if:
+        // 1. It's been longer than our minimum interval since last sync AND
+        // 2. This isn't just a quick tab switch (using a 5-second threshold)
+        if (
+          timeSinceLastSync >= MIN_SYNC_INTERVAL &&
+          timeSinceLastFocusChange >= 5000
+        ) {
+          logger.info(
+            "App visible after significant time, checking for remote changes"
+          );
+          visibilityChangeTimeout = setTimeout(() => {
+            syncData();
+          }, 2000); // Small delay to allow for quick tab switches
+        } else {
+          logger.debug(
+            "Visibility change sync: Skipped - too soon since last sync or focus change"
+          );
+        }
+      }
+    }
+  });
+
   // Attempt to sync before unload
   window.addEventListener("beforeunload", () => {
     if (syncEnabled && cloudSync && navigator.onLine) {
@@ -945,6 +1037,26 @@ function setupEventListeners() {
       }
     }
   });
+
+  // Add periodic sync check when app is active
+  let syncCheckInterval;
+  function setupPeriodicSyncCheck() {
+    if (syncCheckInterval) clearInterval(syncCheckInterval);
+
+    // Check every 10 minutes when app is active
+    syncCheckInterval = setInterval(() => {
+      if (!document.hidden && syncEnabled && cloudSync && navigator.onLine) {
+        const timeSinceLastSync = Date.now() - lastSyncTime;
+        if (timeSinceLastSync >= MIN_SYNC_INTERVAL) {
+          logger.debug("Periodic sync check triggered");
+          syncData();
+        }
+      }
+    }, MIN_SYNC_INTERVAL); // Use same 10-minute interval
+  }
+
+  // Start periodic check on app init
+  setupPeriodicSyncCheck();
 
   // Setup sync button
   setupSyncButton();
@@ -2141,12 +2253,15 @@ function handleSyncError(error) {
   }
 }
 
-async function syncData() {
+// Update syncData to track last sync time
+async function syncData(isInitialSync = false, isManualSync = false) {
   logger.debug("syncData called", {
     cloudSync,
     syncEnabled,
     syncReady,
     online: navigator.onLine,
+    isInitialSync,
+    isManualSync,
   });
 
   if (!cloudSync || !syncEnabled || !syncReady) {
@@ -2158,12 +2273,26 @@ async function syncData() {
     return;
   }
 
+  // If this is not an initial sync and one is in progress, skip
+  if (!isInitialSync && initialSyncInProgress) {
+    logger.info("Skipping sync while initial sync is in progress");
+    return;
+  }
+
+  // If any sync is already in progress, skip
+  if (cloudSync.syncInProgress) {
+    logger.info("Sync already in progress, skipping");
+    return;
+  }
+
   // Check authentication status
   if (!cloudSync.isAuthenticated) {
     logger.info("Authentication needed before sync");
+    // Always show auth-related messages regardless of manual/auto sync
     uiRenderer.showToast("Authenticating with cloud service...", "info", {
       isPersistent: true,
       showSpinner: true,
+      details: "Step 1/4: Authenticating",
     });
     try {
       const authResult = await cloudSync.authenticate();
@@ -2185,29 +2314,66 @@ async function syncData() {
     }
   }
 
-  // Add debugging of metadata to help trace the issue
-  try {
-    const state = dataService.loadState();
-    logger.debug("Current state metadata before sync:", state.metadata);
-  } catch (e) {
-    logger.error("Error logging state metadata:", e);
-  }
-
   const providerName = cloudSync.provider.constructor.name.includes("Dropbox")
     ? "Dropbox"
     : "Google Drive";
-  uiRenderer.showToast(`Syncing data with ${providerName}...`, "info", {
-    isPersistent: true,
-    showSpinner: true,
-  });
 
   try {
     logger.info("Starting sync operation");
     // Update UI to show sync in progress
     updateSyncUIElements();
 
+    // Get state before sync to check for actual changes
+    const preState = stateManager.getState();
+    const hasDirtyFlags =
+      preState.metadata?.currentWeekDirty ||
+      preState.metadata?.historyDirty ||
+      preState.metadata?.dailyTotalsDirty ||
+      preState.metadata?.weeklyTotalsDirty;
+
+    // Phase 1: Check for changes
+    // Only show Phase 1 messages if this is a manual sync
+    if (isManualSync) {
+      uiRenderer.showToast(`Checking for changes...`, "info", {
+        isPersistent: true,
+        showSpinner: true,
+        details: "Step 2/4: Checking for changes",
+      });
+    }
+
+    // Start the sync process
     const result = await cloudSync.sync();
+
+    // If we have local changes or remote changes were detected, show the upload/download message
+    if (hasDirtyFlags || result.hasRemoteChanges) {
+      // Show appropriate message for data transfer
+      if (hasDirtyFlags) {
+        uiRenderer.showToast(
+          `Uploading changes to ${providerName}...`,
+          "info",
+          {
+            isPersistent: true,
+            showSpinner: true,
+            details: "Step 3/4: Uploading changes",
+          }
+        );
+      } else {
+        uiRenderer.showToast(
+          `Downloading changes from ${providerName}...`,
+          "info",
+          {
+            isPersistent: true,
+            showSpinner: true,
+            details: "Step 3/4: Downloading changes",
+          }
+        );
+      }
+    }
+
     logger.info("Sync completed:", result);
+
+    // Update last sync time
+    lastSyncTime = Date.now();
 
     // Force a complete reload of state from dataService
     logger.info("Reloading state after sync");
@@ -2230,47 +2396,29 @@ async function syncData() {
       });
     }
 
-    // NEW ADDITION: Check if we need to perform a date reset after sync
-    const currentState = stateManager.getState();
-    const needsPostSyncReset = currentState.metadata?.pendingDateReset === true;
-
-    if (needsPostSyncReset) {
-      logger.info("Performing post-sync date reset");
-
-      // Clear the pending flag first
-      delete currentState.metadata.pendingDateReset;
-      delete currentState.metadata.remoteDateWas;
-
-      // Save the cleared flag
-      dataService.saveState(currentState);
-
-      // Perform the date check and reset
-      const dateChanged = await stateManager.checkDateAndReset();
-
-      if (dateChanged) {
-        logger.info("Post-sync date reset completed successfully");
-      } else {
-        logger.warn("Post-sync date reset was flagged but no changes made");
-      }
-    }
-
     // Now refresh the UI
     logger.info("Refreshing UI after state reload");
     uiRenderer.renderEverything();
 
-    uiRenderer.showToast(`Data synchronized successfully!`, "success", {
-      duration: 2000,
-    });
+    // Show completion message only if:
+    // 1. It's a manual sync
+    // 2. It's not an initial sync
+    // 3. We had changes (local or remote)
+    if (
+      (isManualSync || hasDirtyFlags || result?.hasRemoteChanges) &&
+      !isInitialSync
+    ) {
+      uiRenderer.showToast(`Data synchronized successfully!`, "success", {
+        duration: 2000, // Non-persistent toast for completion
+      });
+    }
   } catch (error) {
     logger.error("Sync error:", error);
     handleSyncError(error);
   } finally {
-    // Make sure syncInProgress is set to false if the cloudSync object exists
     if (cloudSync) {
       cloudSync.syncInProgress = false;
     }
-
-    // Update the UI elements to reflect current state
     updateSyncUIElements();
   }
 }
@@ -2413,16 +2561,10 @@ async function showSettings() {
       showFooter: true,
       buttons: [
         {
-          label: "Apply",
-          id: "settings-apply-btn",
-          class: "secondary-btn",
-          onClick: () => applySettingsWithoutClosing(),
-        },
-        {
           label: "Save",
           id: "settings-save-btn",
           class: "primary-btn",
-          onClick: () => saveSettingsAndCloseModal(),
+          onClick: () => closeSettingsModal(),
         },
         {
           label: "Cancel",
@@ -2465,6 +2607,12 @@ async function showSettings() {
       .addEventListener("change", async (e) => {
         const enabled = e.target.checked;
         const syncSettings = document.querySelector(".sync-settings");
+
+        // Save preference immediately
+        await dataService.savePreference("cloudSyncEnabled", enabled);
+        // Update global state
+        window.syncEnabled = enabled;
+        syncEnabled = enabled;
 
         if (enabled) {
           // Show warning for demo host when enabling
@@ -2523,13 +2671,23 @@ async function showSettings() {
           document.getElementById("sync-wifi-only").disabled = true;
           document.getElementById("sync-reauth-btn").disabled = true;
           document.getElementById("sync-now-btn").disabled = true;
+
+          // Disable sync if it was enabled
+          if (cloudSync) {
+            cloudSync = null;
+            setSyncReady(false);
+            logger.info("Cloud sync disabled completely");
+          }
         }
+
+        // Update UI elements
+        updateSyncUIElements();
       });
 
     // Add event listener for provider changes
     const syncProviderSelect = document.getElementById("sync-provider");
     if (syncProviderSelect) {
-      syncProviderSelect.addEventListener("change", (e) => {
+      syncProviderSelect.addEventListener("change", async (e) => {
         const newProvider = e.target.value;
         const currentProvider = cloudSync
           ? cloudSync.provider.constructor.name.includes("Dropbox")
@@ -2540,6 +2698,9 @@ async function showSettings() {
         logger.info(
           `Provider changing from ${currentProvider} to ${newProvider}`
         );
+
+        // Save preference immediately
+        await dataService.savePreference("cloudSyncProvider", newProvider);
 
         // If provider changes, reset the connection status
         if (newProvider !== currentProvider) {
@@ -2555,13 +2716,48 @@ async function showSettings() {
           if (syncNowBtn) {
             syncNowBtn.disabled = true;
           }
+
+          // If we're enabled, initialize the new provider
+          if (syncEnabled) {
+            try {
+              setSyncReady(false);
+              cloudSync = new CloudSyncManager(
+                dataService,
+                stateManager,
+                handleSyncComplete,
+                handleSyncError
+              );
+              await cloudSync.initialize(newProvider);
+              setSyncReady(true);
+            } catch (error) {
+              logger.error("Failed to initialize new provider:", error);
+              uiRenderer.showToast(
+                "Failed to initialize new provider: " + error.message,
+                "error"
+              );
+            }
+          }
+        }
+      });
+    }
+
+    // Add event listener for WiFi-only setting
+    const syncWifiOnlyCheckbox = document.getElementById("sync-wifi-only");
+    if (syncWifiOnlyCheckbox) {
+      syncWifiOnlyCheckbox.addEventListener("change", async (e) => {
+        const wifiOnly = e.target.checked;
+        // Save preference immediately
+        await dataService.savePreference("syncWifiOnly", wifiOnly);
+        // Update cloud sync if active
+        if (cloudSync) {
+          cloudSync.syncWifiOnly = wifiOnly;
         }
       });
     }
 
     // Event listeners for action buttons
     document.getElementById("sync-now-btn").addEventListener("click", () => {
-      syncData();
+      syncData(false, true); // Not initial sync, but is manual sync
     });
 
     document
@@ -2597,6 +2793,12 @@ async function showSettings() {
 
           document.getElementById("sync-now-btn").disabled =
             !cloudSync.isAuthenticated;
+
+          // Set pending initial sync flag instead of syncing immediately
+          if (cloudSync.isAuthenticated) {
+            pendingInitialSync = true;
+            logger.info("Initial sync pending until settings dialog is closed");
+          }
         } catch (error) {
           uiRenderer.showToast(
             `Authentication failed: ${error.message}`,
@@ -2612,113 +2814,6 @@ async function showSettings() {
 
 function getProviderClassName(provider) {
   return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
-}
-
-function applySettingsWithoutClosing() {
-  // Get current settings from form elements
-  const newSyncEnabled = document.getElementById("sync-enabled").checked;
-  const syncProvider = document.getElementById("sync-provider").value;
-  const syncWifiOnly = document.getElementById("sync-wifi-only").checked;
-
-  // Save all preferences to storage
-  dataService.savePreference("cloudSyncEnabled", newSyncEnabled);
-  dataService.savePreference("cloudSyncProvider", syncProvider);
-  dataService.savePreference("syncWifiOnly", syncWifiOnly);
-
-  // Update global variables
-  window.syncEnabled = newSyncEnabled;
-  syncEnabled = newSyncEnabled;
-
-  logger.info("Applied sync settings, syncEnabled =", syncEnabled);
-
-  // Add warning for demo host when enabling cloud sync
-  if (isDemoHost && newSyncEnabled) {
-    uiRenderer.showToast(
-      "Cloud sync may not work unless your account has been registered for testing with Dropbox or Google Drive.",
-      "warning",
-      { duration: 5000 }
-    );
-  }
-
-  // Handle cloud sync changes based on new settings
-  if (syncEnabled) {
-    // Reset sync readiness until initialization completes
-    setSyncReady(false);
-
-    // Check if we need to initialize with a new provider
-    if (
-      !cloudSync ||
-      (cloudSync.provider?.constructor.name.includes("GoogleDrive") &&
-        syncProvider === "dropbox") ||
-      (cloudSync.provider?.constructor.name.includes("Dropbox") &&
-        syncProvider === "gdrive")
-    ) {
-      logger.info("Initializing new cloud sync provider:", syncProvider);
-
-      cloudSync = new CloudSyncManager(
-        dataService,
-        stateManager,
-        handleSyncComplete,
-        handleSyncError
-      );
-
-      cloudSync
-        .initialize(syncProvider)
-        .then(() => {
-          // Configure network constraints
-          cloudSync.syncWifiOnly = syncWifiOnly;
-
-          // Mark sync as ready
-          setSyncReady(true);
-
-          // Update status indicator
-          const statusElement = document.getElementById("sync-status");
-          if (statusElement) {
-            if (cloudSync.isAuthenticated) {
-              statusElement.textContent = "Connected";
-              statusElement.className = "status-value connected";
-
-              // Try to sync after initialization if authenticated
-              if (cloudSync.isAuthenticated) {
-                syncData();
-              }
-            } else {
-              statusElement.textContent = "Not connected";
-              statusElement.className = "status-value disconnected";
-            }
-          }
-        })
-        .catch((error) => {
-          logger.error("Failed to initialize cloud sync:", error);
-          setSyncReady(false);
-        });
-    } else {
-      // Provider didn't change, but we might need to update network constraints
-      cloudSync.syncWifiOnly = syncWifiOnly;
-
-      // Mark sync as ready since we're using existing provider
-      setSyncReady(true);
-    }
-  } else if (!syncEnabled && cloudSync) {
-    // Disable sync
-    cloudSync = null;
-    setSyncReady(false);
-    logger.info("Cloud sync disabled completely");
-  }
-
-  // Update the main menu Sync Now button
-  updateSyncUIElements();
-
-  // Show confirmation
-  uiRenderer.showToast("Settings applied", "success");
-}
-
-function saveSettingsAndCloseModal() {
-  // Apply the settings
-  applySettingsWithoutClosing();
-
-  // Close the modal
-  uiRenderer.closeModal();
 }
 
 /**
@@ -3317,6 +3412,20 @@ function closeEditHistoryDailyDetailsModal() {
   // const listEl = uiRenderer.domElements.modalElements.editTotalsList;
   // if (listEl) listEl.innerHTML = "";
   // However, showEditHistoryModalShell already clears these areas upon opening.
+}
+
+function closeSettingsModal() {
+  // Check if we have a pending initial sync
+  if (pendingInitialSync && syncEnabled && cloudSync && syncReady) {
+    logger.info("Executing pending initial sync after settings dialog close");
+    pendingInitialSync = false;
+    setTimeout(() => {
+      syncData();
+    }, 1000); // Small delay after dialog closes
+  }
+
+  // Close the modal
+  uiRenderer.closeModal();
 }
 
 // Initialize the application when the DOM is loaded

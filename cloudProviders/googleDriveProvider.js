@@ -600,6 +600,39 @@ class GoogleDriveProvider {
       throw error;
     }
   }
+
+  /**
+   * Search for a file in Google Drive without creating it
+   * @param {string} filename - The filename to search for
+   * @returns {Promise<Object|null>} The file information or null if not found
+   */
+  async searchFile(filename) {
+    try {
+      logger.debug(
+        `Searching for Google Drive file '${filename}' in appDataFolder...`
+      );
+      const response = await this.gapi.client.drive.files.list({
+        spaces: "appDataFolder",
+        fields: "files(id, name, modifiedTime, size)",
+        q: `name='${filename}'`,
+      });
+
+      // Check if we got any results
+      if (response.result.files && response.result.files.length > 0) {
+        const file = response.result.files[0];
+        logger.debug(
+          `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${file.modifiedTime})`
+        );
+        return file;
+      }
+
+      logger.info(`File '${filename}' not found in Google Drive`);
+      return null;
+    } catch (error) {
+      logger.error("Error in Google Drive searchFile:", error);
+      throw error;
+    }
+  }
 }
 
 export default GoogleDriveProvider;

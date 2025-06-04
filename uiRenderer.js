@@ -1294,8 +1294,11 @@ function renderModalDayDetailsList(
 
   // Calculate weekly totals from tempEditedDailyBreakdown
   const weeklyTotals = {};
-  logger.debug("Calculating weekly totals from tempEditedDailyBreakdown:", tempEditedDailyBreakdown);
-  
+  logger.debug(
+    "Calculating weekly totals from tempEditedDailyBreakdown:",
+    tempEditedDailyBreakdown
+  );
+
   if (tempEditedDailyBreakdown) {
     Object.values(tempEditedDailyBreakdown).forEach((dayData) => {
       Object.entries(dayData).forEach(([groupId, count]) => {
@@ -1303,7 +1306,7 @@ function renderModalDayDetailsList(
       });
     });
   }
-  
+
   logger.debug("Calculated weekly totals:", weeklyTotals);
 
   foodGroups.forEach((group) => {
@@ -1320,18 +1323,18 @@ function renderModalDayDetailsList(
     item.dataset.id = group.id;
 
     // Create name container div for name and weekly badge
-    const nameContainer = document.createElement('div');
-    nameContainer.className = 'name-row';
+    const nameContainer = document.createElement("div");
+    nameContainer.className = "name-row";
 
     // Add name span
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'edit-item-name';
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "edit-item-name";
     nameSpan.textContent = group.name;
     nameContainer.appendChild(nameSpan);
 
     // Add weekly badge
-    const weeklyBadge = document.createElement('div');
-    weeklyBadge.className = 'weekly-badge';
+    const weeklyBadge = document.createElement("div");
+    weeklyBadge.className = "weekly-badge";
     const weeklyTotal = weeklyTotals[group.id] || 0;
     weeklyBadge.innerHTML = `<span class="wk-val">${weeklyTotal}</span>`;
 
@@ -1414,6 +1417,28 @@ function updateDaySelectorActiveState(daySelectorBarElement, selectedDateStr) {
   });
 }
 
+/**
+ * Clears any currently displayed toast messages
+ */
+function clearToasts() {
+  const { toastMessage, toastSpinner } = domElements.toastElements;
+
+  if (!toastMessage || !toastSpinner) {
+    logger.warn("Toast elements not fully cached. Cannot clear toasts.");
+    return;
+  }
+
+  // Clear any existing timeout
+  if (toastTimeout) {
+    clearTimeout(toastTimeout);
+    toastTimeout = null;
+  }
+
+  // Hide the toast and spinner
+  toastMessage.classList.remove("toast-show");
+  toastSpinner.classList.remove("active");
+}
+
 // Export public API
 export default {
   initialize,
@@ -1436,5 +1461,6 @@ export default {
   updateModalSelectedDayDisplay, // For app.js to update the modal's selected day text
   renderModalDayDetailsList, // For app.js to populate the modal's food item list
   updateDaySelectorActiveState, // For app.js to manage active state in modal's day selector
+  clearToasts,
   domElements,
 };

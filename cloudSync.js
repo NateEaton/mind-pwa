@@ -339,62 +339,53 @@ export class CloudSyncManager {
         false;
       const isFreshInstall = localData.metadata?.isFreshInstall || false;
 
-      // Find or create the file in the cloud
+      // Check if file exists in cloud first without creating it
       let fileInfo;
+      let cloudFileExists = false;
       try {
-        fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
-        logger.info("Current week file info:", fileInfo);
-      } catch (fileError) {
-        logger.error("Error finding/creating cloud file:", fileError);
-        throw new Error(`Failed to access cloud file: ${fileError.message}`);
+        const searchResult = await this.provider.searchFile(
+          currentWeekFileName
+        );
+        if (searchResult) {
+          fileInfo = searchResult;
+          cloudFileExists = true;
+          logger.info("Found existing current week file:", fileInfo);
+        }
+      } catch (searchError) {
+        logger.warn("Error searching for cloud file:", searchError);
       }
 
-      // Check if we have a valid file ID
+      // Only create file if:
+      // 1. We have local changes to sync, or
+      // 2. We couldn't find an existing file and need to establish sync
+      if (!cloudFileExists && (hasLocalChanges || !isFreshInstall)) {
+        try {
+          fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
+          logger.info("Created new current week file:", fileInfo);
+        } catch (fileError) {
+          logger.error("Error creating cloud file:", fileError);
+          throw new Error(`Failed to create cloud file: ${fileError.message}`);
+        }
+      }
+
+      // If we still don't have file info, we can't proceed
       if (!fileInfo || !fileInfo.id) {
-        logger.error("Invalid file info returned from cloud provider");
+        logger.info("No cloud file exists or needs to be created yet");
         return {
-          error: "Invalid file info",
+          noChanges: true,
           uploaded: false,
           downloaded: false,
         };
       }
 
-      // Check if file has changed in cloud if we're not forcing upload
-      let cloudFileAccessible = true;
-      let cloudFileExists = false;
+      // Check if file has changed in cloud
       let hasFileChanged = true;
-
-      if (!hasLocalChanges) {
-        try {
-          hasFileChanged = await this.checkIfFileChanged(
-            currentWeekFileName,
-            fileInfo.id
-          );
-
-          // If we got here, the file is accessible
-          cloudFileAccessible = true;
-          cloudFileExists = true;
-
-          if (!hasFileChanged) {
-            logger.info(
-              "Current week file hasn't changed in cloud, skipping sync entirely"
-            );
-            // Store successful check time in metadata
-            await this.storeFileMetadata(currentWeekFileName, fileInfo);
-            return { noChanges: true };
-          }
-        } catch (metadataError) {
-          logger.warn("Error checking file metadata:", metadataError);
-          cloudFileAccessible = false;
-          // We'll continue the process but note we couldn't check metadata
-        }
-      }
 
       // Download remote data when:
       // 1. We have local changes to merge, or
       // 2. Cloud file exists and has changed since last sync
       let remoteData = null;
-      if (hasLocalChanges || (cloudFileAccessible && hasFileChanged)) {
+      if (hasLocalChanges || (cloudFileExists && hasFileChanged)) {
         try {
           logger.info("Downloading remote data...");
           remoteData = await this.provider.downloadFile(fileInfo.id);
@@ -481,7 +472,7 @@ export class CloudSyncManager {
 
       // For fresh installs, we should be more cautious about uploading
       const shouldSkipUploadForFreshInstall =
-        isFreshInstall && cloudFileAccessible && cloudFileExists;
+        isFreshInstall && cloudFileExists && cloudFileExists;
 
       if (shouldSkipUploadForFreshInstall) {
         logger.info("Fresh install with existing cloud data - skipping upload");
