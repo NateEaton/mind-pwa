@@ -514,6 +514,11 @@ async function finalizeLoggerConfig() {
   }
 }
 
+// ... existing imports ...
+import setupWizard from "./setupWizard.js";
+
+// ... existing code ...
+
 /**
  * Initialize the application
  */
@@ -522,6 +527,50 @@ async function initializeApp() {
 
   await finalizeLoggerConfig(); // Ensures DEV_MODE-aware logging early
 
+  try {
+    // Check if initial setup is needed
+    const setupCompleted = await dataService.getPreference(
+      "initialSetupCompleted",
+      false
+    );
+
+    if (!setupCompleted) {
+      logger.info("Initial setup not completed, launching setup wizard");
+
+      // Listen for setup completion
+      window.addEventListener(
+        "setupWizardComplete",
+        async (event) => {
+          logger.info(
+            "Setup wizard completed with selections:",
+            event.detail.selections
+          );
+
+          // Continue with app initialization
+          await completeAppInitialization();
+        },
+        { once: true }
+      ); // Remove listener after first use
+
+      // Launch the setup wizard
+      await setupWizard.start();
+      return; // Exit early, wait for setup completion
+    }
+
+    // If setup is complete, continue with normal initialization
+    await completeAppInitialization();
+  } catch (error) {
+    logger.error("Error during app initialization:", error);
+    uiRenderer.showToast(`Initialization Error: ${error.message}`, "error", {
+      duration: 5000,
+    });
+  }
+}
+
+/**
+ * Complete the app initialization after setup wizard (if needed)
+ */
+async function completeAppInitialization() {
   try {
     // Initialize data service first
     await dataService.initialize();
