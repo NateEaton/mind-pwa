@@ -2178,6 +2178,20 @@ h3:first-child {
 }
 
 .sync-status {
-    color: var(--text-muted);
-    font-size: 0.9375rem;
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background-color: #f5f5f5;
+}
+
+.sync-status.success {
+    background-color: #e6ffe6;
+    border: 1px solid #00cc00;
+    color: #006600;
+}
+
+.sync-status.warning {
+    background-color: #fff3e6;
+    border: 1px solid #ffcc80;
+    color: #804000;
 }

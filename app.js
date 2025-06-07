@@ -19,44 +19,40 @@
 // Detect if we're running on the Vercel demo site
 const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
-// At the very beginning of app.js (similar to early token detection)
+// Detect and handle OAuth redirects before any other initialization
 (function detectOAuthRedirect() {
-  // Check for Dropbox token in URL hash
   if (window.location.hash.includes("access_token=")) {
     try {
-      // Extract the token
       const accessToken = window.location.hash.match(/access_token=([^&]*)/)[1];
+      let state = null;
 
-      // Store the token for later use
-      localStorage.setItem("dropbox_access_token", accessToken);
-
-      // Try to extract state parameter
-      let appState = null;
+      // Try to parse state parameter
       const stateMatch = window.location.hash.match(/state=([^&]*)/);
-
-      if (stateMatch && stateMatch[1]) {
+      if (stateMatch) {
         try {
-          // Decode the state parameter
-          appState = JSON.parse(atob(decodeURIComponent(stateMatch[1])));
-          console.log("Recovered app state from OAuth redirect:", appState);
-
-          // Store state for use after initialization
-          localStorage.setItem("dropbox_auth_state", JSON.stringify(appState));
+          state = JSON.parse(atob(decodeURIComponent(stateMatch[1])));
         } catch (e) {
-          console.error("Error decoding state parameter:", e);
+          console.error("Error parsing OAuth state parameter:", e);
         }
       }
 
-      console.log("Dropbox OAuth token detected and stored");
+      // Store the token
+      localStorage.setItem("dropbox_access_token", accessToken);
 
-      // Clear hash from URL to prevent reprocessing
-      window.history.replaceState(
-        null,
-        document.title,
-        window.location.pathname + window.location.search
-      );
+      // Check if this was a wizard OAuth flow
+      if (state?.wizardContext === "cloudProviderConnect") {
+        localStorage.setItem("pendingWizardContinuation", "true");
+      } else {
+        // This was a normal settings OAuth flow
+        if (state) {
+          localStorage.setItem("dropbox_auth_state", JSON.stringify(state));
+        }
+      }
+
+      // Clear the hash
+      window.history.replaceState(null, "", window.location.pathname);
     } catch (error) {
-      console.error("Error extracting OAuth token:", error);
+      console.error("OAuth redirect handling error:", error);
     }
   }
 })();

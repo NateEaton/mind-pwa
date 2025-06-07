@@ -2,6 +2,8 @@
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
+import cloudSync from "./cloudSync.js";
+import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
 
 const logger = createLogger("setupWizard");
 
@@ -10,6 +12,7 @@ const WIZARD_STEPS = {
   WELCOME: "welcome",
   FIRST_DAY: "first_day",
   CLOUD_SYNC: "cloud_sync",
+  CLOUD_PROVIDER: "cloud_provider",
   COMPLETE: "complete",
 };
 
@@ -19,10 +22,12 @@ class SetupWizard {
     this.selections = {
       firstDayOfWeek: "Sunday", // Default value
       enableCloudSync: false, // Default to false
+      cloudSyncProvider: null, // New field for provider selection
     };
     this.modalElement = null;
     this.contentElement = null;
     this.initialized = false;
+    this.resumeState = null; // For handling OAuth redirect state
   }
 
   async initialize() {
@@ -46,7 +51,23 @@ class SetupWizard {
 
   async start() {
     await this.initialize();
-    this.currentStep = WIZARD_STEPS.WELCOME;
+
+    // Check for OAuth return state
+    if (localStorage.getItem("pendingWizardContinuation")) {
+      localStorage.removeItem("pendingWizardContinuation");
+      this.currentStep = WIZARD_STEPS.COMPLETE;
+
+      // Restore selections if needed
+      const savedState = localStorage.getItem("setupWizardState");
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        this.selections = state.selections;
+        localStorage.removeItem("setupWizardState");
+      }
+    } else {
+      this.currentStep = WIZARD_STEPS.WELCOME;
+    }
+
     await this.renderCurrentStep();
     this.show();
   }
@@ -77,13 +98,18 @@ class SetupWizard {
       case WIZARD_STEPS.CLOUD_SYNC:
         content = this.renderCloudSyncStep();
         break;
+      case WIZARD_STEPS.CLOUD_PROVIDER:
+        content = this.renderCloudProviderStep();
+        break;
       case WIZARD_STEPS.COMPLETE:
-        content = this.renderCompleteStep();
+        content = await this.renderCompleteStep();
         break;
     }
 
-    this.contentElement.innerHTML = content;
-    this.attachStepEventListeners();
+    if (content) {
+      this.contentElement.innerHTML = content;
+      await this.attachStepEventListeners();
+    }
   }
 
   renderWelcomeStep() {
@@ -181,7 +207,9 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 3 of 3</div>
+        <div class="wizard-progress">Step 3 of ${
+          this.selections.enableCloudSync ? "4" : "3"
+        }</div>
         <div class="wizard-buttons">
           <button id="cloud-sync-back-btn" class="secondary-btn">Back</button>
           <button id="cloud-sync-next-btn" class="primary-btn">Continue</button>
@@ -190,10 +218,79 @@ class SetupWizard {
     `;
   }
 
-  renderCompleteStep() {
-    const syncMessage = this.selections.enableCloudSync
-      ? "Cloud sync is enabled and ready to set up."
-      : "You can enable cloud sync anytime from the settings menu.";
+  renderCloudProviderStep() {
+    return `
+      <div class="wizard-header">
+        <h2>Choose Cloud Provider</h2>
+      </div>
+      <div class="wizard-content">
+        <div class="wizard-step">
+          <p>Select the cloud provider you'd like to connect to:</p>
+          <div class="wizard-form">
+            <div class="radio-group">
+              <label>
+                <input type="radio" name="cloudProvider" value="dropbox"
+                  ${
+                    this.selections.cloudSyncProvider === "dropbox"
+                      ? "checked"
+                      : ""
+                  }>
+                <span>Dropbox</span>
+              </label>
+              <label>
+                <input type="radio" name="cloudProvider" value="gdrive"
+                  ${
+                    this.selections.cloudSyncProvider === "gdrive"
+                      ? "checked"
+                      : ""
+                  }>
+                <span>Google Drive</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <div class="wizard-progress">Step 4 of 4</div>
+        <div class="wizard-buttons">
+          <button id="cloud-provider-back-btn" class="secondary-btn">Back</button>
+          <button id="cloud-provider-connect-btn" class="primary-btn">Connect</button>
+        </div>
+      </div>
+    `;
+  }
+
+  async renderCompleteStep() {
+    let syncMessage = "";
+
+    if (this.selections.enableCloudSync) {
+      if (this.selections.cloudSyncProvider) {
+        // Check connection status
+        try {
+          const isConnected = await this.verifyCloudConnection();
+          syncMessage = isConnected
+            ? `Successfully connected to ${
+                this.selections.cloudSyncProvider === "gdrive"
+                  ? "Google Drive"
+                  : "Dropbox"
+              }!`
+            : `Failed to connect to ${
+                this.selections.cloudSyncProvider === "gdrive"
+                  ? "Google Drive"
+                  : "Dropbox"
+              }. You can try again later from Settings.`;
+        } catch (error) {
+          logger.error("Error verifying cloud connection:", error);
+          syncMessage =
+            "There was an error verifying the cloud connection. You can try again from Settings.";
+        }
+      } else {
+        syncMessage =
+          "Cloud sync setup was not completed. You can finish setting it up from Settings.";
+      }
+    } else {
+      syncMessage = "You can enable cloud sync anytime from the settings menu.";
+    }
 
     return `
       <div class="wizard-header">
@@ -202,7 +299,15 @@ class SetupWizard {
       <div class="wizard-content">
         <div class="wizard-step">
           <p>Your preferences have been saved. You're ready to start tracking your MIND diet journey.</p>
-          <p class="sync-status">${syncMessage}</p>
+          <div class="sync-status ${
+            this.selections.enableCloudSync
+              ? syncMessage.includes("Successfully")
+                ? "success"
+                : "warning"
+              : ""
+          }">
+            <p>${syncMessage}</p>
+          </div>
         </div>
       </div>
       <div class="wizard-footer">
@@ -212,6 +317,40 @@ class SetupWizard {
         </div>
       </div>
     `;
+  }
+
+  async verifyCloudConnection() {
+    if (!this.selections.cloudSyncProvider) return false;
+
+    try {
+      if (this.selections.cloudSyncProvider === "dropbox") {
+        const token = localStorage.getItem("dropbox_access_token");
+        if (!token) return false;
+
+        // Make a test API call to verify token
+        const response = await fetch(
+          "https://api.dropboxapi.com/2/users/get_current_account",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        return response.ok;
+      } else if (this.selections.cloudSyncProvider === "gdrive") {
+        // For Google Drive, create a new provider instance and check auth
+        const googleProvider = new GoogleDriveProvider();
+        await googleProvider.initialize();
+        return await googleProvider.checkAuth();
+      }
+      return false;
+    } catch (error) {
+      logger.error("Error verifying cloud connection:", error);
+      return false;
+    }
   }
 
   attachStepEventListeners() {
@@ -237,12 +376,13 @@ class SetupWizard {
         // Next button
         document
           .getElementById("first-day-next-btn")
-          ?.addEventListener("click", () => {
+          ?.addEventListener("click", async () => {
             const selectedDay = document.querySelector(
               'input[name="firstDay"]:checked'
             )?.value;
             if (selectedDay) {
               this.selections.firstDayOfWeek = selectedDay;
+              await dataService.savePreference("weekStartDay", selectedDay);
               this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
               this.renderCurrentStep();
             }
@@ -270,17 +410,56 @@ class SetupWizard {
             const enableSync =
               document.querySelector('input[name="cloudSync"]:checked')
                 ?.value === "true";
+
             this.selections.enableCloudSync = enableSync;
-            await this.savePreferences();
-            this.currentStep = WIZARD_STEPS.COMPLETE;
+            await dataService.savePreference("cloudSyncEnabled", enableSync);
+
+            if (enableSync) {
+              this.currentStep = WIZARD_STEPS.CLOUD_PROVIDER;
+            } else {
+              this.currentStep = WIZARD_STEPS.COMPLETE;
+            }
             this.renderCurrentStep();
           });
 
+        // Radio button change
         document
           .querySelectorAll('input[name="cloudSync"]')
           .forEach((radio) => {
             radio.addEventListener("change", (e) => {
               this.selections.enableCloudSync = e.target.value === "true";
+              this.renderCurrentStep(); // Re-render to update step count
+            });
+          });
+        break;
+
+      case WIZARD_STEPS.CLOUD_PROVIDER:
+        document
+          .getElementById("cloud-provider-back-btn")
+          ?.addEventListener("click", () => {
+            this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            this.renderCurrentStep();
+          });
+
+        document
+          .getElementById("cloud-provider-connect-btn")
+          ?.addEventListener("click", async () => {
+            const provider = document.querySelector(
+              'input[name="cloudProvider"]:checked'
+            )?.value;
+            if (provider) {
+              this.selections.cloudSyncProvider = provider;
+              await dataService.savePreference("cloudSyncProvider", provider);
+              await this.initiateOAuthFlow(provider);
+            }
+          });
+
+        // Radio button change
+        document
+          .querySelectorAll('input[name="cloudProvider"]')
+          .forEach((radio) => {
+            radio.addEventListener("change", (e) => {
+              this.selections.cloudSyncProvider = e.target.value;
             });
           });
         break;
@@ -295,41 +474,68 @@ class SetupWizard {
     }
   }
 
-  async savePreferences() {
+  async initiateOAuthFlow(provider) {
+    const state = {
+      wizardContext: "cloudProviderConnect",
+      originalStep: "cloud_provider",
+    };
+    const stateParam = btoa(JSON.stringify(state));
+
     try {
-      // Save first day of week preference
-      await dataService.savePreference(
-        "weekStartDay",
-        this.selections.firstDayOfWeek
-      );
+      if (provider === "dropbox") {
+        // Store minimal wizard state
+        localStorage.setItem(
+          "setupWizardState",
+          JSON.stringify({
+            isActive: true,
+            selections: this.selections,
+          })
+        );
 
-      // Save cloud sync preference
-      await dataService.savePreference(
-        "cloudSyncEnabled",
-        this.selections.enableCloudSync
-      );
+        // Redirect to Dropbox OAuth
+        // Note: DROPBOX_APP_KEY should be defined in your environment/config
+        window.location.href = `https://www.dropbox.com/oauth2/authorize?client_id=${DROPBOX_APP_KEY}&response_type=token&state=${stateParam}`;
+      } else if (provider === "gdrive") {
+        // Handle Google Drive OAuth popup
+        const googleProvider = new GoogleDriveProvider();
+        await googleProvider.initialize();
+        const success = await googleProvider.authenticate();
 
-      // Mark setup as completed
-      await dataService.savePreference("initialSetupCompleted", true);
-
-      logger.info("Setup preferences saved successfully");
-      return true;
+        if (success) {
+          this.currentStep = WIZARD_STEPS.COMPLETE;
+          await this.renderCurrentStep();
+        } else {
+          throw new Error("Google Drive authentication failed");
+        }
+      }
     } catch (error) {
-      logger.error("Error saving setup preferences:", error);
-      return false;
+      logger.error("OAuth flow failed:", error);
+      // Show error in UI
+      this.currentStep = WIZARD_STEPS.COMPLETE;
+      await this.renderCurrentStep();
     }
   }
 
   async finish() {
-    this.hide();
-    // Dispatch an event that setup is complete
-    window.dispatchEvent(
-      new CustomEvent("setupWizardComplete", {
-        detail: {
-          selections: this.selections,
-        },
-      })
-    );
+    try {
+      // Mark setup as completed
+      await dataService.savePreference("initialSetupCompleted", true);
+
+      this.hide();
+
+      // Dispatch event that setup is complete
+      window.dispatchEvent(
+        new CustomEvent("setupWizardComplete", {
+          detail: {
+            selections: this.selections,
+          },
+        })
+      );
+
+      logger.info("Setup wizard completed successfully");
+    } catch (error) {
+      logger.error("Error finishing setup wizard:", error);
+    }
   }
 }
 
