@@ -1,9 +1,27 @@
-// Setup Wizard Module
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
 import cloudSync from "./cloudSync.js";
 import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
+import DropboxProvider from "./cloudProviders/dropboxProvider.js";
 
 const logger = createLogger("setupWizard");
 
@@ -324,22 +342,10 @@ class SetupWizard {
 
     try {
       if (this.selections.cloudSyncProvider === "dropbox") {
-        const token = localStorage.getItem("dropbox_access_token");
-        if (!token) return false;
-
-        // Make a test API call to verify token
-        const response = await fetch(
-          "https://api.dropboxapi.com/2/users/get_current_account",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        return response.ok;
+        // For Dropbox, create a new provider instance and check auth
+        const dropboxProvider = new DropboxProvider();
+        await dropboxProvider.initialize();
+        return await dropboxProvider.checkAuth();
       } else if (this.selections.cloudSyncProvider === "gdrive") {
         // For Google Drive, create a new provider instance and check auth
         const googleProvider = new GoogleDriveProvider();
@@ -492,9 +498,10 @@ class SetupWizard {
           })
         );
 
-        // Redirect to Dropbox OAuth
-        // Note: DROPBOX_APP_KEY should be defined in your environment/config
-        window.location.href = `https://www.dropbox.com/oauth2/authorize?client_id=${DROPBOX_APP_KEY}&response_type=token&state=${stateParam}`;
+        // Handle Dropbox OAuth redirect using existing provider
+        const dropboxProvider = new DropboxProvider();
+        await dropboxProvider.initialize();
+        await dropboxProvider.authenticate(stateParam);
       } else if (provider === "gdrive") {
         // Handle Google Drive OAuth popup
         const googleProvider = new GoogleDriveProvider();

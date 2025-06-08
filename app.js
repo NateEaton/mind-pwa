@@ -543,7 +543,7 @@ async function initializeApp() {
           );
 
           // Continue with app initialization
-          await completeAppInitialization();
+          await completeAppInitialization(true);
         },
         { once: true }
       ); // Remove listener after first use
@@ -565,8 +565,9 @@ async function initializeApp() {
 
 /**
  * Complete the app initialization after setup wizard (if needed)
+ * @param {boolean} fromWizard - Whether this is being called after wizard completion
  */
-async function completeAppInitialization() {
+async function completeAppInitialization(fromWizard = false) {
   try {
     // Initialize data service first
     await dataService.initialize();
@@ -604,10 +605,75 @@ async function completeAppInitialization() {
     setupNetworkListeners();
 
     // 6. Initialize cloud sync capabilities
-    const syncInitialized = await initializeCloudSync();
+    let syncInitialized = false;
+
+    if (fromWizard) {
+      // If coming from wizard, cloud sync is already set up if the user enabled it
+      syncEnabled = await dataService.getPreference("cloudSyncEnabled", false);
+
+      if (syncEnabled) {
+        logger.info(
+          "Cloud sync was enabled during wizard setup, using existing configuration"
+        );
+
+        // Get the provider that was set up in the wizard
+        const syncProvider = await dataService.getPreference(
+          "cloudSyncProvider",
+          "gdrive"
+        );
+
+        // Create and initialize cloud sync manager with existing auth
+        cloudSync = new CloudSyncManager(
+          dataService,
+          stateManager,
+          handleSyncComplete,
+          handleSyncError
+        );
+
+        const autoSyncInterval = await dataService.getPreference(
+          "autoSyncInterval",
+          15
+        );
+        const syncWifiOnly = await dataService.getPreference(
+          "syncWifiOnly",
+          false
+        );
+        cloudSync.syncWifiOnly = syncWifiOnly;
+
+        // Initialize provider (should find existing auth from wizard)
+        const initResult = await cloudSync.initialize(syncProvider);
+
+        if (initResult) {
+          setSyncReady(true);
+
+          // Configure auto-sync
+          if (autoSyncInterval > 0) {
+            cloudSync.startAutoSync(autoSyncInterval);
+            logger.info(
+              `Auto-sync configured for every ${autoSyncInterval} minutes`
+            );
+          }
+
+          syncInitialized = true;
+          logger.info(
+            "Cloud sync initialized successfully using wizard configuration"
+          );
+        } else {
+          logger.warn(
+            "Failed to initialize cloud sync with wizard configuration"
+          );
+        }
+      } else {
+        logger.info("Cloud sync was disabled during wizard setup");
+      }
+    } else {
+      // Normal app startup - use full initialization
+      syncInitialized = await initializeCloudSync();
+    }
 
     // 7. Perform initial sync if enabled and initialized
-    if (syncEnabled && syncReady) {
+    // Only for normal startup, not after wizard completion
+    if (!fromWizard && syncEnabled && syncReady) {
       logger.info("Performing initial sync");
       await syncData();
     }
@@ -737,21 +803,33 @@ async function initializeCloudSync() {
       await dataService.savePreference("cloudSyncEnabled", true);
       await dataService.savePreference("cloudSyncProvider", "dropbox");
 
-      // Show settings dialog after a short delay to provide feedback
-      setTimeout(() => {
-        showSettings();
-        // Show success toast
-        uiRenderer.showToast("Dropbox connected successfully", "success");
+      // Check if this redirect came from the wizard
+      const pendingWizardContinuation = localStorage.getItem(
+        "pendingWizardContinuation"
+      );
 
-        // Set sync ready AFTER the settings dialog is shown
-        // This delay ensures the auto-sync doesn't happen immediately
+      if (pendingWizardContinuation) {
+        // This was a wizard OAuth flow - the wizard will handle the continuation
+        // Just set sync ready and let the wizard take over
+        setSyncReady(true);
+        return true;
+      } else {
+        // This was a settings dialog OAuth flow - show settings
         setTimeout(() => {
-          setSyncReady(true);
-        }, 1000);
-      }, 500);
+          showSettings();
+          // Show success toast
+          uiRenderer.showToast("Dropbox connected successfully", "success");
 
-      // Return early WITHOUT setting syncReady=true
-      return true;
+          // Set sync ready AFTER the settings dialog is shown
+          // This delay ensures the auto-sync doesn't happen immediately
+          setTimeout(() => {
+            setSyncReady(true);
+          }, 1000);
+        }, 500);
+
+        // Return early WITHOUT setting syncReady=true
+        return true;
+      }
     }
 
     // Mark sync as ready

@@ -1,3 +1,21 @@
+/*
+ * MIND Diet Tracker PWA
+ * Copyright (C) 2025 Nathan A. Eaton Jr.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // cloudProviders/dropboxProvider.js
 
 import logger from "../logger.js";
@@ -134,7 +152,7 @@ class DropboxProvider {
     }
   }
 
-  async authenticate() {
+  async authenticate(customState = null) {
     logger.info("Starting Dropbox authentication");
 
     // If we already have a token from redirect, use it
@@ -166,13 +184,15 @@ class DropboxProvider {
 
     logger.info("Starting new Dropbox auth flow");
     try {
-      // Create state parameter to encode the current UI state
-      const stateParam = btoa(
-        JSON.stringify({
-          context: "settings_dialog",
-          timestamp: Date.now(),
-        })
-      );
+      // Use custom state if provided, otherwise create default state parameter
+      const stateParam =
+        customState ||
+        btoa(
+          JSON.stringify({
+            context: "settings_dialog",
+            timestamp: Date.now(),
+          })
+        );
 
       // Generate auth URL with state parameter
       const authUrl = await this.dbx.auth.getAuthenticationUrl(
