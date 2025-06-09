@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Node.js: >=18.0.0](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet.  Record servings of key food groups each day, view weekly summaries, and browse your historical data. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
+A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet.  Record servings of key food groups each day, view weekly summaries, and browse your historical data. The app includes a guided setup wizard to help new users configure their preferences and optional cloud synchronization. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
 
 [**Live Demo**](https://mind-pwa-fawn.vercel.app/) | [**View Wiki for Complete Documentation**](../../wiki)
 
@@ -42,13 +42,14 @@ If you'd like to test these features, open an issue or contact me with the email
 ## Quick Start
 
 1. **Open the app** in any modern web browser or install it to your home screen as a PWA.
-2. Use the **Daily** view to record servings for each food group for a given day.  Use the date navigation to select a different date, as needed.
-3. Check the **Weekly** view to monitor your progress toward targets.
-4. Browse past weeks in the **History** view, and use the *Edit* button to modify daily entries for a past week.
-5. (Optional) Enable **Cloud Sync** in Settings to synchronize data across devices.
+2. **Complete the setup wizard** on first use to configure your week start day and optional cloud sync.
+3. Use the **Daily** view to record servings for each food group for a given day.  Use the date navigation to select a different date, as needed.
+4. Check the **Weekly** view to monitor your progress toward targets.
+5. Browse past weeks in the **History** view, and use the *Edit* button to modify daily entries for a past week.
 
 ## Core Features
 
+- Guided setup wizard for first-time users to configure preferences and cloud sync.
 - Date-specific tracking of MIND Diet food groups with daily and weekly totals.
 - Weekly summary by food group.
 - Historical data archiving and review.
@@ -105,6 +106,13 @@ This app supports optional cloud synchronization with two providers:
 
 To enable cloud sync:
 
+**During First Use:**
+1. Complete the setup wizard when you first open the app.
+2. Choose "Yes, enable cloud sync" when prompted.
+3. Select your preferred provider (Google Drive or Dropbox).
+4. Complete the authentication process.
+
+**For Existing Users:**
 1. Open the **Settings** from the app menu.
 2. Check "Enable cloud sync".
 3. Select your preferred provider.
