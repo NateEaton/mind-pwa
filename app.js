@@ -1579,10 +1579,16 @@ async function handleAboutClick() {
   // Update version in the modal
   const modalVersionEl = document.getElementById("modal-app-version");
   if (modalVersionEl) {
-    const footerVersionEl = document.getElementById("app-version");
-    modalVersionEl.textContent = footerVersionEl
-      ? footerVersionEl.textContent
-      : "(unknown)";
+    // Load version directly from version.json instead of relying on footer element
+    try {
+      const versionData = await appUtils.loadAppVersion();
+      modalVersionEl.textContent = versionData
+        ? `v${versionData.commitHash}`
+        : "(unknown)";
+    } catch (error) {
+      logger.warn("Failed to load version for About dialog:", error);
+      modalVersionEl.textContent = "(unknown)";
+    }
   }
 
   // Only set up dev controls if in dev mode
