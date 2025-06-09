@@ -62,6 +62,7 @@ import stateManager from "./stateManager.js";
 import uiRenderer from "./uiRenderer.js";
 import appUtils from "./appUtils.js";
 import dateUtils from "./dateUtils.js";
+import modalManager from "./modalManager.js";
 import CloudSyncManager from "./cloudSync.js";
 
 import { createLogger, configure, LOG_LEVELS } from "./logger.js";
@@ -251,18 +252,11 @@ const foodGroups = [
   },
 ];
 
-// State for Edit Totals Modal (in global scope since it needs to be accessed by multiple functions)
-let editingWeekDataRef = null; // Reference to the data being edited
-let editingSource = null; // 'current' or 'history'
-let editedTotals = {}; // Temporary object holding edits within the modal
+// Modal state is now managed by modalManager.js
 let cloudSync = null;
 let syncEnabled = false;
 let syncReady = false;
 let sectionCollapseState = {}; // Track which sections are expanded/collapsed
-let editingHistoryWeekDataRef = null; // -> The original history record from stateManager.state.history
-let tempEditedDailyBreakdown = {}; // -> A deep copy of dailyBreakdown being modified in the modal
-let selectedDayInHistoryModal = null; // -> YYYY-MM-DD string of the day currently active in the modal's day selector
-let historyModalFoodGroups = []; // -> foodGroups array to use when rendering the modal list
 
 // Add at the top of the file with other variables
 let lastSyncTime = 0;
@@ -578,6 +572,9 @@ async function completeAppInitialization(fromWizard = false) {
 
     // Initialize UI renderer
     uiRenderer.initialize();
+
+    // Initialize modal manager
+    modalManager.initialize();
 
     // Render all UI components after initialization
     uiRenderer.renderEverything();
@@ -1004,62 +1001,18 @@ function setupEventListeners() {
   nextWeekBtn.addEventListener("click", handleNextWeek);
   historyDatePicker.addEventListener("change", handleHistoryDatePick);
 
-  // Modal listeners
-  document
-    .getElementById("modal-close-btn")
-    .addEventListener("click", () => uiRenderer.closeModal());
-  document
-    .getElementById("generic-modal")
-    .addEventListener("click", (event) => {
-      if (event.target === document.getElementById("generic-modal"))
-        uiRenderer.closeModal();
-    });
+  // Modal listeners are now handled by modalManager.js
 
-  // Edit totals modal
+  // Edit totals modal buttons
+  if (domElements.editCurrentWeekBtn) {
+    domElements.editCurrentWeekBtn.addEventListener("click", () =>
+      modalManager.openEditTotalsModal("current")
+    );
+  }
   if (domElements.editHistoryWeekBtn) {
-    domElements.editHistoryWeekBtn.addEventListener(
-      "click",
-      openEditHistoryDailyDetailsModal
+    domElements.editHistoryWeekBtn.addEventListener("click", () =>
+      modalManager.openEditHistoryDailyDetailsModal()
     );
-  }
-
-  // Listeners for the "Edit History Daily Details" Modal (repurposed #edit-totals-modal)
-  const modalFoodList = uiRenderer.domElements.modalElements.editTotalsList;
-  if (modalFoodList) {
-    modalFoodList.addEventListener("click", handleModalDailyDetailChange);
-    // If you add direct input fields to this list later, add 'input' or 'change' listeners too
-  }
-
-  const modalSaveBtn = uiRenderer.domElements.modalElements.editTotalsSaveBtn;
-  if (modalSaveBtn) {
-    modalSaveBtn.addEventListener("click", saveEditedHistoryDailyDetails);
-  }
-
-  const modalCancelBtn =
-    uiRenderer.domElements.modalElements.editTotalsCancelBtn;
-  if (modalCancelBtn) {
-    modalCancelBtn.addEventListener("click", closeEditHistoryDailyDetailsModal);
-  }
-
-  const modalCloseIconBtn =
-    uiRenderer.domElements.modalElements.editTotalsCloseBtn;
-  if (modalCloseIconBtn) {
-    modalCloseIconBtn.addEventListener(
-      "click",
-      closeEditHistoryDailyDetailsModal
-    );
-  }
-
-  // Listener for clicking outside the modal content to close (if desired for this specific modal)
-  const editModalContainer =
-    uiRenderer.domElements.modalElements.editTotalsModal;
-  if (editModalContainer) {
-    editModalContainer.addEventListener("click", (event) => {
-      if (event.target === editModalContainer) {
-        // Clicked on the overlay itself
-        closeEditHistoryDailyDetailsModal();
-      }
-    });
   }
 
   // User Guide button
@@ -2861,155 +2814,17 @@ function getProviderClassName(provider) {
   return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
 }
 
-/**
- * Open the edit totals modal
- * @param {string} source - Source of data ('current' or 'history')
- */
-function openEditTotalsModal(source) {
-  const state = stateManager.getState();
-  let title = "Edit Weekly Totals";
-  let dataToEdit = null;
+// openEditTotalsModal moved to modalManager.js
 
-  if (source === "current") {
-    editingWeekDataRef = state;
-    dataToEdit = state.weeklyCounts;
-    const weekStartDate = new Date(`${state.currentWeekStartDate}T00:00:00`);
-    title = `Edit Totals: Week of ${weekStartDate.toLocaleDateString(
-      undefined,
-      { month: "short", day: "numeric", year: "numeric" }
-    )}`;
-    editingSource = "current";
-  } else if (source === "history") {
-    if (
-      state.currentHistoryIndex === -1 ||
-      !state.history[state.currentHistoryIndex]
-    ) {
-      uiRenderer.showToast("No history week selected to edit.", "error");
-      return;
-    }
+// renderEditTotalsList moved to modalManager.js
 
-    editingWeekDataRef = state.history[state.currentHistoryIndex];
-    dataToEdit = editingWeekDataRef.totals;
-    const historyWeekDate = new Date(
-      `${editingWeekDataRef.weekStartDate}T00:00:00`
-    );
-    title = `Edit Totals: Week of ${historyWeekDate.toLocaleDateString(
-      undefined,
-      { month: "short", day: "numeric", year: "numeric" }
-    )}`;
-    editingSource = "history";
-  } else {
-    logger.error("Invalid source for edit modal:", source);
-    return;
-  }
-
-  // Deep copy the totals to the temporary editing object
-  editedTotals = JSON.parse(JSON.stringify(dataToEdit || {}));
-
-  // Ensure all food groups have an entry in editedTotals
-  state.foodGroups.forEach((group) => {
-    if (!(group.id in editedTotals)) {
-      editedTotals[group.id] = 0;
-    }
-  });
-
-  // Update the modal title
-  if (domElements.editTotalsTitle) {
-    domElements.editTotalsTitle.textContent = title;
-  }
-
-  // Render the edit totals list
-  renderEditTotalsList();
-
-  // Show the modal
-  if (domElements.editTotalsModal) {
-    domElements.editTotalsModal.classList.add("modal-open");
-  }
-}
-
-/**
- * Render the edit totals list in the modal
- */
-function renderEditTotalsList() {
-  if (!domElements.editTotalsList || !domElements.editTotalsItemTemplate)
-    return;
-
-  // Clear previous items
-  domElements.editTotalsList.innerHTML = "";
-
-  // Get food groups from state
-  const state = stateManager.getState();
-
-  // Create an item for each food group
-  state.foodGroups.forEach((group) => {
-    const item = domElements.editTotalsItemTemplate.content
-      .cloneNode(true)
-      .querySelector(".edit-totals-item");
-
-    item.dataset.id = group.id;
-
-    const nameSpan = item.querySelector(".edit-item-name");
-    const totalSpan = item.querySelector(".edit-current-total");
-
-    // Add data to buttons for easier access in handler
-    const decBtn = item.querySelector(".edit-decrement-btn");
-    const incBtn = item.querySelector(".edit-increment-btn");
-
-    if (decBtn) decBtn.dataset.groupId = group.id;
-    if (incBtn) incBtn.dataset.groupId = group.id;
-
-    // Set content
-    if (nameSpan) nameSpan.textContent = group.name;
-    if (totalSpan) totalSpan.textContent = editedTotals[group.id] || 0;
-
-    // Add to list
-    domElements.editTotalsList.appendChild(item);
-  });
-}
-
-/**
- * Handle clicks in the edit totals modal
- * @param {Event} event - The click event
- */
-function handleEditTotalsItemClick(event) {
-  const button = event.target.closest(
-    ".edit-decrement-btn, .edit-increment-btn"
-  );
-  if (!button) return;
-
-  const groupId = button.dataset.groupId;
-  if (!groupId) {
-    logger.error("Edit button clicked, but no groupId found in dataset.");
-    return;
-  }
-
-  // Get current value
-  let currentValue = editedTotals[groupId] || 0;
-
-  // Update value based on button type
-  if (button.classList.contains("edit-increment-btn")) {
-    currentValue++;
-  } else if (button.classList.contains("edit-decrement-btn")) {
-    currentValue = Math.max(0, currentValue - 1);
-  }
-
-  // Update temporary state
-  editedTotals[groupId] = currentValue;
-
-  // Update display
-  const itemElement = button.closest(".edit-totals-item");
-  if (itemElement) {
-    const totalSpan = itemElement.querySelector(".edit-current-total");
-    if (totalSpan) {
-      totalSpan.textContent = currentValue;
-    }
-  }
-}
+// handleEditTotalsItemClick moved to modalManager.js
 
 /**
  * Save changes from edit totals modal
  */
-async function saveEditedTotals() {
+// saveEditedTotals moved to modalManager.js
+async function saveEditedTotals_OLD_MOVED() {
   if (!editingSource || !editingWeekDataRef) {
     logger.error("Cannot save, editing context is missing.");
     uiRenderer.showToast("Error saving changes.", "error");
@@ -3111,7 +2926,8 @@ async function saveEditedTotals() {
 /**
  * Close the edit totals modal
  */
-function closeEditTotalsModal() {
+// closeEditTotalsModal moved to modalManager.js
+function closeEditTotalsModal_OLD_MOVED() {
   if (domElements.editTotalsModal) {
     domElements.editTotalsModal.classList.remove("modal-open");
   }
@@ -3129,7 +2945,8 @@ function closeEditTotalsModal() {
 /**
  * Opens and initializes the modal for viewing/editing daily details of a historical week.
  */
-function openEditHistoryDailyDetailsModal() {
+// openEditHistoryDailyDetailsModal moved to modalManager.js
+function openEditHistoryDailyDetailsModal_OLD_MOVED() {
   const state = stateManager.getState();
   if (
     state.currentHistoryIndex === -1 ||
@@ -3225,7 +3042,8 @@ function openEditHistoryDailyDetailsModal() {
  * Handles navigation between days within the "Edit History Daily Details" modal.
  * @param {string} newSelectedDayStr - The YYYY-MM-DD of the day selected in the modal's day bar.
  */
-function handleModalDayNavigation(newSelectedDayStr) {
+// handleModalDayNavigation moved to modalManager.js
+function handleModalDayNavigation_OLD_MOVED(newSelectedDayStr) {
   if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
     logger.warn(
       "handleModalDayNavigation called without active editing context."
@@ -3274,7 +3092,8 @@ function handleModalDayNavigation(newSelectedDayStr) {
  * Updates the temporary 'tempEditedDailyBreakdown'.
  * @param {Event} event - The click event from +/- buttons or change event from input.
  */
-function handleModalDailyDetailChange(event) {
+// handleModalDailyDetailChange moved to modalManager.js
+function handleModalDailyDetailChange_OLD_MOVED(event) {
   const button = event.target.closest(
     ".edit-decrement-btn, .edit-increment-btn"
   );
@@ -3329,7 +3148,8 @@ function handleModalDailyDetailChange(event) {
  * Saves the changes made in the "Edit History Daily Details" modal
  * to the stateManager and IndexedDB.
  */
-async function saveEditedHistoryDailyDetails() {
+// saveEditedHistoryDailyDetails moved to modalManager.js
+async function saveEditedHistoryDailyDetails_OLD_MOVED() {
   if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
     logger.error(
       "saveEditedHistoryDailyDetails: Cannot save, editing context is missing."
@@ -3441,7 +3261,8 @@ async function saveEditedHistoryDailyDetails() {
 /**
  * Closes the "Edit History Daily Details" modal and resets its temporary state.
  */
-function closeEditHistoryDailyDetailsModal() {
+// closeEditHistoryDailyDetailsModal moved to modalManager.js
+function closeEditHistoryDailyDetailsModal_OLD_MOVED() {
   uiRenderer.closeEditTotalsModal(); // Call the uiRenderer function to hide the modal
 
   // Reset temporary editing state variables in app.js
