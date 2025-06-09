@@ -21,9 +21,16 @@ import DropboxProvider from "./cloudProviders/dropboxProvider.js";
 import logger from "./logger.js";
 
 export class CloudSyncManager {
-  constructor(dataService, stateManager, onSyncComplete, onSyncError) {
+  constructor(
+    dataService,
+    stateManager,
+    uiRenderer,
+    onSyncComplete,
+    onSyncError
+  ) {
     this.dataService = dataService;
     this.stateManager = stateManager;
+    this.uiRenderer = uiRenderer;
     this.onSyncComplete = onSyncComplete || (() => {});
     this.onSyncError = onSyncError || logger.error;
     this.provider = null;
@@ -227,15 +234,52 @@ export class CloudSyncManager {
       // Check if we're authenticated
       if (!this.isAuthenticated) {
         logger.info("Not authenticated, attempting authentication");
+
+        // Show authentication toast
+        if (this.uiRenderer) {
+          this.uiRenderer.showToast(
+            "Authenticating with cloud service...",
+            "info",
+            {
+              isPersistent: true,
+              showSpinner: true,
+            }
+          );
+        }
+
         try {
           await this.authenticate();
           if (!this.isAuthenticated) {
+            if (this.uiRenderer) {
+              this.uiRenderer.clearToasts();
+              this.uiRenderer.showToast(
+                "Authentication required for sync",
+                "warning",
+                {
+                  duration: 5000,
+                }
+              );
+            }
             const error = new Error("Authentication required");
             error.code = "AUTH_REQUIRED";
             throw error;
           }
+          // Clear auth toast on success - will be replaced by sync toast if needed
+          if (this.uiRenderer) {
+            this.uiRenderer.clearToasts();
+          }
         } catch (authError) {
           logger.error("Authentication failed:", authError);
+          if (this.uiRenderer) {
+            this.uiRenderer.clearToasts();
+            this.uiRenderer.showToast(
+              `Authentication error: ${authError.message}`,
+              "error",
+              {
+                duration: 5000,
+              }
+            );
+          }
           const error = new Error(
             `Authentication failed: ${authError.message}`
           );
@@ -248,7 +292,28 @@ export class CloudSyncManager {
       // Always determine what needs to be synced
       const { syncCurrent, syncHistory } = await this.determineWhatToSync();
 
+      // Check if we actually have work to do before showing any toast
+      const localData = this.dataService.loadState();
+      const hasLocalChanges =
+        localData.metadata?.currentWeekDirty ||
+        localData.metadata?.historyDirty ||
+        localData.metadata?.dailyTotalsDirty ||
+        localData.metadata?.weeklyTotalsDirty;
+
       let syncResults = { currentWeekSynced: false, historySynced: false };
+      let workWasDone = false;
+
+      // Show toast if:
+      // 1. Not silent (manual sync) - always show toast
+      // 2. Silent (auto sync) but we have local changes that need syncing
+      const shouldShowToast = !silent || hasLocalChanges;
+
+      if (shouldShowToast && this.uiRenderer) {
+        this.uiRenderer.showToast("Synchronizing data with cloud...", "info", {
+          isPersistent: true,
+          showSpinner: true,
+        });
+      }
 
       // Now proceed with actual sync
       try {
@@ -257,6 +322,11 @@ export class CloudSyncManager {
           try {
             const currentWeekResult = (await this.syncCurrentWeek()) || {};
             syncResults.currentWeekSynced = !currentWeekResult.noChanges;
+
+            // Track if actual work was done (uploaded or downloaded)
+            if (currentWeekResult.uploaded || currentWeekResult.downloaded) {
+              workWasDone = true;
+            }
 
             // Clear the current week dirty flags
             await this.clearDirtyFlag("currentWeekDirty");
@@ -275,6 +345,11 @@ export class CloudSyncManager {
             const historyResult = (await this.syncHistory()) || {};
             syncResults.historySynced =
               historyResult && historyResult.syncedCount > 0;
+
+            // Track if actual work was done
+            if (syncResults.historySynced) {
+              workWasDone = true;
+            }
 
             // Clear the history dirty flag
             await this.clearDirtyFlag("historyDirty");
@@ -299,6 +374,22 @@ export class CloudSyncManager {
         }
 
         this.lastSyncTimestamp = Date.now();
+
+        // Show completion toast if work was done OR if this was a manual sync
+        if ((workWasDone || !silent) && this.uiRenderer) {
+          this.uiRenderer.clearToasts(); // Clear the persistent "Synchronizing..." toast
+          this.uiRenderer.showToast(
+            "Data synchronized successfully!",
+            "success",
+            {
+              duration: 2000,
+            }
+          );
+        } else if (this.uiRenderer) {
+          // Clear the sync toast even if no work was done (for cases where toast was shown)
+          this.uiRenderer.clearToasts();
+        }
+
         this.onSyncComplete({
           timestamp: this.lastSyncTimestamp,
           ...syncResults,
@@ -313,6 +404,10 @@ export class CloudSyncManager {
         throw error;
       }
     } catch (error) {
+      // Clear any sync toast on error
+      if (this.uiRenderer) {
+        this.uiRenderer.clearToasts();
+      }
       this.onSyncError(error);
       return false;
     } finally {
@@ -559,10 +654,9 @@ export class CloudSyncManager {
     const now = Date.now();
 
     // Local timestamps (update and reset)
-    const localDailyUpdatedAt =
-      localData.metadata?.dailyTotalsUpdatedAt || localData.lastModified || 0;
-    const localWeeklyUpdatedAt =
-      localData.metadata?.weeklyTotalsUpdatedAt || localData.lastModified || 0;
+    // Ensure local UpdatedAt timestamps default to 0 if not present, NOT to localData.lastModified
+    const localDailyUpdatedAt = localData.metadata?.dailyTotalsUpdatedAt || 0;
+    const localWeeklyUpdatedAt = localData.metadata?.weeklyTotalsUpdatedAt || 0;
     const localDailyResetTimestamp =
       localData.metadata?.dailyResetTimestamp || 0;
     const localWeeklyResetTimestamp =
@@ -592,12 +686,62 @@ export class CloudSyncManager {
       previousWeekStartDate: localData.metadata?.previousWeekStartDate,
     });
 
-    // Special case for fresh installs - prefer remote data
-    if (localData.metadata && localData.metadata.isFreshInstall) {
+    // CRITICAL FIRST CHECK: Special case for fresh installs - prefer remote data
+    if (localData.metadata?.isFreshInstall) {
       logger.info(
-        "Fresh install detected - using remote data and updating timestamp"
+        "FRESH INSTALL detected by mergeCurrentWeekData - prioritizing cloud data if it exists."
       );
-      // [existing fresh install logic]
+      const remoteHasData =
+        (remoteData &&
+          remoteData.weeklyCounts &&
+          Object.keys(remoteData.weeklyCounts).length > 0) ||
+        (remoteData &&
+          remoteData.dailyCounts &&
+          Object.values(remoteData.dailyCounts).some(
+            (day) => Object.keys(day).length > 0
+          ));
+
+      if (remoteHasData) {
+        logger.info("Fresh install: Using remote data entirely.");
+        const newLocalState = {
+          ...remoteData,
+          metadata: {
+            ...(remoteData.metadata || {}),
+            deviceId: localData.metadata.deviceId,
+            weekStartDay: localData.metadata.weekStartDay,
+            isFreshInstall: false, // CRITICAL: Mark as not fresh
+            dailyTotalsUpdatedAt:
+              remoteData.metadata?.dailyTotalsUpdatedAt ||
+              remoteData.lastModified ||
+              Date.now(),
+            weeklyTotalsUpdatedAt:
+              remoteData.metadata?.weeklyTotalsUpdatedAt ||
+              remoteData.lastModified ||
+              Date.now(),
+            lastModified: Date.now(),
+            dailyTotalsDirty: false, // Start clean after taking cloud data
+            weeklyTotalsDirty: false,
+            currentWeekDirty: false,
+          },
+        };
+        newLocalState.dailyCounts = newLocalState.dailyCounts || {};
+        newLocalState.weeklyCounts = newLocalState.weeklyCounts || {};
+        return newLocalState;
+      } else {
+        logger.info(
+          "Fresh install: No remote data found or remote data is empty. Local (empty) state will be prepared for upload."
+        );
+        const updatedLocalState = { ...localData };
+        if (!updatedLocalState.metadata) updatedLocalState.metadata = {};
+        updatedLocalState.metadata.isFreshInstall = false; // Still mark as not fresh for next time
+        // Timestamps are already sentinel/old from stateManager.initialize
+        // Mark as dirty to ensure this "initial empty state" or "initial minimal state" gets uploaded.
+        updatedLocalState.metadata.dailyTotalsDirty = true;
+        updatedLocalState.metadata.weeklyTotalsDirty = true;
+        updatedLocalState.metadata.currentWeekDirty = true;
+        updatedLocalState.metadata.lastModified = Date.now(); // Reflect this decision time
+        return updatedLocalState;
+      }
     }
 
     // *** SPECIAL WEEKLY RESET HANDLING ***

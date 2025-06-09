@@ -626,6 +626,7 @@ async function completeAppInitialization(fromWizard = false) {
         cloudSync = new CloudSyncManager(
           dataService,
           stateManager,
+          uiRenderer,
           handleSyncComplete,
           handleSyncError
         );
@@ -757,6 +758,7 @@ async function initializeCloudSync() {
     cloudSync = new CloudSyncManager(
       dataService,
       stateManager,
+      uiRenderer,
       handleSyncComplete,
       handleSyncError
     );
@@ -2408,90 +2410,13 @@ async function syncData(isInitialSync = false, isManualSync = false) {
     return;
   }
 
-  // Check authentication status
-  if (!cloudSync.isAuthenticated) {
-    logger.info("Authentication needed before sync");
-    // Always show auth-related messages regardless of manual/auto sync
-    uiRenderer.showToast("Authenticating with cloud service...", "info", {
-      isPersistent: true,
-      showSpinner: true,
-      details: "Step 1/4: Authenticating",
-    });
-    try {
-      const authResult = await cloudSync.authenticate();
-      if (!authResult) {
-        logger.info("Authentication failed or was canceled");
-        uiRenderer.showToast("Authentication required for sync", "warning", {
-          duration: 5000,
-        });
-        return;
-      }
-      // Authentication succeeded
-      logger.info("Authentication successful, proceeding with sync");
-    } catch (error) {
-      logger.error("Authentication error:", error);
-      uiRenderer.showToast(`Authentication error: ${error.message}`, "error", {
-        duration: 5000,
-      });
-      return;
-    }
-  }
-
-  const providerName = cloudSync.provider.constructor.name.includes("Dropbox")
-    ? "Dropbox"
-    : "Google Drive";
-
   try {
     logger.info("Starting sync operation");
     // Update UI to show sync in progress
     updateSyncUIElements();
 
-    // Get state before sync to check for actual changes
-    const preState = stateManager.getState();
-    const hasDirtyFlags =
-      preState.metadata?.currentWeekDirty ||
-      preState.metadata?.historyDirty ||
-      preState.metadata?.dailyTotalsDirty ||
-      preState.metadata?.weeklyTotalsDirty;
-
-    // Phase 1: Check for changes
-    // Only show Phase 1 messages if this is a manual sync
-    if (isManualSync) {
-      uiRenderer.showToast(`Checking for changes...`, "info", {
-        isPersistent: true,
-        showSpinner: true,
-        details: "Step 2/4: Checking for changes",
-      });
-    }
-
-    // Start the sync process
-    const result = await cloudSync.sync();
-
-    // If we have local changes or remote changes were detected, show the upload/download message
-    if (hasDirtyFlags || result.hasRemoteChanges) {
-      // Show appropriate message for data transfer
-      if (hasDirtyFlags) {
-        uiRenderer.showToast(
-          `Uploading changes to ${providerName}...`,
-          "info",
-          {
-            isPersistent: true,
-            showSpinner: true,
-            details: "Step 3/4: Uploading changes",
-          }
-        );
-      } else {
-        uiRenderer.showToast(
-          `Downloading changes from ${providerName}...`,
-          "info",
-          {
-            isPersistent: true,
-            showSpinner: true,
-            details: "Step 3/4: Downloading changes",
-          }
-        );
-      }
-    }
+    // Start the sync process - cloudSyncManager handles all toast messages
+    const result = await cloudSync.sync(!isManualSync); // Pass silent=true for auto syncs, silent=false for manual syncs
 
     logger.info("Sync completed:", result);
 
@@ -2522,19 +2447,6 @@ async function syncData(isInitialSync = false, isManualSync = false) {
     // Now refresh the UI
     logger.info("Refreshing UI after state reload");
     uiRenderer.renderEverything();
-
-    // Show completion message only if:
-    // 1. It's a manual sync
-    // 2. It's not an initial sync
-    // 3. We had changes (local or remote)
-    if (
-      (isManualSync || hasDirtyFlags || result?.hasRemoteChanges) &&
-      !isInitialSync
-    ) {
-      uiRenderer.showToast(`Data synchronized successfully!`, "success", {
-        duration: 2000, // Non-persistent toast for completion
-      });
-    }
   } catch (error) {
     logger.error("Sync error:", error);
     handleSyncError(error);
@@ -2765,6 +2677,7 @@ async function showSettings() {
               cloudSync = new CloudSyncManager(
                 dataService,
                 stateManager,
+                uiRenderer,
                 handleSyncComplete,
                 handleSyncError
               );
@@ -2847,6 +2760,7 @@ async function showSettings() {
               cloudSync = new CloudSyncManager(
                 dataService,
                 stateManager,
+                uiRenderer,
                 handleSyncComplete,
                 handleSyncError
               );
@@ -2897,6 +2811,7 @@ async function showSettings() {
           cloudSync = new CloudSyncManager(
             dataService,
             stateManager,
+            uiRenderer,
             handleSyncComplete,
             handleSyncError
           );

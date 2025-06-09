@@ -512,6 +512,34 @@ async function initialize(foodGroups) {
   recalculateWeeklyTotals(); // This uses the state modified by checkDateAndReset
   logger.debug("StateManager Initialize: recalculateWeeklyTotals() complete.");
 
+  // 7. CRITICAL FINAL STEP FOR FRESH INSTALL:
+  //    After all initialization, if it's still marked as a fresh install,
+  //    override key timestamps to ensure cloud data wins on first sync.
+  let currentStateAfterInit = getState(); // Get the state *after* all above operations
+  if (currentStateAfterInit.metadata?.isFreshInstall) {
+    logger.info(
+      "StateManager Initialize: Fresh install detected at FINAL STAGE. Overriding timestamps to sentinel values."
+    );
+    const sentinelTimestamp = new Date("2025-01-01T00:00:00Z").getTime();
+
+    // Dispatch an action to update metadata with these sentinel values.
+    // This ensures the change goes through the reducer and notifies subscribers,
+    // and importantly, triggers saveStateToStorage().
+    dispatch({
+      type: ACTION_TYPES.UPDATE_METADATA,
+      payload: {
+        metadata: {
+          dailyTotalsUpdatedAt: sentinelTimestamp,
+          weeklyTotalsUpdatedAt: sentinelTimestamp,
+          lastModified: sentinelTimestamp, // Override the overall state's lastModified too
+          // isFreshInstall remains true. CloudSyncManager will set it to false
+          // after the first successful sync that uses this information.
+        },
+      },
+    });
+    // The saveStateToStorage() will be called by the dispatch above.
+  }
+
   logger.info("StateManager Initialize: Initialization complete.");
   return getState();
 }

@@ -203,7 +203,6 @@ class SetupWizard {
           <ul class="wizard-list">
             <li>Access your data across multiple devices</li>
             <li>Keep your data backed up securely</li>
-            <li>Never lose your tracking history</li>
           </ul>
           <div class="wizard-form">
             <div class="radio-group">
@@ -247,15 +246,6 @@ class SetupWizard {
           <div class="wizard-form">
             <div class="radio-group">
               <label>
-                <input type="radio" name="cloudProvider" value="dropbox"
-                  ${
-                    this.selections.cloudSyncProvider === "dropbox"
-                      ? "checked"
-                      : ""
-                  }>
-                <span>Dropbox</span>
-              </label>
-              <label>
                 <input type="radio" name="cloudProvider" value="gdrive"
                   ${
                     this.selections.cloudSyncProvider === "gdrive"
@@ -264,7 +254,19 @@ class SetupWizard {
                   }>
                 <span>Google Drive</span>
               </label>
+              <label>
+                <input type="radio" name="cloudProvider" value="dropbox"
+                  ${
+                    this.selections.cloudSyncProvider === "dropbox"
+                      ? "checked"
+                      : ""
+                  }>
+                <span>Dropbox</span>
+              </label>
             </div>
+          </div>
+          <div class="wizard-note">
+            <p><strong>Note:</strong> If you've used this app on another device and synced data to the cloud, your existing data will be downloaded to this device on first sync.</p>
           </div>
         </div>
       </div>
