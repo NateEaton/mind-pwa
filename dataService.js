@@ -29,6 +29,7 @@
  */
 
 import logger from "./logger.js";
+import dateUtils from "./dateUtils.js";
 
 // Constants
 const DB_NAME = "MindDietTrackerDB";
@@ -159,63 +160,19 @@ function getDeviceId() {
   return deviceId;
 }
 
-/**
- * Get the start date of the week containing the given date
- * @param {Date|string} d - The date to get the week start for
- * @param {string} [startDayPref="Sunday"] - Day to start the week on ("Sunday" or "Monday")
- * @returns {string} YYYY-MM-DD formatted string of the week start date
- */
+// getWeekStartDate moved to dateUtils.js - proxy function for compatibility
 function getWeekStartDate(d, startDayPref = "Sunday") {
-  // Ensure d is a Date object. If string, assume YYYY-MM-DD and parse in local time.
-  const dateObj =
-    d instanceof Date ? new Date(d.getTime()) : new Date(d + "T00:00:00");
-  const day = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  let diff;
-
-  if (startDayPref === "Sunday") {
-    diff = dateObj.getDate() - day;
-  } else {
-    // Monday start
-    // Adjust when day is Sunday (0) to go back to the previous Monday (-6 days)
-    // Otherwise, go back (day - 1) days to get to Monday
-    diff = dateObj.getDate() - day + (day === 0 ? -6 : 1);
-  }
-
-  const weekStart = new Date(dateObj.setDate(diff));
-  weekStart.setHours(0, 0, 0, 0); // Set to midnight
-
-  const year = weekStart.getFullYear();
-  const month = String(weekStart.getMonth() + 1).padStart(2, "0");
-  const dayOfMonth = String(weekStart.getDate()).padStart(2, "0");
-  return `${year}-${month}-${dayOfMonth}`;
+  return dateUtils.getWeekStartDate(d, startDayPref);
 }
 
-/**
- * Get the end date of the week starting with the given date
- * @param {string} weekStartDate - The week start date (YYYY-MM-DD)
- * @returns {string} YYYY-MM-DD formatted string of the week end date
- */
+// getWeekEndDate moved to dateUtils.js - proxy function for compatibility
 function getWeekEndDate(weekStartDate) {
-  const startDate = new Date(`${weekStartDate}T00:00:00`);
-  const endDate = new Date(startDate);
-  endDate.setDate(startDate.getDate() + 6); // 6 days after start = end of week
-
-  const year = endDate.getFullYear();
-  const month = String(endDate.getMonth() + 1).padStart(2, "0");
-  const dayOfMonth = String(endDate.getDate()).padStart(2, "0");
-  return `${year}-${month}-${dayOfMonth}`;
+  return dateUtils.getWeekEndDate(weekStartDate);
 }
 
-/**
- * Get today's date as a YYYY-MM-DD string in local time
- * @returns {string} YYYY-MM-DD formatted string of today's date
- */
+// getTodayDateString moved to dateUtils.js - proxy function for compatibility
 function getTodayDateString() {
-  const today = getCurrentDate();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return dateUtils.formatDateToYYYYMMDD(getCurrentDate());
 }
 
 /**

@@ -61,6 +61,7 @@ import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import uiRenderer from "./uiRenderer.js";
 import appUtils from "./appUtils.js";
+import dateUtils from "./dateUtils.js";
 import CloudSyncManager from "./cloudSync.js";
 
 import { createLogger, configure, LOG_LEVELS } from "./logger.js";
@@ -3157,7 +3158,7 @@ function openEditHistoryDailyDetailsModal() {
   for (let i = 0; i < 7; i++) {
     const dayObj = new Date(weekStartDateObj);
     dayObj.setDate(weekStartDateObj.getDate() + i);
-    const dayStr = appUtils.formatDateToYYYYMMDD(dayObj);
+    const dayStr = dateUtils.formatDateToYYYYMMDD(dayObj);
     daysOfThisHistoricalWeek.push(dayStr);
     if (!tempEditedDailyBreakdown[dayStr]) {
       tempEditedDailyBreakdown[dayStr] = {}; // Initialize if day is missing
@@ -3361,7 +3362,7 @@ async function saveEditedHistoryDailyDetails() {
     for (let i = 0; i < 7; i++) {
       const dayToProcess = new Date(startDateObj);
       dayToProcess.setDate(startDateObj.getDate() + i);
-      const dateStr = appUtils.formatDateToYYYYMMDD(dayToProcess);
+      const dateStr = dateUtils.formatDateToYYYYMMDD(dayToProcess);
 
       if (editingHistoryWeekDataRef.dailyBreakdown[dateStr]) {
         for (const foodId in editingHistoryWeekDataRef.dailyBreakdown[

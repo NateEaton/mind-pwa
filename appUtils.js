@@ -62,54 +62,7 @@ async function registerServiceWorker() {
   }
 }
 
-/**
- * Format a date object to a human-readable string
- * @param {Date} date - The date to format
- * @param {Object} options - Format options
- * @param {boolean} [options.includeWeekday=true] - Whether to include the weekday
- * @param {boolean} [options.includeYear=false] - Whether to include the year
- * @param {boolean} [options.shortForm=true] - Whether to use abbreviated forms
- * @returns {string} Formatted date string
- */
-function formatDate(date, options = {}) {
-  const {
-    includeWeekday = true,
-    includeYear = false,
-    shortForm = true,
-  } = options;
-
-  if (!date) return "";
-
-  try {
-    // Create format options for toLocaleDateString
-    const formatOptions = {};
-
-    if (includeWeekday) {
-      formatOptions.weekday = shortForm ? "short" : "long";
-    }
-
-    formatOptions.month = shortForm ? "short" : "long";
-    formatOptions.day = "numeric";
-
-    if (includeYear) {
-      formatOptions.year = "numeric";
-    }
-
-    return date.toLocaleDateString(undefined, formatOptions);
-  } catch (error) {
-    logger.error("Error formatting date:", error);
-    return date.toLocaleDateString();
-  }
-}
-
-// Format date to YYYY-MM-DD
-function formatDateToYYYYMMDD(dateObj) {
-  if (!dateObj || !(dateObj instanceof Date)) return "";
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const day = String(dateObj.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+// Date functions moved to dateUtils.js
 
 /**
  * Debounce a function to limit how often it can be called
@@ -163,29 +116,7 @@ function getDeviceInfo() {
   return info;
 }
 
-/**
- * Check if a date string is a valid date in YYYY-MM-DD format
- * @param {string} dateString - The date string to validate
- * @returns {boolean} True if the date string is valid
- */
-function isValidDateString(dateString) {
-  if (typeof dateString !== "string") return false;
-
-  // Check format using regex
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
-
-  // Check if it's a valid date
-  const date = new Date(dateString + "T00:00:00");
-  if (Number.isNaN(date.getTime())) return false;
-
-  // Check if year-month-day components match the input
-  const parts = dateString.split("-").map((part) => parseInt(part, 10));
-  return (
-    date.getFullYear() === parts[0] &&
-    date.getMonth() + 1 === parts[1] &&
-    date.getDate() === parts[2]
-  );
-}
+// isValidDateString moved to dateUtils.js
 
 /**
  * Add a test mode banner to the application
@@ -264,12 +195,9 @@ async function loadAppVersion(versionElement = null) {
 export default {
   triggerHapticFeedback,
   registerServiceWorker,
-  formatDate,
   debounce,
   getDeviceInfo,
-  isValidDateString,
   addTestModeBanner,
   removeTestModeBanner,
   loadAppVersion,
-  formatDateToYYYYMMDD,
 };

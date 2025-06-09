@@ -18,6 +18,8 @@
 
 import dataService from "./dataService.js";
 import appUtils from "./appUtils.js";
+import dateUtils from "./dateUtils.js";
+import uiRenderer from "./uiRenderer.js";
 import logger from "./logger.js";
 
 /**
@@ -762,7 +764,7 @@ async function checkDateAndReset() {
         const dayToProcess = new Date(startDateForArchive);
         dayToProcess.setDate(startDateForArchive.getDate() + i);
 
-        const dateStr = appUtils.formatDateToYYYYMMDD(dayToProcess);
+        const dateStr = dateUtils.formatDateToYYYYMMDD(dayToProcess);
 
         if (completedWeekState.dailyCounts[dateStr]) {
           for (const foodId in completedWeekState.dailyCounts[dateStr]) {
@@ -956,7 +958,7 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
     const dayInArchivedWeekObj = new Date(weekStartDateObj);
     dayInArchivedWeekObj.setDate(weekStartDateObj.getDate() + i);
 
-    const dayStr = appUtils.formatDateToYYYYMMDD(dayInArchivedWeekObj); // Use the imported utility
+    const dayStr = dateUtils.formatDateToYYYYMMDD(dayInArchivedWeekObj); // Use the imported utility
 
     if (dayStr === "") {
       logger.error(
