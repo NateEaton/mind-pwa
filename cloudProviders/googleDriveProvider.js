@@ -218,10 +218,23 @@ class GoogleDriveProvider {
           logger.error("Error saving token:", e);
         }
 
-        // Signal that sync is ready
-        if (window.setSyncReady) window.setSyncReady(true);
+        // Check if this auth is happening from settings dialog context
+        // If so, delay setting sync ready to prevent immediate auto-sync
+        const isFromSettingsDialog = document.querySelector(
+          "#settings-modal, .modal-overlay"
+        );
 
-        logger.info("Authentication successful");
+        if (isFromSettingsDialog) {
+          logger.info(
+            "Authentication successful from settings dialog - delaying sync ready"
+          );
+          // Don't set sync ready immediately - let the settings dialog control when to sync
+        } else {
+          // Signal that sync is ready for normal auth flows
+          if (window.setSyncReady) window.setSyncReady(true);
+          logger.info("Authentication successful - sync ready");
+        }
+
         resolve(true);
       };
       this.tokenClient.requestAccessToken({ prompt: "consent" });

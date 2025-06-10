@@ -64,6 +64,7 @@ import appUtils from "./appUtils.js";
 import dateUtils from "./dateUtils.js";
 import historyModalManager from "./historyModalManager.js";
 import importExportManager from "./importExportManager.js";
+import settingsManager from "./settingsManager.js";
 import CloudSyncManager from "./cloudSync.js";
 
 import { createLogger, configure, LOG_LEVELS } from "./logger.js";
@@ -257,13 +258,10 @@ const foodGroups = [
 let cloudSync = null;
 let syncEnabled = false;
 let syncReady = false;
-let sectionCollapseState = {}; // Track which sections are expanded/collapsed
-
-// Add at the top of the file with other variables
+// Add at the top of the file with other variables (sectionCollapseState and pendingInitialSync moved to settingsManager.js)
 let lastSyncTime = 0;
 let lastFocusChangeTime = 0;
 let visibilityChangeTimeout = null;
-let pendingInitialSync = false;
 let initialSyncInProgress = false;
 const MIN_SYNC_INTERVAL = 1 * 60 * 1000; // 1 minute between auto-syncs
 
@@ -580,6 +578,29 @@ async function completeAppInitialization(fromWizard = false) {
     // Initialize import/export manager
     importExportManager.initialize(domElements.importFileInput);
 
+    // Initialize settings manager
+    settingsManager.initialize({
+      CloudSyncManager: CloudSyncManager,
+      closeMenu: closeMenu,
+      updateSyncUIElements: updateSyncUIElements,
+      setSyncReady: setSyncReady,
+      syncData: syncData,
+      handleSyncComplete: handleSyncComplete,
+      handleSyncError: handleSyncError,
+      stateManager: stateManager,
+      getCloudSyncState: () => cloudSync,
+      setCloudSyncState: (newCloudSync) => {
+        cloudSync = newCloudSync;
+      },
+      getSyncEnabled: () => syncEnabled,
+      setSyncEnabled: (enabled) => {
+        syncEnabled = enabled;
+        window.syncEnabled = enabled;
+      },
+      getSyncReady: () => syncReady,
+      getIsDemoHost: () => isDemoHost,
+    });
+
     // Render all UI components after initialization
     uiRenderer.renderEverything();
 
@@ -820,7 +841,7 @@ async function initializeCloudSync() {
       } else {
         // This was a settings dialog OAuth flow - show settings
         setTimeout(() => {
-          showSettings();
+          settingsManager.showSettings();
           // Show success toast
           uiRenderer.showToast("Dropbox connected successfully", "success");
 
@@ -983,7 +1004,10 @@ function setupEventListeners() {
   document.addEventListener("click", handleOutsideMenuClick);
 
   // Menu items
-  domElements.settingsBtn.addEventListener("click", handleSettings);
+  domElements.settingsBtn.addEventListener(
+    "click",
+    settingsManager.handleSettings
+  );
   domElements.userGuideBtn = document.getElementById("user-guide-btn");
   domElements.aboutBtn.addEventListener("click", handleAboutClick);
 
@@ -1049,6 +1073,19 @@ function setupEventListeners() {
     if (document.hidden) {
       // App is being hidden/minimized - check for changes
       if (syncEnabled && cloudSync) {
+        // Check if we're in an OAuth flow by looking for settings dialog
+        // When OAuth popups open, they hide the main app but we shouldn't sync during auth
+        const isInOAuthFlow =
+          document.querySelector("#generic-modal.modal-open") ||
+          document.querySelector(".modal.modal-open");
+
+        if (isInOAuthFlow) {
+          logger.info(
+            "App being hidden during OAuth flow, skipping sync to prevent conflicts"
+          );
+          return;
+        }
+
         const state = stateManager.getState();
         const hasDirtyFlags =
           state.metadata?.currentWeekDirty ||
@@ -1073,6 +1110,18 @@ function setupEventListeners() {
     } else {
       // App is becoming visible
       if (syncEnabled && cloudSync) {
+        // Check if we're still in an OAuth flow (settings dialog open)
+        const isInOAuthFlow =
+          document.querySelector("#generic-modal.modal-open") ||
+          document.querySelector(".modal.modal-open");
+
+        if (isInOAuthFlow) {
+          logger.info(
+            "App becoming visible during OAuth flow, skipping sync to prevent conflicts"
+          );
+          return;
+        }
+
         // Only sync on becoming visible if:
         // 1. It's been longer than our minimum interval since last sync AND
         // 2. This isn't just a quick tab switch (using a 5-second threshold)
@@ -1139,13 +1188,7 @@ function setupEventListeners() {
   // Setup sync button
   setupSyncButton();
 
-  // Add a sync settings option to the Settings menu
-  const oldSettingsBtn = document.getElementById("settings-btn");
-  if (oldSettingsBtn) {
-    oldSettingsBtn.addEventListener("click", async () => {
-      await showSettings();
-    });
-  }
+  // Settings button handled by settingsManager
 
   domElements.exportBtn.addEventListener("click", () =>
     importExportManager.handleExport(closeMenu)
@@ -2052,397 +2095,9 @@ async function syncData(isInitialSync = false, isManualSync = false) {
   }
 }
 
-/**
- * Handle settings button click
- */
-async function handleSettings() {
-  closeMenu();
+// handleSettings moved to settingsManager.js
 
-  // Get current sync settings
-  const syncEnabled = dataService.getPreference("cloudSyncEnabled", false);
-  const syncProvider = dataService.getPreference("cloudSyncProvider", "gdrive");
-  const autoSyncInterval = dataService.getPreference("autoSyncInterval", 15);
-  const syncWifiOnly = dataService.getPreference("syncWifiOnly", false);
-
-  // Show the settings dialog with sync options
-  await showSettings();
-}
-
-async function showSettings() {
-  closeMenu();
-
-  // Force a fresh read of preferences synchronously before building the UI
-  try {
-    // Get actual current sync enabled state
-    const freshSyncEnabled = await dataService.getPreference(
-      "cloudSyncEnabled",
-      false
-    );
-    logger.info(
-      "Settings dialog opening with cloud sync enabled:",
-      freshSyncEnabled
-    );
-
-    // Update the global variable to match what's in storage
-    window.syncEnabled = freshSyncEnabled;
-    syncEnabled = freshSyncEnabled;
-
-    // Get current sync provider
-    let currentSyncProvider;
-    if (cloudSync && cloudSync.provider) {
-      // If we have an active cloud sync, check what type it is
-      currentSyncProvider = cloudSync.provider.constructor.name.includes(
-        "Dropbox"
-      )
-        ? "dropbox"
-        : "gdrive";
-      logger.debug("Active provider detected:", currentSyncProvider);
-    } else {
-      // Fall back to saved preference
-      currentSyncProvider = await dataService.getPreference(
-        "cloudSyncProvider",
-        "gdrive"
-      );
-      logger.debug("Using saved provider preference:", currentSyncProvider);
-    }
-
-    // Get Wi-Fi only preference
-    const syncWifiOnly = await dataService.getPreference("syncWifiOnly", false);
-
-    const settingsTitle = "Settings";
-
-    let settingsContent = `
-      <div class="settings-container">
-
-        <!-- Cloud Synchronization Section -->
-        <div class="settings-section">
-          <div class="section-header collapsible">
-            <h4>Cloud Synchronization</h4>
-            <span class="section-toggle">▼</span>
-          </div>
-          <div class="section-content">
-            <div class="settings-row">
-              <label for="sync-enabled">Enable cloud sync:</label>
-              <input type="checkbox" id="sync-enabled" ${
-                freshSyncEnabled ? "checked" : ""
-              }>
-            </div>
-            
-            <div class="sync-settings ${
-              !freshSyncEnabled ? "disabled-section" : ""
-            }">
-              <div class="settings-row provider-row">
-                <label for="sync-provider">Provider:</label>
-                <select id="sync-provider" ${
-                  !freshSyncEnabled ? "disabled" : ""
-                }>
-                  <option value="gdrive" ${
-                    currentSyncProvider === "gdrive" ? "selected" : ""
-                  }>Google Drive</option>
-                  <option value="dropbox" ${
-                    currentSyncProvider === "dropbox" ? "selected" : ""
-                  }>Dropbox</option>
-                </select>
-                
-                <div class="connection-status">
-                  <span class="status-label">Status:</span>
-                  <span id="sync-status" class="status-value ${
-                    cloudSync?.isAuthenticated ? "connected" : "disconnected"
-                  }">${
-      cloudSync?.isAuthenticated ? "Connected" : "Not connected"
-    }</span>
-                </div>
-                
-                <button id="sync-reauth-btn" class="small-btn" ${
-                  !freshSyncEnabled ? "disabled" : ""
-                }>Connect</button>
-                <button id="sync-now-btn" class="small-btn" ${
-                  !freshSyncEnabled || !cloudSync?.isAuthenticated
-                    ? "disabled"
-                    : ""
-                }>Sync Now</button>
-              </div>
-              
-              <div class="settings-row sync-options-row">
-                <label for="sync-wifi-only">Sync only on Wi-Fi:</label>
-                <input type="checkbox" id="sync-wifi-only" ${
-                  syncWifiOnly ? "checked" : ""
-                } ${!freshSyncEnabled ? "disabled" : ""}>
-                <span class="setting-note">(Mobile devices only)</span>
-              </div>
-              
-              <div class="settings-row sync-last-row">
-                <label>Last sync:</label>
-                <span id="sync-last-time">${
-                  cloudSync && cloudSync.lastSyncTimestamp
-                    ? new Date(cloudSync.lastSyncTimestamp).toLocaleString()
-                    : "Never"
-                }</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Use the modal component
-    uiRenderer.openModal(settingsTitle, settingsContent, {
-      showFooter: true,
-      buttons: [
-        {
-          label: "Save",
-          id: "settings-save-btn",
-          class: "primary-btn",
-          onClick: () => closeSettingsModal(),
-        },
-        {
-          label: "Cancel",
-          id: "settings-cancel-btn",
-          class: "secondary-btn",
-          onClick: () => uiRenderer.closeModal(),
-        },
-      ],
-    });
-
-    // Add event listeners for collapsible sections
-    document
-      .querySelectorAll(".section-header.collapsible")
-      .forEach((header) => {
-        const sectionName = header.dataset.section;
-
-        // Apply saved state or default to collapsed
-        const isExpanded = sectionCollapseState[sectionName] === true;
-        const content = header.nextElementSibling;
-        const toggle = header.querySelector(".section-toggle");
-
-        if (isExpanded) {
-          content.style.display = "block";
-          toggle.textContent = "▼";
-        }
-
-        header.addEventListener("click", () => {
-          const isCurrentlyExpanded = content.style.display !== "none";
-          content.style.display = isCurrentlyExpanded ? "none" : "block";
-          toggle.textContent = isCurrentlyExpanded ? "▶" : "▼";
-
-          // Save the state
-          sectionCollapseState[sectionName] = !isCurrentlyExpanded;
-        });
-      });
-
-    // Add event listener for Enable sync checkbox to update UI in real-time
-    document
-      .getElementById("sync-enabled")
-      .addEventListener("change", async (e) => {
-        const enabled = e.target.checked;
-        const syncSettings = document.querySelector(".sync-settings");
-
-        // Save preference immediately
-        await dataService.savePreference("cloudSyncEnabled", enabled);
-        // Update global state
-        window.syncEnabled = enabled;
-        syncEnabled = enabled;
-
-        if (enabled) {
-          // Show warning for demo host when enabling
-          if (isDemoHost) {
-            uiRenderer.showToast(
-              "Cloud sync may not work unless your account has been registered for testing with Dropbox or Google Drive.",
-              "warning",
-              { duration: 5000 }
-            );
-          }
-
-          syncSettings.classList.remove("disabled-section");
-          document.getElementById("sync-provider").disabled = false;
-          document.getElementById("sync-wifi-only").disabled = false;
-          document.getElementById("sync-reauth-btn").disabled = false;
-
-          // Initialize sync object immediately if needed
-          const provider = document.getElementById("sync-provider").value;
-          if (!cloudSync) {
-            try {
-              // Show loading indicator
-              const statusElement = document.getElementById("sync-status");
-              statusElement.textContent = "Initializing...";
-              statusElement.className = "status-value initializing";
-
-              // Initialize the cloud sync
-              cloudSync = new CloudSyncManager(
-                dataService,
-                stateManager,
-                uiRenderer,
-                handleSyncComplete,
-                handleSyncError
-              );
-              await cloudSync.initialize(provider);
-
-              // Update status
-              setSyncReady(true);
-              statusElement.textContent = cloudSync.isAuthenticated
-                ? "Connected"
-                : "Not connected";
-              statusElement.className =
-                "status-value " +
-                (cloudSync.isAuthenticated ? "connected" : "disconnected");
-              document.getElementById("sync-now-btn").disabled =
-                !cloudSync.isAuthenticated;
-            } catch (error) {
-              logger.error("Failed to initialize cloud sync:", error);
-              uiRenderer.showToast(
-                "Failed to initialize sync: " + error.message,
-                "error"
-              );
-            }
-          }
-        } else {
-          syncSettings.classList.add("disabled-section");
-          document.getElementById("sync-provider").disabled = true;
-          document.getElementById("sync-wifi-only").disabled = true;
-          document.getElementById("sync-reauth-btn").disabled = true;
-          document.getElementById("sync-now-btn").disabled = true;
-
-          // Disable sync if it was enabled
-          if (cloudSync) {
-            cloudSync = null;
-            setSyncReady(false);
-            logger.info("Cloud sync disabled completely");
-          }
-        }
-
-        // Update UI elements
-        updateSyncUIElements();
-      });
-
-    // Add event listener for provider changes
-    const syncProviderSelect = document.getElementById("sync-provider");
-    if (syncProviderSelect) {
-      syncProviderSelect.addEventListener("change", async (e) => {
-        const newProvider = e.target.value;
-        const currentProvider = cloudSync
-          ? cloudSync.provider.constructor.name.includes("Dropbox")
-            ? "dropbox"
-            : "gdrive"
-          : "none";
-
-        logger.info(
-          `Provider changing from ${currentProvider} to ${newProvider}`
-        );
-
-        // Save preference immediately
-        await dataService.savePreference("cloudSyncProvider", newProvider);
-
-        // If provider changes, reset the connection status
-        if (newProvider !== currentProvider) {
-          // Update status to show not connected
-          const statusElement = document.getElementById("sync-status");
-          if (statusElement) {
-            statusElement.textContent = "Not connected";
-            statusElement.className = "status-value disconnected";
-          }
-
-          // Disable sync button until authenticated with new provider
-          const syncNowBtn = document.getElementById("sync-now-btn");
-          if (syncNowBtn) {
-            syncNowBtn.disabled = true;
-          }
-
-          // If we're enabled, initialize the new provider
-          if (syncEnabled) {
-            try {
-              setSyncReady(false);
-              cloudSync = new CloudSyncManager(
-                dataService,
-                stateManager,
-                uiRenderer,
-                handleSyncComplete,
-                handleSyncError
-              );
-              await cloudSync.initialize(newProvider);
-              setSyncReady(true);
-            } catch (error) {
-              logger.error("Failed to initialize new provider:", error);
-              uiRenderer.showToast(
-                "Failed to initialize new provider: " + error.message,
-                "error"
-              );
-            }
-          }
-        }
-      });
-    }
-
-    // Add event listener for WiFi-only setting
-    const syncWifiOnlyCheckbox = document.getElementById("sync-wifi-only");
-    if (syncWifiOnlyCheckbox) {
-      syncWifiOnlyCheckbox.addEventListener("change", async (e) => {
-        const wifiOnly = e.target.checked;
-        // Save preference immediately
-        await dataService.savePreference("syncWifiOnly", wifiOnly);
-        // Update cloud sync if active
-        if (cloudSync) {
-          cloudSync.syncWifiOnly = wifiOnly;
-        }
-      });
-    }
-
-    // Event listeners for action buttons
-    document.getElementById("sync-now-btn").addEventListener("click", () => {
-      syncData(false, true); // Not initial sync, but is manual sync
-    });
-
-    document
-      .getElementById("sync-reauth-btn")
-      .addEventListener("click", async () => {
-        const provider = document.getElementById("sync-provider").value;
-
-        if (
-          !cloudSync ||
-          cloudSync.provider?.constructor.name !==
-            getProviderClassName(provider)
-        ) {
-          // Initialize with new provider
-          cloudSync = new CloudSyncManager(
-            dataService,
-            stateManager,
-            uiRenderer,
-            handleSyncComplete,
-            handleSyncError
-          );
-          await cloudSync.initialize(provider);
-        }
-
-        try {
-          await cloudSync.authenticate();
-          // Update status after auth
-          const statusElement = document.getElementById("sync-status");
-          statusElement.textContent = cloudSync.isAuthenticated
-            ? "Connected"
-            : "Not connected";
-          statusElement.className =
-            "status-value " +
-            (cloudSync.isAuthenticated ? "connected" : "disconnected");
-
-          document.getElementById("sync-now-btn").disabled =
-            !cloudSync.isAuthenticated;
-
-          // Set pending initial sync flag instead of syncing immediately
-          if (cloudSync.isAuthenticated) {
-            pendingInitialSync = true;
-            logger.info("Initial sync pending until settings dialog is closed");
-          }
-        } catch (error) {
-          uiRenderer.showToast(
-            `Authentication failed: ${error.message}`,
-            "error"
-          );
-        }
-      });
-  } catch (err) {
-    logger.error("Error loading settings:", err);
-    uiRenderer.showToast("Failed to load settings", "error");
-  }
-}
+// showSettings moved to settingsManager.js
 
 function getProviderClassName(provider) {
   return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
@@ -2914,19 +2569,7 @@ function closeEditHistoryDailyDetailsModal_OLD_MOVED() {
   // However, showEditHistoryModalShell already clears these areas upon opening.
 }
 
-function closeSettingsModal() {
-  // Check if we have a pending initial sync
-  if (pendingInitialSync && syncEnabled && cloudSync && syncReady) {
-    logger.info("Executing pending initial sync after settings dialog close");
-    pendingInitialSync = false;
-    setTimeout(() => {
-      syncData();
-    }, 1000); // Small delay after dialog closes
-  }
-
-  // Close the modal
-  uiRenderer.closeModal();
-}
+// closeSettingsModal moved to settingsManager.js
 
 // Initialize the application when the DOM is loaded
 document.addEventListener("DOMContentLoaded", initializeApp);
