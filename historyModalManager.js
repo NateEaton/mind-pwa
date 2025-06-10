@@ -17,7 +17,7 @@
  */
 
 /**
- * ModalManager - Centralized modal management for the application
+ * History Modal Manager - Manages the History Daily Details modal for editing historical week data
  */
 
 import stateManager from "./stateManager.js";
@@ -28,11 +28,6 @@ import logger from "./logger.js";
 
 // Modal state management
 let modalState = {
-  // Edit Totals Modal state
-  editingSource: null, // 'current' or 'history'
-  editingWeekDataRef: null,
-  editedTotals: {},
-
   // History Daily Details Modal state
   editingHistoryWeekDataRef: null,
   tempEditedDailyBreakdown: {},
@@ -45,7 +40,7 @@ let modalState = {
  */
 function initialize() {
   setupModalEventListeners();
-  logger.debug("ModalManager initialized");
+  logger.debug("History Modal Manager initialized");
 }
 
 /**
@@ -106,303 +101,39 @@ function setupModalEventListeners() {
 }
 
 /**
- * Handle modal click events - routes to appropriate handler based on modal type
+ * Handle modal click events for history daily details
  * @param {Event} event - The click event
  */
 function handleModalClick(event) {
-  if (modalState.editingHistoryWeekDataRef) {
-    // We're in history daily details mode
-    handleModalDailyDetailChange(event);
-  } else {
-    // We're in edit totals mode
-    handleEditTotalsItemClick(event);
-  }
+  handleModalDailyDetailChange(event);
 }
 
 /**
- * Handle modal save events - routes to appropriate handler based on modal type
+ * Handle modal save events for history daily details
  */
 async function handleModalSave() {
   logger.debug("handleModalSave called", {
     editingHistoryWeekDataRef: !!modalState.editingHistoryWeekDataRef,
-    editingWeekDataRef: !!modalState.editingWeekDataRef,
-    editingSource: modalState.editingSource,
   });
 
   if (modalState.editingHistoryWeekDataRef) {
-    // We're in history daily details mode
     logger.debug("Calling saveEditedHistoryDailyDetails");
     await saveEditedHistoryDailyDetails();
   } else {
-    // We're in edit totals mode
-    logger.debug("Calling saveEditedTotals");
-    await saveEditedTotals();
+    logger.warn("Save called but no editing context available");
   }
 }
 
 /**
- * Handle modal cancel events - routes to appropriate handler based on modal type
+ * Handle modal cancel events for history daily details
  */
 function handleModalCancel() {
-  if (modalState.editingHistoryWeekDataRef) {
-    // We're in history daily details mode
-    closeEditHistoryDailyDetailsModal();
-  } else {
-    // We're in edit totals mode
-    closeEditTotalsModal();
-  }
+  closeEditHistoryDailyDetailsModal();
 }
 
 // =============================================================================
-// EDIT TOTALS MODAL
+// HISTORY DAILY DETAILS MODAL
 // =============================================================================
-
-/**
- * Open the edit totals modal
- * @param {string} source - Source of data ('current' or 'history')
- */
-function openEditTotalsModal(source) {
-  const state = stateManager.getState();
-  let title = "Edit Weekly Totals";
-  let dataToEdit = null;
-
-  if (source === "current") {
-    modalState.editingWeekDataRef = state;
-    dataToEdit = state.weeklyCounts;
-    const weekStartDate = new Date(`${state.currentWeekStartDate}T00:00:00`);
-    title = `Edit Totals: Week of ${weekStartDate.toLocaleDateString(
-      undefined,
-      { month: "short", day: "numeric", year: "numeric" }
-    )}`;
-    modalState.editingSource = "current";
-  } else if (source === "history") {
-    if (
-      state.currentHistoryIndex === -1 ||
-      !state.history[state.currentHistoryIndex]
-    ) {
-      uiRenderer.showToast("No history week selected to edit.", "error");
-      return;
-    }
-
-    modalState.editingWeekDataRef = state.history[state.currentHistoryIndex];
-    dataToEdit = modalState.editingWeekDataRef.totals;
-    const historyWeekDate = new Date(
-      `${modalState.editingWeekDataRef.weekStartDate}T00:00:00`
-    );
-    title = `Edit Totals: Week of ${historyWeekDate.toLocaleDateString(
-      undefined,
-      { month: "short", day: "numeric", year: "numeric" }
-    )}`;
-    modalState.editingSource = "history";
-  } else {
-    logger.error("Invalid source for edit modal:", source);
-    return;
-  }
-
-  // Deep copy the totals to the temporary editing object
-  modalState.editedTotals = JSON.parse(JSON.stringify(dataToEdit || {}));
-
-  // Ensure all food groups have an entry in editedTotals
-  state.foodGroups.forEach((group) => {
-    if (!(group.id in modalState.editedTotals)) {
-      modalState.editedTotals[group.id] = 0;
-    }
-  });
-
-  // Update the modal title
-  const domElements = uiRenderer.domElements;
-  if (domElements.modalElements.editTotalsTitle) {
-    domElements.modalElements.editTotalsTitle.textContent = title;
-  }
-
-  // Render the edit totals list
-  renderEditTotalsList();
-
-  // Show the modal
-  if (domElements.modalElements.editTotalsModal) {
-    domElements.modalElements.editTotalsModal.classList.add("modal-open");
-  }
-}
-
-/**
- * Render the edit totals list in the modal
- */
-function renderEditTotalsList() {
-  const domElements = uiRenderer.domElements;
-  if (
-    !domElements.modalElements.editTotalsList ||
-    !domElements.modalElements.editTotalsItemTemplate
-  ) {
-    return;
-  }
-
-  // Clear previous items
-  domElements.modalElements.editTotalsList.innerHTML = "";
-
-  // Get food groups from state
-  const state = stateManager.getState();
-
-  // Create an item for each food group
-  state.foodGroups.forEach((group) => {
-    const item = domElements.modalElements.editTotalsItemTemplate.content
-      .cloneNode(true)
-      .querySelector(".edit-totals-item");
-
-    item.dataset.id = group.id;
-
-    const nameSpan = item.querySelector(".edit-item-name");
-    const totalSpan = item.querySelector(".edit-current-total");
-
-    // Add data to buttons for easier access in handler
-    const decBtn = item.querySelector(".edit-decrement-btn");
-    const incBtn = item.querySelector(".edit-increment-btn");
-
-    if (decBtn) decBtn.dataset.groupId = group.id;
-    if (incBtn) incBtn.dataset.groupId = group.id;
-
-    // Set content
-    if (nameSpan) nameSpan.textContent = group.name;
-    if (totalSpan)
-      totalSpan.textContent = modalState.editedTotals[group.id] || 0;
-
-    // Add to list
-    domElements.modalElements.editTotalsList.appendChild(item);
-  });
-}
-
-/**
- * Handle clicks in the edit totals modal
- * @param {Event} event - The click event
- */
-function handleEditTotalsItemClick(event) {
-  const button = event.target.closest(
-    ".edit-decrement-btn, .edit-increment-btn"
-  );
-  if (!button) return;
-
-  const groupId = button.dataset.groupId;
-  if (!groupId) {
-    logger.error("Edit button clicked, but no groupId found in dataset.");
-    return;
-  }
-
-  // Get current value
-  let currentValue = modalState.editedTotals[groupId] || 0;
-
-  // Update value based on button type
-  if (button.classList.contains("edit-increment-btn")) {
-    currentValue++;
-  } else if (button.classList.contains("edit-decrement-btn")) {
-    currentValue = Math.max(0, currentValue - 1);
-  }
-
-  // Update temporary state
-  modalState.editedTotals[groupId] = currentValue;
-
-  // Update display
-  const itemElement = button.closest(".edit-totals-item");
-  if (itemElement) {
-    const totalSpan = itemElement.querySelector(".edit-current-total");
-    if (totalSpan) {
-      totalSpan.textContent = currentValue;
-    }
-  }
-}
-
-/**
- * Save changes from edit totals modal
- */
-async function saveEditedTotals() {
-  if (!modalState.editingSource || !modalState.editingWeekDataRef) {
-    logger.error("Cannot save, editing context is missing.");
-    uiRenderer.showToast("Error saving changes.", "error");
-    closeEditTotalsModal();
-    return;
-  }
-
-  try {
-    // Get a deep copy of edited totals
-    const finalTotals = JSON.parse(JSON.stringify(modalState.editedTotals));
-
-    if (modalState.editingSource === "current") {
-      // Update state weekly counts
-      for (const [groupId, count] of Object.entries(finalTotals)) {
-        stateManager.updateWeeklyCount(groupId, count);
-      }
-
-      // Force dirty flag explicitly after batch edit
-      const currentState = stateManager.getState();
-      if (currentState.metadata) {
-        stateManager.dispatch({
-          type: stateManager.ACTION_TYPES.UPDATE_METADATA,
-          payload: {
-            metadata: {
-              currentWeekDirty: true,
-              lastModified: Date.now(),
-            },
-          },
-        });
-        logger.info(
-          "Explicitly set currentWeekDirty flag after edit totals save"
-        );
-      }
-
-      uiRenderer.showToast("Current week totals updated.", "success");
-    } else if (modalState.editingSource === "history") {
-      // Update the totals in the history object
-      modalState.editingWeekDataRef.totals = finalTotals;
-
-      // Ensure we have proper metadata with current timestamp
-      if (!modalState.editingWeekDataRef.metadata) {
-        modalState.editingWeekDataRef.metadata = {};
-      }
-      modalState.editingWeekDataRef.metadata.updatedAt = Date.now();
-
-      // Save to database
-      await dataService.saveWeekHistory(modalState.editingWeekDataRef, {
-        foodGroups: stateManager.getState().foodGroups,
-        updatedAt: modalState.editingWeekDataRef.metadata.updatedAt,
-      });
-
-      // Mark history as dirty for sync
-      stateManager.dispatch({
-        type: stateManager.ACTION_TYPES.UPDATE_METADATA,
-        payload: {
-          metadata: {
-            historyDirty: true,
-            lastModified: Date.now(),
-          },
-        },
-      });
-
-      uiRenderer.showToast("History week totals updated.", "success");
-    }
-
-    closeEditTotalsModal();
-  } catch (error) {
-    logger.error("Error saving edited totals:", error);
-    uiRenderer.showToast("Error saving changes. Please try again.", "error");
-  }
-}
-
-/**
- * Close the edit totals modal
- */
-function closeEditTotalsModal() {
-  const domElements = uiRenderer.domElements;
-  if (domElements.modalElements.editTotalsModal) {
-    domElements.modalElements.editTotalsModal.classList.remove("modal-open");
-  }
-
-  // Reset temporary editing state
-  modalState.editingWeekDataRef = null;
-  modalState.editingSource = null;
-  modalState.editedTotals = {};
-
-  if (domElements.modalElements.editTotalsList) {
-    domElements.modalElements.editTotalsList.innerHTML = "";
-  }
-}
 
 // =============================================================================
 // HISTORY DAILY DETAILS MODAL
@@ -630,6 +361,61 @@ function handleModalDailyDetailChange(event) {
     weeklySpan.textContent = weeklyTotals[groupId] || 0;
   }
 
+  // Update the badge color and number for the current item
+  const weeklyBadge = itemElement.querySelector(".weekly-badge");
+  if (weeklyBadge) {
+    // Update the badge number
+    const badgeValueSpan = weeklyBadge.querySelector(".wk-val");
+    if (badgeValueSpan) {
+      badgeValueSpan.textContent = weeklyTotals[groupId] || 0;
+    }
+
+    // Find the food group info
+    const group = modalState.historyModalFoodGroups.find(
+      (g) => g.id === groupId
+    );
+    if (group) {
+      // Remove existing badge color classes
+      weeklyBadge.classList.remove(
+        "badge-primary",
+        "badge-secondary",
+        "badge-warning",
+        "badge-danger"
+      );
+
+      // Calculate effective weekly target
+      let effectiveWeeklyTarget;
+      if (group.frequency === "week") {
+        effectiveWeeklyTarget = group.target;
+      } else if (group.frequency === "day") {
+        effectiveWeeklyTarget = group.target * 7;
+      } else {
+        effectiveWeeklyTarget = group.target;
+      }
+
+      // Update badge color based on progress
+      const weeklyTotal = weeklyTotals[groupId] || 0;
+      if (group.type === "positive") {
+        if (weeklyTotal >= effectiveWeeklyTarget) {
+          weeklyBadge.classList.add("badge-primary");
+        } else {
+          weeklyBadge.classList.add("badge-secondary");
+        }
+      } else {
+        // For limits
+        if (weeklyTotal === 0) {
+          weeklyBadge.classList.add("badge-secondary");
+        } else if (weeklyTotal > effectiveWeeklyTarget) {
+          weeklyBadge.classList.add("badge-danger");
+        } else if (weeklyTotal > effectiveWeeklyTarget * 0.75) {
+          weeklyBadge.classList.add("badge-warning");
+        } else {
+          weeklyBadge.classList.add("badge-secondary");
+        }
+      }
+    }
+  }
+
   modalState.editingHistoryWeekDataRef.totals = weeklyTotals;
 }
 
@@ -730,27 +516,19 @@ function closeEditHistoryDailyDetailsModal() {
 
 export default {
   initialize,
-  openEditTotalsModal,
-  closeEditTotalsModal,
   openEditHistoryDailyDetailsModal,
   closeEditHistoryDailyDetailsModal,
   handleModalDayNavigation,
   handleModalDailyDetailChange,
-  saveEditedTotals,
   saveEditedHistoryDailyDetails,
-  handleEditTotalsItemClick,
 };
 
 // Named exports for convenience
 export {
   initialize,
-  openEditTotalsModal,
-  closeEditTotalsModal,
   openEditHistoryDailyDetailsModal,
   closeEditHistoryDailyDetailsModal,
   handleModalDayNavigation,
   handleModalDailyDetailChange,
-  saveEditedTotals,
   saveEditedHistoryDailyDetails,
-  handleEditTotalsItemClick,
 };

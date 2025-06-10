@@ -62,7 +62,8 @@ import stateManager from "./stateManager.js";
 import uiRenderer from "./uiRenderer.js";
 import appUtils from "./appUtils.js";
 import dateUtils from "./dateUtils.js";
-import modalManager from "./modalManager.js";
+import historyModalManager from "./historyModalManager.js";
+import importExportManager from "./importExportManager.js";
 import CloudSyncManager from "./cloudSync.js";
 
 import { createLogger, configure, LOG_LEVELS } from "./logger.js";
@@ -252,7 +253,7 @@ const foodGroups = [
   },
 ];
 
-// Modal state is now managed by modalManager.js
+// History modal state is now managed by historyModalManager.js
 let cloudSync = null;
 let syncEnabled = false;
 let syncReady = false;
@@ -574,7 +575,10 @@ async function completeAppInitialization(fromWizard = false) {
     uiRenderer.initialize();
 
     // Initialize modal manager
-    modalManager.initialize();
+    historyModalManager.initialize();
+
+    // Initialize import/export manager
+    importExportManager.initialize(domElements.importFileInput);
 
     // Render all UI components after initialization
     uiRenderer.renderEverything();
@@ -1001,17 +1005,12 @@ function setupEventListeners() {
   nextWeekBtn.addEventListener("click", handleNextWeek);
   historyDatePicker.addEventListener("change", handleHistoryDatePick);
 
-  // Modal listeners are now handled by modalManager.js
+  // Modal listeners are now handled by historyModalManager.js
 
-  // Edit totals modal buttons
-  if (domElements.editCurrentWeekBtn) {
-    domElements.editCurrentWeekBtn.addEventListener("click", () =>
-      modalManager.openEditTotalsModal("current")
-    );
-  }
+  // History edit modal button
   if (domElements.editHistoryWeekBtn) {
     domElements.editHistoryWeekBtn.addEventListener("click", () =>
-      modalManager.openEditHistoryDailyDetailsModal()
+      historyModalManager.openEditHistoryDailyDetailsModal()
     );
   }
 
@@ -1148,11 +1147,11 @@ function setupEventListeners() {
     });
   }
 
-  domElements.exportBtn.addEventListener("click", handleExport);
-  domElements.importBtnTrigger.addEventListener("click", triggerImport);
-  domElements.importFileInput.addEventListener(
-    "change",
-    handleImportFileSelect
+  domElements.exportBtn.addEventListener("click", () =>
+    importExportManager.handleExport(closeMenu)
+  );
+  domElements.importBtnTrigger.addEventListener("click", () =>
+    importExportManager.triggerImport(closeMenu)
   );
 }
 
@@ -1938,371 +1937,6 @@ async function deleteCloudFiles(files, providerName) {
   }
 }
 
-/**
- * Handle export data operation
- */
-async function handleExport() {
-  closeMenu();
-
-  try {
-    logger.info("Exporting data...");
-    const dataToExport = await dataService.exportData();
-
-    if (
-      Object.keys(dataToExport.currentState).length === 0 &&
-      dataToExport.history.length === 0
-    ) {
-      uiRenderer.showToast("No data available to export.", "error");
-      return;
-    }
-
-    // Create JSON file and trigger download
-    const jsonString = JSON.stringify(dataToExport, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const timestamp = dataService.getTodayDateString();
-    link.download = `mind-diet-tracker-data-${timestamp}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    logger.info("Data exported successfully.");
-    uiRenderer.showToast("Data exported successfully!", "success");
-    uiRenderer.setActiveView("tracker");
-  } catch (error) {
-    logger.error("Error exporting data:", error);
-    uiRenderer.showToast(`Export failed: ${error.message}`, "error");
-  }
-}
-
-/**
- * Trigger the import file selection dialog
- */
-function triggerImport() {
-  closeMenu();
-  domElements.importFileInput.click();
-}
-
-/**
- * Handle import file selection
- * @param {Event} event - The file input change event
- */
-async function handleImportFileSelect(event) {
-  const file = event.target.files[0];
-  if (!file) {
-    logger.info("No file selected for import.");
-    return;
-  }
-
-  // Validate file type
-  if (!file.type || file.type !== "application/json") {
-    uiRenderer.showToast(
-      "Invalid file type. Please select a '.json' file.",
-      "error"
-    );
-    domElements.importFileInput.value = "";
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = async (e) => {
-    try {
-      const fileContent = e.target.result;
-      const importedData = JSON.parse(fileContent);
-
-      // Basic validation of the imported structure
-      if (
-        typeof importedData !== "object" ||
-        importedData === null ||
-        !importedData.currentState ||
-        !Array.isArray(importedData.history)
-      ) {
-        throw new Error("Invalid file structure.");
-      }
-
-      // Format export date for display
-      const exportDate =
-        importedData.appInfo && importedData.appInfo.exportDate
-          ? new Date(importedData.appInfo.exportDate).toLocaleString()
-          : "unknown date";
-
-      // Determine relationship between import date and current date
-      const importedDate = importedData.currentState.currentDayDate;
-      const todayStr = dataService.getTodayDateString();
-
-      // Get date relationship (SAME_DAY, SAME_WEEK, PAST_WEEK, FUTURE_WEEK)
-      const dateRelationship = getDateRelationship(importedDate, todayStr);
-
-      // Prepare confirmation message
-      let actionDescription;
-      switch (dateRelationship) {
-        case "SAME_DAY":
-          actionDescription = "REPLACE ALL tracking data";
-          break;
-        case "SAME_WEEK":
-          actionDescription = "UPDATE current week totals and REPLACE history";
-          break;
-        case "PAST_WEEK":
-          actionDescription =
-            "ADD the imported data as history while PRESERVING current tracking";
-          break;
-        case "FUTURE_WEEK":
-          actionDescription =
-            "Warning: Import data appears to be from a FUTURE date";
-          break;
-        default:
-          actionDescription = "REPLACE ALL tracking data";
-      }
-
-      // File details for the dialog
-      const fileDetails = `
-        <p><strong>File:</strong> ${file.name}</p>
-        <p><strong>Exported:</strong> ${exportDate}</p>
-        <p><strong>Import type:</strong> ${dateRelationship
-          .replace("_", " ")
-          .toLowerCase()}</p>
-      `;
-
-      // Show confirmation dialog using uiRenderer instead of appUtils
-      const confirmed = await uiRenderer.showConfirmDialog({
-        title: "Import Confirmation",
-        details: fileDetails,
-        actionDesc: actionDescription,
-        message:
-          "This action cannot be undone. Do you want to proceed with the import?",
-        confirmText: "Import",
-        cancelText: "Cancel",
-      });
-
-      if (!confirmed) {
-        logger.info("Import cancelled by user.");
-        domElements.importFileInput.value = "";
-        return;
-      }
-
-      // Perform the import based on the data relationship
-      const importResult = await processImport(importedData, dateRelationship);
-
-      // Reload UI with new data
-      uiRenderer.renderEverything();
-      uiRenderer.setActiveView("tracker");
-
-      // Create success message
-      let successMessage;
-      switch (dateRelationship) {
-        case "SAME_DAY":
-          successMessage = `Import complete. All data replaced.`;
-          break;
-        case "SAME_WEEK":
-          successMessage = `Import complete. Week totals updated for current week.`;
-          break;
-        case "PAST_WEEK":
-          // Use the count directly from the import result
-          const importedCount =
-            importResult?.importedCount ||
-            importedData.appInfo?.historyCount ||
-            importedData.history.length;
-          successMessage = `Import complete. ${importedCount} weeks added to history.`;
-          break;
-        case "FUTURE_WEEK":
-          successMessage = `Import complete. Future-dated data imported.`;
-          break;
-        default:
-          successMessage = `Import successful!`;
-      }
-
-      uiRenderer.showToast(successMessage, "success", { duration: 4000 });
-    } catch (error) {
-      logger.error("Error importing data:", error);
-      uiRenderer.showToast(`Import failed: ${error.message}`, "error", {
-        duration: 5000,
-      });
-    } finally {
-      domElements.importFileInput.value = "";
-    }
-  };
-
-  reader.onerror = (e) => {
-    logger.error("Error reading file:", e);
-    uiRenderer.showToast("Error reading the selected file.", "error");
-    domElements.importFileInput.value = "";
-  };
-
-  reader.readAsText(file);
-}
-
-/**
- * Process the import operation based on date relationship.
- * @param {Object} importedData - The parsed data from the imported JSON file.
- * @param {string} dateRelationship - Relationship of imported currentState to local current date.
- * @returns {Promise<Object>} An object indicating success and any relevant import counts.
- */
-async function processImport(importedData, dateRelationship) {
-  try {
-    let importResult = { success: false };
-
-    if (dateRelationship === "PAST_WEEK") {
-      const currentState = stateManager.getState();
-      const currentDailyCounts = { ...currentState.dailyCounts };
-      const currentWeeklyCounts = { ...currentState.weeklyCounts };
-      const currentDayDate = currentState.currentDayDate;
-      const currentWeekStartDate = currentState.currentWeekStartDate;
-
-      const foodGroups =
-        currentState.foodGroups || stateManager.getFoodGroups();
-
-      const importedCurrentWeek = dataService.createHistoryFromCurrentState(
-        importedData.currentState,
-        importedData.appInfo,
-        foodGroups
-      );
-
-      const combinedHistory = [importedCurrentWeek, ...importedData.history];
-      const importedHistoryCount = combinedHistory.length;
-
-      const historyOnly = {
-        appInfo: {
-          ...importedData.appInfo,
-          historyCount: importedHistoryCount,
-        },
-        currentState: {
-          currentDayDate,
-          currentWeekStartDate,
-          dailyCounts: currentDailyCounts,
-          weeklyCounts: currentWeeklyCounts,
-          lastModified: Date.now(),
-          metadata: {
-            schemaVersion: 3,
-            partialImport: true,
-            historyDirty: true,
-          },
-        },
-        history: combinedHistory,
-        preferences: importedData.preferences || {},
-      };
-
-      await dataService.importData(historyOnly);
-      importResult = { success: true, importedCount: importedHistoryCount };
-    } else if (dateRelationship === "SAME_WEEK") {
-      const currentState = stateManager.getState();
-      const currentDailyCounts = { ...currentState.dailyCounts };
-      const currentWeeklyCounts = { ...currentState.weeklyCounts };
-      const importedDailyCounts = { ...importedData.currentState.dailyCounts };
-      const importedWeeklyCounts = {
-        ...importedData.currentState.weeklyCounts,
-      };
-
-      // Merge daily counts
-      const mergedDailyCounts = { ...currentDailyCounts };
-      Object.keys(importedDailyCounts).forEach((date) => {
-        mergedDailyCounts[date] = mergedDailyCounts[date] || {};
-        Object.keys(importedDailyCounts[date]).forEach((groupId) => {
-          const currentCount = mergedDailyCounts[date][groupId] || 0;
-          const importedCount = importedDailyCounts[date][groupId] || 0;
-          mergedDailyCounts[date][groupId] = Math.max(
-            currentCount,
-            importedCount
-          );
-        });
-      });
-
-      // Merge weekly counts
-      const mergedWeeklyCounts = {};
-      const allGroupIds = [
-        ...new Set([
-          ...Object.keys(currentWeeklyCounts),
-          ...Object.keys(importedWeeklyCounts),
-        ]),
-      ];
-
-      allGroupIds.forEach((groupId) => {
-        const currentCount = currentWeeklyCounts[groupId] || 0;
-        const importedCount = importedWeeklyCounts[groupId] || 0;
-        mergedWeeklyCounts[groupId] = Math.max(currentCount, importedCount);
-      });
-
-      const now = Date.now();
-      const mergedImport = {
-        appInfo: importedData.appInfo,
-        currentState: {
-          currentDayDate: currentState.currentDayDate,
-          currentWeekStartDate: currentState.currentWeekStartDate,
-          dailyCounts: mergedDailyCounts,
-          weeklyCounts: mergedWeeklyCounts,
-          lastModified: now,
-          metadata: {
-            schemaVersion: 3,
-            partialImport: true,
-            currentWeekDirty: true,
-            historyDirty: true,
-            dailyTotalsDirty: true,
-            dailyTotalsUpdatedAt: now,
-            weeklyTotalsDirty: true,
-            weeklyTotalsUpdatedAt: now,
-          },
-        },
-        history: importedData.history,
-        preferences: importedData.preferences || {},
-      };
-
-      await dataService.importData(mergedImport);
-
-      // TODO: add call to have stateManager recalculate weekly totals from daily counts read in from import file
-      importResult = { success: true };
-    } else {
-      // SAME_DAY or FUTURE_WEEK – full import
-      importedData.currentState.metadata = {
-        ...(importedData.currentState.metadata || {}),
-        currentWeekDirty: true,
-      };
-
-      if (importedData.history && importedData.history.length > 0) {
-        importedData.currentState.metadata.historyDirty = true;
-      }
-
-      await dataService.importData(importedData);
-      importResult = { success: true };
-    }
-
-    const foodGroups =
-      stateManager.getState().foodGroups || stateManager.getFoodGroups();
-    await stateManager.initialize(foodGroups);
-
-    return importResult;
-  } catch (error) {
-    logger.error("Error during import processing:", error);
-    throw error;
-  }
-}
-
-/**
- * Determine the relationship between two dates
- * @param {string} importDate - The import date string (YYYY-MM-DD)
- * @param {string} todayDate - The current date string (YYYY-MM-DD)
- * @returns {string} Relationship type (SAME_DAY, SAME_WEEK, PAST_WEEK, FUTURE_WEEK)
- */
-function getDateRelationship(importDate, todayDate) {
-  // Convert string dates to Date objects
-  const importDateObj = new Date(`${importDate}T00:00:00`);
-  const todayDateObj = new Date(`${todayDate}T00:00:00`);
-
-  // Get week start dates to compare weeks
-  const importWeekStart = dataService.getWeekStartDate(importDateObj);
-  const todayWeekStart = dataService.getWeekStartDate(todayDateObj);
-
-  if (importDate === todayDate) {
-    return "SAME_DAY";
-  } else if (importWeekStart === todayWeekStart) {
-    return "SAME_WEEK";
-  } else {
-    return importDateObj < todayDateObj ? "PAST_WEEK" : "FUTURE_WEEK";
-  }
-}
-
 function handleSyncComplete(result) {
   logger.info("Sync completed:", result);
 
@@ -2814,16 +2448,16 @@ function getProviderClassName(provider) {
   return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
 }
 
-// openEditTotalsModal moved to modalManager.js
+// openEditTotalsModal removed (obsolete functionality)
 
-// renderEditTotalsList moved to modalManager.js
+// renderEditTotalsList removed (obsolete functionality)
 
-// handleEditTotalsItemClick moved to modalManager.js
+// handleEditTotalsItemClick removed (obsolete functionality)
 
 /**
  * Save changes from edit totals modal
  */
-// saveEditedTotals moved to modalManager.js
+// saveEditedTotals removed (obsolete functionality)
 async function saveEditedTotals_OLD_MOVED() {
   if (!editingSource || !editingWeekDataRef) {
     logger.error("Cannot save, editing context is missing.");
@@ -2926,7 +2560,7 @@ async function saveEditedTotals_OLD_MOVED() {
 /**
  * Close the edit totals modal
  */
-// closeEditTotalsModal moved to modalManager.js
+// closeEditTotalsModal removed (obsolete functionality)
 function closeEditTotalsModal_OLD_MOVED() {
   if (domElements.editTotalsModal) {
     domElements.editTotalsModal.classList.remove("modal-open");
@@ -2945,7 +2579,7 @@ function closeEditTotalsModal_OLD_MOVED() {
 /**
  * Opens and initializes the modal for viewing/editing daily details of a historical week.
  */
-// openEditHistoryDailyDetailsModal moved to modalManager.js
+// openEditHistoryDailyDetailsModal moved to historyModalManager.js
 function openEditHistoryDailyDetailsModal_OLD_MOVED() {
   const state = stateManager.getState();
   if (
@@ -3042,7 +2676,7 @@ function openEditHistoryDailyDetailsModal_OLD_MOVED() {
  * Handles navigation between days within the "Edit History Daily Details" modal.
  * @param {string} newSelectedDayStr - The YYYY-MM-DD of the day selected in the modal's day bar.
  */
-// handleModalDayNavigation moved to modalManager.js
+// handleModalDayNavigation moved to historyModalManager.js
 function handleModalDayNavigation_OLD_MOVED(newSelectedDayStr) {
   if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
     logger.warn(
@@ -3092,7 +2726,7 @@ function handleModalDayNavigation_OLD_MOVED(newSelectedDayStr) {
  * Updates the temporary 'tempEditedDailyBreakdown'.
  * @param {Event} event - The click event from +/- buttons or change event from input.
  */
-// handleModalDailyDetailChange moved to modalManager.js
+// handleModalDailyDetailChange moved to historyModalManager.js
 function handleModalDailyDetailChange_OLD_MOVED(event) {
   const button = event.target.closest(
     ".edit-decrement-btn, .edit-increment-btn"
@@ -3148,7 +2782,7 @@ function handleModalDailyDetailChange_OLD_MOVED(event) {
  * Saves the changes made in the "Edit History Daily Details" modal
  * to the stateManager and IndexedDB.
  */
-// saveEditedHistoryDailyDetails moved to modalManager.js
+// saveEditedHistoryDailyDetails moved to historyModalManager.js
 async function saveEditedHistoryDailyDetails_OLD_MOVED() {
   if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
     logger.error(
@@ -3261,7 +2895,7 @@ async function saveEditedHistoryDailyDetails_OLD_MOVED() {
 /**
  * Closes the "Edit History Daily Details" modal and resets its temporary state.
  */
-// closeEditHistoryDailyDetailsModal moved to modalManager.js
+// closeEditHistoryDailyDetailsModal moved to historyModalManager.js
 function closeEditHistoryDailyDetailsModal_OLD_MOVED() {
   uiRenderer.closeEditTotalsModal(); // Call the uiRenderer function to hide the modal
 
