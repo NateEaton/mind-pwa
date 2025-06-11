@@ -73,10 +73,15 @@ const domElements = {
 
 let toastTimeout = null; // For managing toast hide timer
 
+// Reference to app manager for callbacks
+let appManagerRef = null;
+
 /**
  * Initialize the UI renderer by caching DOM elements
+ * @param {Object} appManager - Reference to the app manager for callbacks
  */
-function initialize() {
+function initialize(appManager = null) {
+  appManagerRef = appManager;
   // Cache main view elements
   domElements.views = {
     tracker: document.getElementById("tracker-view"),
@@ -349,6 +354,11 @@ function handleStateChange(state, action) {
       renderEverything();
       break;
 
+    case "BATCH_COMPLETE":
+      // Handle batched updates by re-rendering everything
+      renderEverything();
+      break;
+
     default:
       // For unknown actions, re-render everything to be safe
       renderEverything();
@@ -457,16 +467,15 @@ function renderTrackerItems() {
     state.selectedTrackerDate,
     (newSelectedDateStr) => {
       // onDaySelectCallback
-      // This callback will be defined in app.js and passed to uiRenderer.initialize or similar
-      // For now, we'll assume app.js wires this up to dispatch SET_SELECTED_TRACKER_DATE
+      // Call the app manager's day selection handler
       if (
-        window.app &&
-        typeof window.app.handleTrackerDaySelect === "function"
+        appManagerRef &&
+        typeof appManagerRef.handleTrackerDaySelect === "function"
       ) {
-        window.app.handleTrackerDaySelect(newSelectedDateStr);
+        appManagerRef.handleTrackerDaySelect(newSelectedDateStr);
       } else {
         logger.warn(
-          "window.app.handleTrackerDaySelect not found. Day selection might not work."
+          "appManager.handleTrackerDaySelect not found. Day selection might not work."
         );
       }
     },

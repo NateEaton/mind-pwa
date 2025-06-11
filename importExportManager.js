@@ -296,7 +296,7 @@ async function processImport(importedData, dateRelationship) {
           weeklyCounts: currentWeeklyCounts,
           lastModified: Date.now(),
           metadata: {
-            schemaVersion: 3,
+            schemaVersion: dataService.SCHEMA?.VERSION || 3,
             partialImport: true,
             historyDirty: true,
           },
@@ -355,7 +355,7 @@ async function processImport(importedData, dateRelationship) {
           weeklyCounts: mergedWeeklyCounts,
           lastModified: now,
           metadata: {
-            schemaVersion: 3,
+            schemaVersion: dataService.SCHEMA?.VERSION || 3,
             partialImport: true,
             currentWeekDirty: true,
             historyDirty: true,
@@ -371,7 +371,10 @@ async function processImport(importedData, dateRelationship) {
 
       await dataService.importData(mergedImport);
 
-      // TODO: add call to have stateManager recalculate weekly totals from daily counts read in from import file
+      // Recalculate weekly totals from merged daily counts to ensure consistency
+      stateManager.recalculateWeeklyTotals();
+      logger.info("Recalculated weekly totals after SAME_WEEK import merge");
+
       importResult = { success: true };
     } else {
       // SAME_DAY or FUTURE_WEEK – full import
@@ -391,6 +394,10 @@ async function processImport(importedData, dateRelationship) {
     const foodGroups =
       stateManager.getState().foodGroups || stateManager.getFoodGroups();
     await stateManager.initialize(foodGroups);
+
+    // Ensure weekly totals are consistent with daily counts after any import
+    stateManager.recalculateWeeklyTotals();
+    logger.debug("Post-import weekly totals recalculation complete");
 
     return importResult;
   } catch (error) {

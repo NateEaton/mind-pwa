@@ -86,6 +86,9 @@ let _state = { ...defaultState };
 // Array of subscriber functions
 const _subscribers = [];
 
+// Batch update flag to prevent intermediate UI updates during complex operations
+let _batchingUpdates = false;
+
 /**
  * Subscribe to state changes
  * @param {Function} callback - Function to call when state changes
@@ -151,8 +154,10 @@ function dispatch(action) {
       saveStateToStorage();
     }
 
-    // Notify subscribers
-    notifySubscribers(_state, action);
+    // Notify subscribers only if not batching updates
+    if (!_batchingUpdates) {
+      notifySubscribers(_state, action);
+    }
   }
 
   return _state;
@@ -1054,38 +1059,75 @@ function getFoodGroup(id) {
 }
 
 /**
+ * Start batching state updates to prevent intermediate UI renders
+ */
+function startBatching() {
+  _batchingUpdates = true;
+  logger.debug("Started batching state updates");
+}
+
+/**
+ * End batching and trigger a final UI update
+ */
+function endBatching() {
+  if (_batchingUpdates) {
+    _batchingUpdates = false;
+    logger.debug("Ended batching state updates - triggering final UI update");
+    // Trigger a final notification with the current state
+    notifySubscribers(_state, { type: "BATCH_COMPLETE" });
+  }
+}
+
+/**
  * Reload state from persistent storage
+ * @param {boolean} skipRecalculation - Skip automatic weekly totals recalculation
  * @returns {Promise<boolean>} Success indicator
  */
-async function reload() {
+async function reload(skipRecalculation = false) {
   logger.info("Reloading state from data service");
 
-  // Load fresh data from data service
-  const freshData = dataService.loadState();
-  logger.debug("Fresh data loaded:", {
-    dayDate: freshData.currentDayDate,
-    weekStartDate: freshData.currentWeekStartDate,
-    dailyCounts: Object.keys(freshData.dailyCounts || {}),
-    weeklyCounts: Object.keys(freshData.weeklyCounts || {}),
-  });
+  // Start batching to prevent intermediate UI updates
+  startBatching();
 
-  // Update state with fresh data
-  dispatch({
-    type: ACTION_TYPES.SET_STATE,
-    payload: freshData,
-  });
+  try {
+    // Load fresh data from data service
+    const freshData = dataService.loadState();
+    logger.debug("Fresh data loaded:", {
+      dayDate: freshData.currentDayDate,
+      weekStartDate: freshData.currentWeekStartDate,
+      dailyCounts: Object.keys(freshData.dailyCounts || {}),
+      weeklyCounts: Object.keys(freshData.weeklyCounts || {}),
+    });
 
-  // Also reload history if needed
-  const historyData = await dataService.getAllWeekHistory();
-  logger.info("History data loaded:", historyData.length, "weeks");
+    // Update state with fresh data
+    dispatch({
+      type: ACTION_TYPES.SET_STATE,
+      payload: freshData,
+    });
 
-  dispatch({
-    type: ACTION_TYPES.SET_HISTORY,
-    payload: { history: historyData },
-  });
+    // Also reload history if needed
+    const historyData = await dataService.getAllWeekHistory();
+    logger.info("History data loaded:", historyData.length, "weeks");
 
-  logger.info("State reloaded successfully");
-  return true;
+    dispatch({
+      type: ACTION_TYPES.SET_HISTORY,
+      payload: { history: historyData },
+    });
+
+    // Recalculate weekly totals to ensure consistency unless caller will handle it
+    if (!skipRecalculation) {
+      logger.debug("Auto-recalculating weekly totals after reload");
+      recalculateWeeklyTotals();
+    } else {
+      logger.debug("Skipping auto-recalculation - caller will handle it");
+    }
+
+    logger.info("State reloaded successfully");
+    return true;
+  } finally {
+    // Always end batching, even if an error occurs
+    endBatching();
+  }
 }
 
 /**
@@ -1158,6 +1200,10 @@ export default {
   // Helper functions
   getFoodGroup,
   reload, // Add reload to the exported methods
+
+  // Batch update controls
+  startBatching,
+  endBatching,
 
   // Action types (for external use)
   ACTION_TYPES,

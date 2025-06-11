@@ -373,7 +373,7 @@ export class CloudSyncManager {
           }
         }
 
-        this.lastSyncTimestamp = Date.now();
+        this.lastSyncTimestamp = this.dataService.getCurrentTimestamp();
 
         // Show completion toast if work was done OR if this was a manual sync
         if ((workWasDone || !silent) && this.uiRenderer) {
@@ -522,6 +522,23 @@ export class CloudSyncManager {
         // Update local store with merged data
         logger.info("Updating local store with merged data");
         this.dataService.saveState(dataToUpload);
+
+        // Update state manager with merged data to ensure consistency
+        logger.info("Reloading state manager after cloud sync merge");
+        if (
+          this.stateManager &&
+          typeof this.stateManager.reload === "function"
+        ) {
+          // Skip automatic recalculation in reload - we'll do it manually for proper sequencing
+          await this.stateManager.reload(true);
+
+          // Ensure weekly totals are consistent after cloud sync merge
+          // This must happen immediately after reload to prevent UI race condition
+          if (typeof this.stateManager.recalculateWeeklyTotals === "function") {
+            this.stateManager.recalculateWeeklyTotals();
+            logger.info("Recalculated weekly totals after cloud sync merge");
+          }
+        }
 
         // Store file metadata after download
         await this.storeFileMetadata(currentWeekFileName, fileInfo);
@@ -976,7 +993,7 @@ export class CloudSyncManager {
 
       // Update the archived week
       archivedWeek.totals = mergedTotals;
-      archivedWeek.metadata.updatedAt = Date.now();
+      archivedWeek.metadata.updatedAt = this.dataService.getCurrentTimestamp();
       archivedWeek.metadata.mergedAfterReset = true;
 
       // Save the updated archive
@@ -1441,7 +1458,9 @@ export class CloudSyncManager {
 
             const weekEntry = {
               weekStartDate: weekStartDate,
-              updatedAt: syncedWeek.metadata?.updatedAt || Date.now(),
+              updatedAt:
+                syncedWeek.metadata?.updatedAt ||
+                this.dataService.getCurrentTimestamp(),
             };
 
             if (weekIndex >= 0) {
@@ -1513,7 +1532,7 @@ export class CloudSyncManager {
       );
 
       // Update the last sync timestamp
-      this.lastHistorySyncTimestamp = Date.now();
+      this.lastHistorySyncTimestamp = this.dataService.getCurrentTimestamp();
       this.storeLastSyncedState();
 
       // Clear the history dirty flag after successful sync
@@ -1575,9 +1594,9 @@ export class CloudSyncManager {
 
       // Ensure metadata exists
       if (!week.metadata) {
-        week.metadata = { updatedAt: Date.now() };
+        week.metadata = { updatedAt: this.dataService.getCurrentTimestamp() };
       } else if (!week.metadata.updatedAt) {
-        week.metadata.updatedAt = Date.now();
+        week.metadata.updatedAt = this.dataService.getCurrentTimestamp();
       }
 
       weekMap.set(week.weekStartDate, {
@@ -1618,9 +1637,9 @@ export class CloudSyncManager {
 
       // Ensure metadata exists
       if (!week.metadata) {
-        week.metadata = { updatedAt: Date.now() };
+        week.metadata = { updatedAt: this.dataService.getCurrentTimestamp() };
       } else if (!week.metadata.updatedAt) {
-        week.metadata.updatedAt = Date.now();
+        week.metadata.updatedAt = this.dataService.getCurrentTimestamp();
       }
 
       const existingWeek = weekMap.get(week.weekStartDate);
@@ -1685,7 +1704,7 @@ export class CloudSyncManager {
 
       // Ensure metadata exists
       if (!week.metadata) {
-        week.metadata = { updatedAt: Date.now() };
+        week.metadata = { updatedAt: this.dataService.getCurrentTimestamp() };
       }
 
       return true;
