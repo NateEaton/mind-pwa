@@ -2647,5 +2647,54 @@ function closeEditHistoryDailyDetailsModal_OLD_MOVED() {
   logger.debug("Closed Edit History Daily Details modal and reset temp state.");
 }
 
+/**
+ * Handle dynamic viewport height for mobile browsers
+ * This addresses issues with browsers like Edge mobile that include browser chrome in viewport calculations
+ */
+function setupDynamicViewportHeight() {
+  function updateViewportHeight() {
+    // Calculate the actual viewport height
+    const vh = window.innerHeight * 0.01;
+    // Set a CSS custom property for use in calculations
+    document.documentElement.style.setProperty("--vh", `${vh}px`);
+
+    // For browsers that don't support dvh, we can use this custom property
+    if (!CSS.supports("height", "100dvh")) {
+      document.documentElement.style.setProperty(
+        "--dynamic-vh",
+        `${window.innerHeight}px`
+      );
+    }
+  }
+
+  // Set initial values
+  updateViewportHeight();
+
+  // Update on resize and orientation change
+  window.addEventListener("resize", updateViewportHeight);
+  window.addEventListener("orientationchange", () => {
+    // Delay update to allow browser UI to settle
+    setTimeout(updateViewportHeight, 100);
+  });
+
+  // Update on visual viewport changes (for browsers that support it)
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateViewportHeight);
+  }
+}
+
 // Initialize the application when the DOM is loaded
-document.addEventListener("DOMContentLoaded", initializeApp);
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    // Setup dynamic viewport height first
+    setupDynamicViewportHeight();
+
+    // Initialize the main application
+    await initializeApp();
+  } catch (error) {
+    logger.error("Error initializing app:", error);
+    uiRenderer.showToast(`Initialization Error: ${error.message}`, "error", {
+      duration: 5000,
+    });
+  }
+});

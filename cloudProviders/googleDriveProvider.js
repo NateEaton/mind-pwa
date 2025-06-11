@@ -24,7 +24,8 @@ class GoogleDriveProvider {
   constructor() {
     this.GOOGLE_CLIENT_ID = null;
     this.GOOGLE_API_KEY = null;
-    this.SCOPES = "https://www.googleapis.com/auth/drive.appdata";
+    this.SCOPES =
+      "https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email";
     this.DISCOVERY_DOCS = [
       "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
     ];
@@ -662,6 +663,52 @@ class GoogleDriveProvider {
     } catch (error) {
       logger.error("Error in Google Drive searchFile:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Get user information from Google Drive
+   * @returns {Promise<Object|null>} User info object or null if failed
+   */
+  async getUserInfo() {
+    try {
+      if (!this.gapi?.client) {
+        logger.warn("Google API client not available, cannot get user info");
+        return null;
+      }
+
+      // Check if we have a valid token
+      const token = this.gapi.client.getToken();
+      if (!token) {
+        logger.warn("No Google token available, cannot get user info");
+        return null;
+      }
+
+      // Use the People API to get user information
+      const response = await fetch(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        {
+          headers: {
+            Authorization: `Bearer ${token.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const userInfo = await response.json();
+
+      return {
+        email: userInfo.email,
+        name: userInfo.name || userInfo.email,
+        id: userInfo.id,
+        provider: "Google Drive",
+      };
+    } catch (error) {
+      logger.error("Error getting Google user info:", error);
+      return null;
     }
   }
 }

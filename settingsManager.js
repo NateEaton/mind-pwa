@@ -123,6 +123,16 @@ async function showSettings() {
     // Get Wi-Fi only preference
     const syncWifiOnly = await dataService.getPreference("syncWifiOnly", false);
 
+    // Get user info if connected
+    let userInfo = null;
+    if (cloudSync?.isAuthenticated && cloudSync.provider?.getUserInfo) {
+      try {
+        userInfo = await cloudSync.provider.getUserInfo();
+      } catch (error) {
+        logger.debug("Failed to get user info:", error);
+      }
+    }
+
     const settingsTitle = "Settings";
 
     let settingsContent = `
@@ -146,17 +156,19 @@ async function showSettings() {
               !freshSyncEnabled ? "disabled-section" : ""
             }">
               <div class="settings-row provider-row">
-                <label for="sync-provider">Provider:</label>
-                <select id="sync-provider" ${
-                  !freshSyncEnabled ? "disabled" : ""
-                }>
-                  <option value="gdrive" ${
-                    currentSyncProvider === "gdrive" ? "selected" : ""
-                  }>Google Drive</option>
-                  <option value="dropbox" ${
-                    currentSyncProvider === "dropbox" ? "selected" : ""
-                  }>Dropbox</option>
-                </select>
+                <div class="provider-select-row">
+                  <label for="sync-provider">Provider:</label>
+                  <select id="sync-provider" ${
+                    !freshSyncEnabled ? "disabled" : ""
+                  }>
+                    <option value="gdrive" ${
+                      currentSyncProvider === "gdrive" ? "selected" : ""
+                    }>Google Drive</option>
+                    <option value="dropbox" ${
+                      currentSyncProvider === "dropbox" ? "selected" : ""
+                    }>Dropbox</option>
+                  </select>
+                </div>
                 
                 <div class="connection-status">
                   <span class="status-label">Status:</span>
@@ -166,6 +178,17 @@ async function showSettings() {
       cloudSync?.isAuthenticated ? "Connected" : "Not connected"
     }</span>
                 </div>
+                
+                ${
+                  userInfo
+                    ? `
+                <div class="connection-status account-info">
+                  <span class="status-label">Account:</span>
+                  <span class="status-value connected">${userInfo.email}</span>
+                </div>
+                `
+                    : ""
+                }
               </div>
               
               <div class="settings-row sync-actions-row">
@@ -206,16 +229,16 @@ async function showSettings() {
       showFooter: true,
       buttons: [
         {
-          label: "Save",
-          id: "settings-save-btn",
-          class: "primary-btn",
-          onClick: () => closeSettingsModal(),
-        },
-        {
           label: "Cancel",
           id: "settings-cancel-btn",
           class: "secondary-btn",
           onClick: () => uiRenderer.closeModal(),
+        },
+        {
+          label: "Save",
+          id: "settings-save-btn",
+          class: "primary-btn",
+          onClick: () => closeSettingsModal(),
         },
       ],
     });
@@ -536,6 +559,28 @@ function setupActionButtonListeners() {
           // delays it when authenticating from settings dialog
           if (cloudSync.provider?.constructor.name === "GoogleDriveProvider") {
             if (setSyncReadyCallback) setSyncReadyCallback(true);
+          }
+
+          // Try to get and display user info
+          try {
+            if (cloudSync.provider?.getUserInfo) {
+              const userInfo = await cloudSync.provider.getUserInfo();
+              if (userInfo) {
+                // Add account info to the DOM if not already there
+                const providerRow = document.querySelector(".provider-row");
+                if (providerRow && !document.querySelector(".account-info")) {
+                  const accountDiv = document.createElement("div");
+                  accountDiv.className = "connection-status account-info";
+                  accountDiv.innerHTML = `
+                    <span class="status-label">Account:</span>
+                    <span class="status-value connected">${userInfo.email}</span>
+                  `;
+                  providerRow.appendChild(accountDiv);
+                }
+              }
+            }
+          } catch (error) {
+            logger.debug("Failed to update user info display:", error);
           }
         }
       } catch (error) {

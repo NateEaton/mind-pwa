@@ -168,8 +168,10 @@ main {
     padding-right: var(--spacing-lg);
     max-width: 800px;
     margin: 0 auto;
-    /* Removed top/bottom margin */
+    /* Fallback for browsers that don't support dvh */
     height: calc(100vh - var(--main-app-header-height));
+    /* Use dynamic viewport height for better mobile browser compatibility */
+    height: calc(100dvh - var(--main-app-header-height));
     /* Fill available space */
     overflow: hidden;
     /* Prevent main from scrolling */
@@ -177,8 +179,25 @@ main {
     flex-direction: column;
 }
 
+/* Support detection for dynamic viewport units */
+@supports not (height: 100dvh) {
+    main {
+        /* Enhanced fallback for older browsers */
+        height: calc(100vh - var(--main-app-header-height));
+        /* Use JavaScript-calculated height if available */
+        height: calc(var(--dynamic-vh, 100vh) - var(--main-app-header-height));
+        min-height: calc(100vh - var(--main-app-header-height));
+    }
+
+    .main-content {
+        /* Extra padding for browsers without dvh support */
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+}
+
 .main-content {
-    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    /* Reduced padding since dvh should fix the root issue */
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }
 
 .view {
@@ -225,6 +244,8 @@ main {
     overflow-y: auto;
     /* Enables vertical scrolling for this part only */
     padding: var(--spacing-lg);
+    /* Reduced extra padding since dvh should fix the root cause */
+    padding-bottom: calc(var(--spacing-lg) + 20px);
 }
 
 .scroll-fade-indicator {
@@ -1230,7 +1251,7 @@ h3:first-child {
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
     width: 90%;
     max-width: 500px;
-    max-height: 90vh;
+    max-height: 95vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1339,7 +1360,7 @@ h3:first-child {
 }
 
 .settings-section .section-content {
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm);
     background-color: white;
     border-top: 1px solid var(--border-color);
 }
@@ -1350,7 +1371,8 @@ h3:first-child {
 .settings-row {
     display: flex;
     align-items: center;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+    /* Reduced from --spacing-md */
     flex-wrap: wrap;
 }
 
@@ -1433,15 +1455,21 @@ h3:first-child {
 }
 
 .provider-row {
-    align-items: center;
-    margin-bottom: var(--spacing-lg);
+    align-items: stretch;
+    margin-bottom: var(--spacing-md);
+    /* Reduced from --spacing-lg */
+    flex-direction: column;
+    gap: var(--spacing-sm);
 }
 
-.provider-row .small-btn {
-    margin-left: var(--spacing-sm);
-    white-space: nowrap;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    font-size: var(--font-sm);
+.provider-select-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.account-info {
+    margin-top: var(--spacing-xs);
 }
 
 .action-btn {
@@ -1648,8 +1676,14 @@ h3:first-child {
     }
 
     .modal-content {
-        width: 90%;
-        /* This is fine */
+        width: 95%;
+        max-width: none;
+        /* Allow full width on very small screens */
+        margin-top: var(--spacing-sm);
+        /* Reduce modal margins */
+        margin-bottom: var(--spacing-sm);
+        max-height: 95vh;
+        /* Ensure modal doesn't exceed viewport height - increased from 90vh */
     }
 
     .mdi {
@@ -1738,8 +1772,8 @@ h3:first-child {
         margin-top: var(--spacing-sm);
         /* Reduce modal margins */
         margin-bottom: var(--spacing-sm);
-        max-height: 90vh;
-        /* Ensure modal doesn't exceed viewport height */
+        max-height: 95vh;
+        /* Ensure modal doesn't exceed viewport height - increased from 90vh */
     }
 
     .modal-header {
@@ -1842,6 +1876,19 @@ h3:first-child {
         font-size: 0.9em;
         max-width: 90%;
         /* Toast can be wider */
+    }
+
+    /* Sync actions row adjustments for mobile */
+    .sync-actions-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+    }
+
+    .sync-actions-row .small-btn {
+        width: 100%;
+        min-width: auto;
+        text-align: center;
     }
 }
 
@@ -1969,10 +2016,10 @@ h3:first-child {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     max-width: 480px;
     width: 90%;
-    height: 80%;
-    /* Changed to percentage of container height */
-    min-height: 460px;
-    /* Minimum height as fallback */
+    max-height: 60vh;
+    /* Reasonable height for desktop, responsive for mobile */
+    min-height: 550px;
+    /* Higher minimum to keep consistent size across wizard panels */
     display: flex;
     flex-direction: column;
     position: relative;
@@ -2073,9 +2120,10 @@ h3:first-child {
 /* Mobile adjustments */
 @media (max-width: 480px) {
     .setup-wizard-content {
-        height: 80%;
-        /* Keep consistent percentage on mobile */
-        min-height: 420px;
+        max-height: 80vh;
+        /* Use more height on mobile for better usability */
+        min-height: 500px;
+        /* Higher minimum for consistency on mobile */
     }
 
     .wizard-step {
@@ -2198,4 +2246,36 @@ h3:first-child {
     background-color: #fff3e6;
     border: 1px solid #ffcc80;
     color: #804000;
+}
+
+/* Fix for Connect and Sync Now buttons spacing in Settings */
+.sync-actions-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    /* Reduced from --spacing-md */
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.sync-actions-row .small-btn {
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: var(--font-sm);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    min-width: 90px;
+    white-space: nowrap;
+}
+
+.sync-actions-row .small-btn:hover:not(:disabled) {
+    background-color: var(--secondary-dark);
+}
+
+.sync-actions-row .small-btn:disabled {
+    background-color: #ccc;
+    color: #888;
+    cursor: not-allowed;
 }

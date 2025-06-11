@@ -135,10 +135,6 @@ function handleModalCancel() {
 // HISTORY DAILY DETAILS MODAL
 // =============================================================================
 
-// =============================================================================
-// HISTORY DAILY DETAILS MODAL
-// =============================================================================
-
 /**
  * Opens and initializes the modal for viewing/editing daily details of a historical week
  */

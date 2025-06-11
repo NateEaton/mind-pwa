@@ -572,6 +572,32 @@ class DropboxProvider {
       throw error;
     }
   }
+
+  /**
+   * Get user information from Dropbox
+   * @returns {Promise<Object|null>} User info object or null if failed
+   */
+  async getUserInfo() {
+    try {
+      if (!this.ACCESS_TOKEN || !this.dbx) {
+        logger.warn("Not authenticated with Dropbox, cannot get user info");
+        return null;
+      }
+
+      const response = await this.dbx.usersGetCurrentAccount();
+      const userInfo = response.result;
+
+      return {
+        email: userInfo.email,
+        name: userInfo.name?.display_name || userInfo.email,
+        id: userInfo.account_id,
+        provider: "Dropbox",
+      };
+    } catch (error) {
+      logger.error("Error getting Dropbox user info:", error);
+      return null;
+    }
+  }
 }
 
 export default DropboxProvider;

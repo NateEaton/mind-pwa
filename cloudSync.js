@@ -221,7 +221,7 @@ export class CloudSyncManager {
 
     // Check network constraints
     if (!this.checkNetworkConstraints()) {
-      const error = new Error("Network constraints prevented sync");
+      const error = new Error("'Sync only on Wi-Fi' is enabled.");
       error.code = "NETWORK_CONSTRAINT";
       this.onSyncError(error);
       return false;
