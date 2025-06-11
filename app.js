@@ -43,7 +43,6 @@ const isDemoHost = window?.location?.hostname?.includes("vercel.app");
       if (state?.wizardContext === "cloudProviderConnect") {
         localStorage.setItem("pendingWizardContinuation", "true");
       } else {
-        // This was a normal settings OAuth flow
         if (state) {
           localStorage.setItem("dropbox_auth_state", JSON.stringify(state));
         }
@@ -614,7 +613,7 @@ async function initializeApp() {
           await completeAppInitialization(true);
         },
         { once: true }
-      ); // Remove listener after first use
+      );
 
       // Launch the setup wizard
       await setupWizard.start();
@@ -925,19 +924,18 @@ async function initializeCloudSync() {
       );
 
       if (pendingWizardContinuation) {
-        // This was a wizard OAuth flow - the wizard will handle the continuation
-        // Just set sync ready and let the wizard take over
+        // This was a wizard OAuth flow - set sync ready and let the wizard handle continuation
         appManager.setSyncReady(true);
         return true;
       } else {
-        // This was a settings dialog OAuth flow - show settings
+        // This was a settings dialog OAuth flow
         setTimeout(() => {
           settingsManager.showSettings();
           // Show success toast
           uiRenderer.showToast("Dropbox connected successfully", "success");
 
           // Set sync ready AFTER the settings dialog is shown
-          // This delay ensures the auto-sync doesn't happen immediately
+
           setTimeout(() => {
             appManager.setSyncReady(true);
           }, 1000);
@@ -1058,11 +1056,7 @@ function handleTrackerDaySelect(newSelectedDateStr) {
       `Attempted to select date ${newSelectedDateStr} outside of current week ${currentState.currentWeekStartDate}. Ignoring.`
     );
     // Optionally, provide feedback to the user or revert the visual selection in UI
-    // For now, uiRenderer will re-render based on state, so if state doesn't change, UI won't either.
-    // However, the button clicked might stay 'active' visually until next state-driven render.
-    // To fix this, uiRenderer.renderDaySelectorBar might need to be called again with current state.selectedTrackerDate
-    // if the selection is invalid. Or, the click handler in renderDaySelectorBar could be smarter.
-    // For Phase 1, this level of edge case handling might be deferred.
+    // The UI will re-render based on state changes via the subscription system.
   }
 }
 
@@ -1244,7 +1238,6 @@ function setupEventListeners() {
       appManager.getCloudSync() &&
       navigator.onLine
     ) {
-      // Use a synchronous approach for beforeunload
       try {
         // Create a sync record but don't wait for response
         const currentState = dataService.loadState();
@@ -1286,7 +1279,7 @@ function setupEventListeners() {
           syncData();
         }
       }
-    }, appManager.MIN_SYNC_INTERVAL); // Use same 10-minute interval
+    }, appManager.MIN_SYNC_INTERVAL);
   }
 
   // Start periodic check on app init
@@ -1675,7 +1668,6 @@ async function handleAboutClick() {
     `;
   }
 
-  // Use the new modal format with footer
   uiRenderer.openModal(aboutTitle, aboutContent, {
     showFooter: true,
     buttons: [
@@ -1807,7 +1799,6 @@ function setupDevControlEventListeners() {
       await stateManager.checkDateAndReset();
       uiRenderer.renderEverything();
 
-      // Remove banner and show toast
       appUtils.removeTestModeBanner();
       uiRenderer.showToast(
         "Test mode disabled. Using real system date.",
@@ -2233,24 +2224,10 @@ async function syncData(isInitialSync = false, isManualSync = false) {
   }
 }
 
-// handleSettings moved to settingsManager.js
-
-// showSettings moved to settingsManager.js
-
 function getProviderClassName(provider) {
   return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
 }
 
-// openEditTotalsModal removed (obsolete functionality)
-
-// renderEditTotalsList removed (obsolete functionality)
-
-// handleEditTotalsItemClick removed (obsolete functionality)
-
-/**
- * Save changes from edit totals modal
- */
-// saveEditedTotals removed (obsolete functionality)
 async function saveEditedTotals_OLD_MOVED() {
   if (!editingSource || !editingWeekDataRef) {
     logger.error("Cannot save, editing context is missing.");
@@ -2355,10 +2332,6 @@ async function saveEditedTotals_OLD_MOVED() {
   }
 }
 
-/**
- * Close the edit totals modal
- */
-// closeEditTotalsModal removed (obsolete functionality)
 function closeEditTotalsModal_OLD_MOVED() {
   if (appManager.getDomElements().editTotalsModal) {
     appManager.getDomElements().editTotalsModal.classList.remove("modal-open");
@@ -2374,10 +2347,6 @@ function closeEditTotalsModal_OLD_MOVED() {
   }
 }
 
-/**
- * Opens and initializes the modal for viewing/editing daily details of a historical week.
- */
-// openEditHistoryDailyDetailsModal moved to historyModalManager.js
 function openEditHistoryDailyDetailsModal_OLD_MOVED() {
   const state = stateManager.getState();
   if (
@@ -2454,7 +2423,7 @@ function openEditHistoryDailyDetailsModal_OLD_MOVED() {
       handleModalDayNavigation, // Callback in app.js
       editingHistoryWeekDataRef.metadata?.weekStartDay ||
         state.metadata.weekStartDay ||
-        "Sunday", // Use record's, then state's, then default
+        "Sunday",
       true // isModal = true
     );
   } else {
@@ -2470,11 +2439,6 @@ function openEditHistoryDailyDetailsModal_OLD_MOVED() {
   );
 }
 
-/**
- * Handles navigation between days within the "Edit History Daily Details" modal.
- * @param {string} newSelectedDayStr - The YYYY-MM-DD of the day selected in the modal's day bar.
- */
-// handleModalDayNavigation moved to historyModalManager.js
 function handleModalDayNavigation_OLD_MOVED(newSelectedDayStr) {
   if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
     logger.warn(
@@ -2519,17 +2483,10 @@ function handleModalDayNavigation_OLD_MOVED(newSelectedDayStr) {
   }
 }
 
-/**
- * Handles +/- clicks or input changes for food items within the "Edit History Daily Details" modal.
- * Updates the temporary 'tempEditedDailyBreakdown'.
- * @param {Event} event - The click event from +/- buttons or change event from input.
- */
-// handleModalDailyDetailChange moved to historyModalManager.js
 function handleModalDailyDetailChange_OLD_MOVED(event) {
   const button = event.target.closest(
     ".edit-decrement-btn, .edit-increment-btn"
   );
-  // TODO: Later, also handle direct input change if you add number inputs to the modal list
 
   if (
     !button ||
@@ -2576,18 +2533,13 @@ function handleModalDailyDetailChange_OLD_MOVED(event) {
   );
 }
 
-/**
- * Saves the changes made in the "Edit History Daily Details" modal
- * to the stateManager and IndexedDB.
- */
-// saveEditedHistoryDailyDetails moved to historyModalManager.js
 async function saveEditedHistoryDailyDetails_OLD_MOVED() {
   if (!editingHistoryWeekDataRef || !tempEditedDailyBreakdown) {
     logger.error(
       "saveEditedHistoryDailyDetails: Cannot save, editing context is missing."
     );
     uiRenderer.showToast("Error saving changes. No editing context.", "error");
-    closeEditHistoryDailyDetailsModal(); // Use the specific close function
+    closeEditHistoryDailyDetailsModal();
     return;
   }
 
@@ -2600,13 +2552,12 @@ async function saveEditedHistoryDailyDetails_OLD_MOVED() {
       JSON.parse(JSON.stringify(tempEditedDailyBreakdown))
     );
 
-    // 1. Update the original history record's dailyBreakdown with our temporary copy
-    //    Make sure to create a new object to avoid reference issues if tempEditedDailyBreakdown is reused.
+    // Update the original history record's dailyBreakdown with our temporary copy
     editingHistoryWeekDataRef.dailyBreakdown = JSON.parse(
       JSON.stringify(tempEditedDailyBreakdown)
     );
 
-    // 2. Recalculate totals for this history record based on the new dailyBreakdown
+    // Recalculate totals for this history record based on the new dailyBreakdown
     const newTotalsForHistoryRecord = {};
     const weekStartDateForTotals = editingHistoryWeekDataRef.weekStartDate;
     const startDateObj = new Date(weekStartDateForTotals + "T00:00:00");
@@ -2638,39 +2589,34 @@ async function saveEditedHistoryDailyDetails_OLD_MOVED() {
       JSON.parse(JSON.stringify(newTotalsForHistoryRecord))
     );
 
-    // 3. Update metadata for the history record
+    // Update metadata for the history record
     if (!editingHistoryWeekDataRef.metadata)
       editingHistoryWeekDataRef.metadata = {};
     editingHistoryWeekDataRef.metadata.updatedAt =
       dataService.getCurrentTimestamp();
-    // Ensure weekStartDay from original record is preserved. It was set on archival.
-    // It should not change during an edit of daily details.
+    // Ensure weekStartDay from original record is preserved
     editingHistoryWeekDataRef.metadata.weekStartDay =
       editingHistoryWeekDataRef.metadata.weekStartDay ||
-      stateManager.getState().metadata.weekStartDay || // Fallback to current app pref
-      "Sunday"; // Ultimate fallback
+      stateManager.getState().metadata.weekStartDay ||
+      "Sunday";
 
-    // 4. Save the modified history record to dataService
-    // We need to pass foodGroups in case normalizeWeekData needs to rebuild targets
-    // if they were missing from an old history record.
+    // Save the modified history record to dataService
     await dataService.saveWeekHistory(editingHistoryWeekDataRef, {
       foodGroups: stateManager.getState().foodGroups,
-      weekStartDay: editingHistoryWeekDataRef.metadata.weekStartDay, // Pass the record's specific weekStartDay
+      weekStartDay: editingHistoryWeekDataRef.metadata.weekStartDay,
     });
 
-    // 5. Refresh history data in stateManager (this will trigger UI update for history view)
+    // Refresh history data in stateManager
     const updatedHistoryData = await dataService.getAllWeekHistory();
     stateManager.dispatch({
       type: stateManager.ACTION_TYPES.SET_HISTORY,
       payload: { history: updatedHistoryData || [] },
     });
-    // The currentHistoryIndex should still point to the edited week,
-    // so uiRenderer.renderHistory() (called via subscription) will show updated data.
 
-    // 6. Update app-level metadata
+    // Update app-level metadata
     stateManager.updateMetadata({
-      historyDirty: true, // Mark history as dirty for potential sync
-      lastModified: dataService.getCurrentTimestamp(), // General app data modification
+      historyDirty: true,
+      lastModified: dataService.getCurrentTimestamp(),
     });
 
     uiRenderer.showToast(
@@ -2686,33 +2632,20 @@ async function saveEditedHistoryDailyDetails_OLD_MOVED() {
       error
     );
     uiRenderer.showToast(`Failed to save changes: ${error.message}`, "error");
-    // Optionally, don't close the modal on error so user can retry or see data.
   }
 }
 
-/**
- * Closes the "Edit History Daily Details" modal and resets its temporary state.
- */
-// closeEditHistoryDailyDetailsModal moved to historyModalManager.js
 function closeEditHistoryDailyDetailsModal_OLD_MOVED() {
-  uiRenderer.closeEditTotalsModal(); // Call the uiRenderer function to hide the modal
+  uiRenderer.closeEditTotalsModal();
 
-  // Reset temporary editing state variables in app.js
+  // Reset temporary editing state variables
   editingHistoryWeekDataRef = null;
   tempEditedDailyBreakdown = {};
   selectedDayInHistoryModal = null;
   historyModalFoodGroups = [];
 
   logger.debug("Closed Edit History Daily Details modal and reset temp state.");
-
-  // Optional: Reset the modal's internal DOM structure if uiRenderer.closeEditTotalsModal doesn't
-  // For example, clear the list element:
-  // const listEl = uiRenderer.domElements.modalElements.editTotalsList;
-  // if (listEl) listEl.innerHTML = "";
-  // However, showEditHistoryModalShell already clears these areas upon opening.
 }
-
-// closeSettingsModal moved to settingsManager.js
 
 // Initialize the application when the DOM is loaded
 document.addEventListener("DOMContentLoaded", initializeApp);

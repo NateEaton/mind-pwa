@@ -910,16 +910,8 @@ function loadState() {
 
     const today = getTodayDateString(); // Uses dataService.getCurrentDate()
 
-    // --- Determine weekStartDay Preference ---
-    // This is a bit tricky because preferences are in IndexedDB and might not be loaded yet.
-    // For initial loadState, we might have to rely on a localStorage cache of this specific preference
-    // or use a hardcoded default and let stateManager/app fully initialize it later.
-    // Let's assume a default for now and stateManager will load the actual preference.
-    // The app should call dataService.getPreference('weekStartDay') once DB is up
-    // and potentially re-evaluate/update currentWeekStartDate if needed.
-    const weekStartDayPrefDefault = "Sunday"; // Hardcoded default for this function's scope
-    // If you have a mechanism to quickly get this preference (e.g., cached in localStorage by settings save), use it.
-    // For example: const weekStartDayPref = localStorage.getItem('mindTrackerWeekStartDayPref') || "Sunday";
+    // Determine weekStartDay preference (default to Sunday for initial load)
+    const weekStartDayPrefDefault = "Sunday";
 
     const currentWeekStart = getWeekStartDate(
       getCurrentDate(),
@@ -934,22 +926,22 @@ function loadState() {
       ? veryOldTimestamp
       : savedState.lastModified || now;
 
-    // --- Metadata Handling ---
+    // Metadata handling
     const loadedMetadata = savedState.metadata || {};
     const defaultMetadataForFreshInstall = {
       schemaVersion: SCHEMA.VERSION,
       deviceId: getDeviceId(),
       isFreshInstall: true,
-      weekStartDay: weekStartDayPrefDefault, // Default for fresh install
-      currentWeekDirty: false, // Legacy compatibility, default to false
+      weekStartDay: weekStartDayPrefDefault,
+      currentWeekDirty: false,
       historyDirty: false,
       dateResetPerformed: false,
       dateResetType: null,
       dateResetTimestamp: 0,
-      dailyTotalsUpdatedAt: 0, // Use 0 for fresh install
+      dailyTotalsUpdatedAt: 0,
       dailyTotalsDirty: false,
       dailyResetTimestamp: 0,
-      weeklyTotalsUpdatedAt: 0, // Use 0 for fresh install
+      weeklyTotalsUpdatedAt: 0,
       weeklyTotalsDirty: false,
       weeklyResetTimestamp: 0,
       previousWeekStartDate: null,
@@ -960,20 +952,20 @@ function loadState() {
     const normalizedMetadata = isFreshInstall
       ? defaultMetadataForFreshInstall
       : {
-          ...defaultMetadataForFreshInstall, // Start with defaults to ensure all fields
-          ...loadedMetadata, // Then overwrite with loaded values
-          isFreshInstall: false, // Not a fresh install if we loaded metadata
-          schemaVersion: SCHEMA.VERSION, // Always use current schema version
-          deviceId: getDeviceId(), // Ensure deviceId is current
-          weekStartDay: loadedMetadata.weekStartDay || weekStartDayPrefDefault, // Ensure present
+          ...defaultMetadataForFreshInstall,
+          ...loadedMetadata,
+          isFreshInstall: false,
+          schemaVersion: SCHEMA.VERSION,
+          deviceId: getDeviceId(),
+          weekStartDay: loadedMetadata.weekStartDay || weekStartDayPrefDefault,
         };
 
-    // --- State Normalization ---
+    // State normalization
     const normalizedState = {
       currentDayDate: savedState.currentDayDate || today,
       currentWeekStartDate: savedState.currentWeekStartDate || currentWeekStart,
       selectedTrackerDate: savedState.selectedTrackerDate || today,
-      dailyCounts: savedState.dailyCounts || {}, // Default to empty map
+      dailyCounts: savedState.dailyCounts || {},
       weeklyCounts: savedState.weeklyCounts || {},
       lastModified: lastModified,
       metadata: normalizedMetadata,
@@ -1003,13 +995,12 @@ function loadState() {
     );
     const veryOldTimestampOnError = new Date("2024-01-01T00:00:00").getTime();
 
-    // This is the critical part that needed full expansion
     const fallbackMetadata = {
       schemaVersion: SCHEMA.VERSION,
       deviceId: getDeviceId(),
-      isFreshInstall: true, // Clearly a fresh/error state
+      isFreshInstall: true,
       weekStartDay: weekStartDayPrefDefaultOnError,
-      currentWeekDirty: false, // Legacy
+      currentWeekDirty: false,
       historyDirty: false,
       dateResetPerformed: false,
       dateResetType: null,
@@ -1023,15 +1014,13 @@ function loadState() {
       previousWeekStartDate: null,
       pendingDateReset: false,
       remoteDateWas: null,
-      // Ensure any other critical metadata fields from your SCHEMA.CURRENT_STATE.metadata
-      // have their default values here.
     };
 
     return {
       currentDayDate: today,
       currentWeekStartDate: currentWeekStartOnError,
       selectedTrackerDate: today,
-      dailyCounts: { [today]: {} }, // Initialize with an empty entry for today
+      dailyCounts: { [today]: {} },
       weeklyCounts: {},
       lastModified: veryOldTimestampOnError,
       metadata: fallbackMetadata,
@@ -1051,17 +1040,15 @@ function saveState(state) {
     const normalizedState = {
       currentDayDate: state.currentDayDate,
       currentWeekStartDate: state.currentWeekStartDate,
-      selectedTrackerDate: state.selectedTrackerDate, // Add this
-      dailyCounts: state.dailyCounts || {}, // Add this (the map)
+      selectedTrackerDate: state.selectedTrackerDate,
+      dailyCounts: state.dailyCounts || {},
       weeklyCounts: state.weeklyCounts || {},
-      lastModified: now, // This represents overall state modification
+      lastModified: now,
       metadata: {
         ...(state.metadata || {}),
         schemaVersion: SCHEMA.VERSION,
         deviceId: getDeviceId(),
-        weekStartDay: state.metadata?.weekStartDay || "Sunday", // Persist weekStartDay
-        // Update metadata timestamps if they reflect actual data changes
-        // dailyTotalsUpdatedAt, weeklyTotalsUpdatedAt should be updated by stateManager actions
+        weekStartDay: state.metadata?.weekStartDay || "Sunday",
       },
     };
 
@@ -1076,7 +1063,7 @@ function saveState(state) {
     logSyncChange("currentState", "update", "current", {
       timestamp: now,
       weekStartDate: state.currentWeekStartDate,
-      selectedDate: state.selectedTrackerDate, // Optionally log more detail
+      selectedDate: state.selectedTrackerDate,
     }).catch((e) => logger.warn("Failed to log current state change:", e));
 
     return true;

@@ -177,6 +177,10 @@ main {
     flex-direction: column;
 }
 
+.main-content {
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+}
+
 .view {
     display: none;
     background-color: var(--card-bg);

@@ -221,7 +221,6 @@ async function handleImportFileSelect(event) {
           successMessage = `Import complete. Week totals updated for current week.`;
           break;
         case "PAST_WEEK":
-          // Use the count directly from the import result
           const importedCount =
             importResult?.importedCount ||
             importedData.appInfo?.historyCount ||

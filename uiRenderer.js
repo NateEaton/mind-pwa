@@ -137,7 +137,7 @@ function initialize(appManager = null) {
     editTotalsList: document.getElementById("edit-totals-list"), // Where food group items go
     editTotalsItemTemplate: document.getElementById(
       "edit-totals-item-template"
-    ), // Template for items in the list
+    ),
     editTotalsCloseBtn: document.getElementById("edit-totals-close-btn"),
     editTotalsCancelBtn: document.getElementById("edit-totals-cancel-btn"),
     editTotalsSaveBtn: document.getElementById("edit-totals-save-btn"),
@@ -383,7 +383,6 @@ function renderDateElements() {
   try {
     const state = stateManager.getState();
 
-    // Use selectedTrackerDate for the Daily Tracker view's main date display
     if (
       domElements.trackerElements.trackerDateEl &&
       state.selectedTrackerDate
@@ -496,7 +495,7 @@ function renderTrackerItems() {
     item.dataset.id = group.id;
 
     const nameElement = item.querySelector(".name");
-    const weeklyBadge = item.querySelector(".weekly-badge"); // This is for the weekly total
+    const weeklyBadge = item.querySelector(".weekly-badge");
     const weeklyBadgeValue = weeklyBadge
       ? weeklyBadge.querySelector(".wk-val")
       : null;
@@ -545,7 +544,6 @@ function renderTrackerItems() {
  * @param {number} count - The current count
  */
 function updateBadgeColor(badge, group, count) {
-  // Remove existing color classes
   badge.classList.remove(
     "badge-primary",
     "badge-secondary",
@@ -723,15 +721,15 @@ function renderHistory(weekIndex) {
   historyContent.innerHTML = "";
   if (editHistoryWeekBtn) editHistoryWeekBtn.disabled = true;
 
-  // Reset nav UI elements (date picker might still be useful but label is gone)
-  // if (historyWeekLabel) historyWeekLabel.textContent = "Select a week"; // REMOVE THIS LINE
+  // Reset navigation UI elements
+
   if (prevWeekBtn) prevWeekBtn.disabled = true;
   if (nextWeekBtn) nextWeekBtn.disabled = true;
   if (historyDatePicker) historyDatePicker.value = "";
 
   if (!state.history || state.history.length === 0) {
     historyContent.innerHTML = "<p>No history data available yet.</p>";
-    mainHistoryTitleEl.textContent = "No History"; // Set title for no history
+    mainHistoryTitleEl.textContent = "No History";
     return;
   }
 
@@ -773,7 +771,7 @@ function renderHistory(weekIndex) {
   if (!weekData) {
     historyContent.innerHTML =
       "<p>Error: Could not load selected week data.</p>";
-    mainHistoryTitleEl.textContent = "Error Loading History"; // Set title for error
+    mainHistoryTitleEl.textContent = "Error Loading History";
     return;
   }
 
@@ -785,7 +783,7 @@ function renderHistory(weekIndex) {
       weekday: "short",
       month: "short",
       day: "numeric",
-      year: "numeric", // Add year for clarity in history
+      year: "numeric",
     }
   )}`;
 
@@ -1047,7 +1045,7 @@ function openModal(title, htmlContent, options = {}) {
   // Handle optional footer with buttons
   const existingFooter = genericModal.querySelector(".modal-actions");
   if (existingFooter) {
-    existingFooter.remove(); // Remove any existing footer
+    existingFooter.remove();
   }
 
   // Add footer if requested
@@ -1222,8 +1220,6 @@ function showEditHistoryModalShell(mainTitle, saveButtonText = "Save Changes") {
   modal.classList.add("modal-open");
 
   logger.info(`Edit History Modal Shell shown with title: ${mainTitle}`);
-  // Note: Focus management can be handled by app.js after content is fully rendered,
-  // or a default focus (e.g., close button) can be set here.
 }
 
 /**

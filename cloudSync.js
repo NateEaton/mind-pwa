@@ -533,7 +533,7 @@ export class CloudSyncManager {
           await this.stateManager.reload(true);
 
           // Ensure weekly totals are consistent after cloud sync merge
-          // This must happen immediately after reload to prevent UI race condition
+
           if (typeof this.stateManager.recalculateWeeklyTotals === "function") {
             this.stateManager.recalculateWeeklyTotals();
             logger.info("Recalculated weekly totals after cloud sync merge");
@@ -761,7 +761,7 @@ export class CloudSyncManager {
       }
     }
 
-    // *** SPECIAL WEEKLY RESET HANDLING ***
+    // Special weekly reset handling
     if (weeklyResetPerformed) {
       logger.info("WEEKLY RESET detected - this is a new week");
 

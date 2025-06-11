@@ -37,7 +37,7 @@ export const ACTION_TYPES = {
 
   // Food counts
   UPDATE_DAILY_COUNT: "UPDATE_DAILY_COUNT",
-  // UPDATE_WEEKLY_COUNT: "UPDATE_WEEKLY_COUNT", // This might become less direct, or just for edits
+  // UPDATE_WEEKLY_COUNT: "UPDATE_WEEKLY_COUNT",
 
   // Date changes
   SET_CURRENT_DAY: "SET_CURRENT_DAY",
@@ -234,13 +234,9 @@ function reducer(state, action) {
         },
       };
 
-    // UPDATE_WEEKLY_COUNT is being re-evaluated. If used for history edits,
-    // it wouldn't directly modify `currentState.weeklyCounts`.
-    // For now, we can comment it out or leave it if there's another use case.
-    // If it were to update currentState.weeklyCounts directly, it would break the
-    // dailyCounts -> weeklyCounts derivation.
+    // UPDATE_WEEKLY_COUNT is deprecated - weekly counts are now derived from daily counts
     /*
-    case ACTION_TYPES.UPDATE_WEEKLY_COUNT: // This action needs careful consideration now
+    case ACTION_TYPES.UPDATE_WEEKLY_COUNT:
       return {
         ...state,
         weeklyCounts: {
@@ -264,9 +260,7 @@ function reducer(state, action) {
       };
 
     case ACTION_TYPES.SET_CURRENT_WEEK:
-      // This action is usually part of a larger flow like weekly reset.
-      // The calling logic (checkDateAndReset) should handle resetting daily/weekly counts
-      // and setting currentDayDate/selectedTrackerDate appropriately.
+      // Usually part of a larger flow like weekly reset
       return {
         ...state,
         currentWeekStartDate: action.payload.date,
@@ -286,7 +280,7 @@ function reducer(state, action) {
 
     case ACTION_TYPES.RESET_DAILY_COUNTS:
       // Resets counts for a specific date and updates weekly totals accordingly.
-      const { dateToReset } = action.payload; // No resetTimestamp needed in payload for reducer
+      const { dateToReset } = action.payload;
       const dailyCountsToClear = state.dailyCounts[dateToReset] || {};
       let updatedWeeklyCountsAfterDailyReset = { ...state.weeklyCounts };
 
@@ -310,16 +304,13 @@ function reducer(state, action) {
       };
 
     case ACTION_TYPES.RESET_WEEKLY_COUNTS:
-      // Resets all daily counts for the current week to just today's empty entry,
-      // and resets all weekly counts.
-      // `currentDayDate` should be up-to-date before this action is called.
+      // Resets all daily counts for the current week and all weekly counts
       const currentDayForWeeklyReset =
         state.currentDayDate || dataService.getTodayDateString();
       return {
         ...state,
         dailyCounts: { [currentDayForWeeklyReset]: {} },
         weeklyCounts: {},
-        // selectedTrackerDate should also be set to currentDayForWeeklyReset by calling logic (checkDateAndReset)
       };
 
     case ACTION_TYPES.RECALCULATE_WEEKLY_TOTALS:
@@ -338,9 +329,7 @@ function reducer(state, action) {
       for (let i = 0; i < 7; i++) {
         const dayToProcess = new Date(startDateForRecalc);
         dayToProcess.setDate(startDateForRecalc.getDate() + i);
-        // Use a robust way to get YYYY-MM-DD string, preferably from dataService if it has a utility
-        // that doesn't require passing the weekStartDay preference for this specific formatting.
-        // For now, a simple local formatter for YYYY-MM-DD:
+        // Format date as YYYY-MM-DD
         const year = dayToProcess.getFullYear();
         const month = String(dayToProcess.getMonth() + 1).padStart(2, "0");
         const day = String(dayToProcess.getDate()).padStart(2, "0");
@@ -364,7 +353,7 @@ function reducer(state, action) {
     case ACTION_TYPES.SET_HISTORY:
       return {
         ...state,
-        history: action.payload.history || [], // Ensure history is always an array
+        history: action.payload.history || [],
       };
 
     case ACTION_TYPES.SET_HISTORY_INDEX:
@@ -373,11 +362,9 @@ function reducer(state, action) {
         currentHistoryIndex: action.payload.index,
       };
 
-    case ACTION_TYPES.IMPORT_STATE: // Placeholder for Phase 2
-      // This will eventually replace the entire state, but needs careful handling
-      // For Phase 1, this action effectively does nothing or is disabled.
+    case ACTION_TYPES.IMPORT_STATE:
       logger.warn("IMPORT_STATE action called but is deferred to Phase 2.");
-      return state; // No change in Phase 1
+      return state;
 
     case ACTION_TYPES.UPDATE_METADATA:
       return {
@@ -398,19 +385,15 @@ function reducer(state, action) {
  * Save current state to persistent storage
  */
 function saveStateToStorage() {
-  // Include metadata in the state object being saved
   const stateToSave = {
     currentDayDate: _state.currentDayDate,
     currentWeekStartDate: _state.currentWeekStartDate,
     dailyCounts: _state.dailyCounts,
     weeklyCounts: _state.weeklyCounts,
-    metadata: _state.metadata, // <--- ADD THIS LINE
+    metadata: _state.metadata,
   };
 
-  // Optionally add lastModified here if you want stateManager to control it consistently
-  // stateToSave.lastModified = _state.lastModified; // Ensure lastModified is saved
-
-  logger.debug("StateManager saving state to storage:", stateToSave); // Add logging to verify
+  logger.debug("StateManager saving state to storage:", stateToSave);
   dataService.saveState(stateToSave);
 }
 
@@ -516,7 +499,7 @@ async function initialize(foodGroups) {
 
   // 6. Recalculate weekly totals based on the (potentially) updated daily counts and week structure
   logger.debug("StateManager Initialize: Calling recalculateWeeklyTotals()...");
-  recalculateWeeklyTotals(); // This uses the state modified by checkDateAndReset
+  recalculateWeeklyTotals();
   logger.debug("StateManager Initialize: recalculateWeeklyTotals() complete.");
 
   // 7. CRITICAL FINAL STEP FOR FRESH INSTALL:
@@ -530,7 +513,7 @@ async function initialize(foodGroups) {
     const sentinelTimestamp = new Date("2025-01-01T00:00:00Z").getTime();
 
     // Dispatch an action to update metadata with these sentinel values.
-    // This ensures the change goes through the reducer and notifies subscribers,
+
     // and importantly, triggers saveStateToStorage().
     dispatch({
       type: ACTION_TYPES.UPDATE_METADATA,
@@ -749,7 +732,7 @@ async function checkDateAndReset() {
     weekStartPref: weekStartDayPref,
   });
 
-  // --- Weekly Rollover Check ---
+  // Weekly rollover check
   if (currentState.currentWeekStartDate !== systemCurrentWeekStartStr) {
     logger.info(
       `Weekly rollover detected: from ${currentState.currentWeekStartDate} to ${systemCurrentWeekStartStr}`
@@ -760,7 +743,7 @@ async function checkDateAndReset() {
 
     try {
       // Before archiving, ensure its weeklyCounts are accurate based on its dailyCounts
-      // This is a critical integrity step for the outgoing week.
+
       const accurateWeeklyTotalsForArchive = {};
       const startDateForArchive = new Date(
         completedWeekState.currentWeekStartDate + "T00:00:00"
@@ -793,7 +776,6 @@ async function checkDateAndReset() {
         payload: { date: systemCurrentWeekStartStr },
       });
       dispatch({
-        // This will also set selectedTrackerDate
         type: ACTION_TYPES.SET_CURRENT_DAY,
         payload: { date: systemTodayStr },
       });
@@ -831,13 +813,12 @@ async function checkDateAndReset() {
       return false; // Indicate no state change for current week because of error
     }
   }
-  // --- Daily Rollover Check (only if no weekly rollover occurred) ---
+  // Daily rollover check (only if no weekly rollover occurred)
   else if (currentState.currentDayDate !== systemTodayStr) {
     logger.info(
       `Daily rollover detected: from ${currentState.currentDayDate} to ${systemTodayStr}`
     );
     dispatch({
-      // This action also updates selectedTrackerDate
       type: ACTION_TYPES.SET_CURRENT_DAY,
       payload: { date: systemTodayStr },
     });
@@ -859,8 +840,7 @@ async function checkDateAndReset() {
     });
     logger.info(`Daily reset complete. Current day set to: ${systemTodayStr}`);
   }
-  // --- Ensure selectedTrackerDate is currentDayDate if no other reset happened ---
-  // This covers scenarios where app is opened, no date change, but selectedTrackerDate might be off.
+  // Ensure selectedTrackerDate is currentDayDate if no other reset happened
   else if (
     currentState.selectedTrackerDate !== currentState.currentDayDate &&
     !stateChanged
@@ -872,7 +852,7 @@ async function checkDateAndReset() {
       type: ACTION_TYPES.SET_SELECTED_TRACKER_DATE,
       payload: { date: currentState.currentDayDate },
     });
-    // This is a minor UI alignment, not a "reset", so stateChanged might remain false
+
     // unless this is the only change. For simplicity, let's not mark stateChanged=true for this.
   }
 
@@ -953,7 +933,7 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
     );
   }
 
-  // --- Filter dailyCounts to only include days within the archived week ---
+  // Filter dailyCounts to only include days within the archived week
   const filteredDailyBreakdown = {};
   const weekStartDateObj = new Date(
     stateToArchive.currentWeekStartDate + "T00:00:00"
@@ -963,7 +943,7 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
     const dayInArchivedWeekObj = new Date(weekStartDateObj);
     dayInArchivedWeekObj.setDate(weekStartDateObj.getDate() + i);
 
-    const dayStr = dateUtils.formatDateToYYYYMMDD(dayInArchivedWeekObj); // Use the imported utility
+    const dayStr = dateUtils.formatDateToYYYYMMDD(dayInArchivedWeekObj);
 
     if (dayStr === "") {
       logger.error(
@@ -987,12 +967,11 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
       filteredDailyBreakdown[dayStr] = {};
     }
   }
-  // --- End of filtering ---
 
   const weekDataForHistory = {
     weekStartDate: stateToArchive.currentWeekStartDate,
     dailyBreakdown: filteredDailyBreakdown, // <<< USE THE FILTERED OBJECT HERE
-    totals: { ...stateToArchive.weeklyCounts }, // This should be correct now due to fixes in checkDateAndReset
+    totals: { ...stateToArchive.weeklyCounts },
   };
 
   logger.info(
@@ -1028,7 +1007,6 @@ async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
     });
 
     updateMetadata({
-      // This function is defined and exported in your stateManager.js
       historyDirty: true,
       lastModified: timestamp,
     });
