@@ -28,6 +28,14 @@ const urlsToCache = [
   "/serviceWorker.js",
   "/stateManager.js",
   "/uiRenderer.js",
+  "/eventHandlers.js",
+  "/devTools.js",
+  "/logger.js",
+  "/dateUtils.js",
+  "/historyModalManager.js",
+  "/importExportManager.js",
+  "/settingsManager.js",
+  "/setupWizard.js",
   "/cloudProviders/googleDriveProvider.js",
   "/cloudProviders/dropboxProvider.js",
   "/manifest.json",
@@ -74,6 +82,16 @@ self.addEventListener("activate", (event) => {
 
 // Fetch event: Serve from cache first, then network
 self.addEventListener("fetch", (event) => {
+  // Skip caching for requests with special headers (like Range requests)
+  const hasRangeHeader = event.request.headers.get("Range");
+  const isDevToolsRequest = event.request.headers.get("cache") === "no-cache";
+
+  // For requests we shouldn't cache, just pass through to network
+  if (hasRangeHeader || isDevToolsRequest || event.request.method !== "GET") {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       // Cache hit - return response
