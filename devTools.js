@@ -353,6 +353,15 @@ class DevTools {
       "cloudProviders/dropboxProvider.js",
       "cloudProviders/config.js",
       "config.js",
+      "cloudSync/mergeStrategies/mergeCoordinator.js",
+      "cloudSync/mergeStrategies/archiveMergeStrategy.js",
+      "cloudSync/mergeStrategies/currentWeekMergeStrategy.js",
+      "cloudSync/mergeStrategies/historyMergeStrategy.js",
+      "cloudSync/utils/changeDetectionUtils.js",
+      "cloudSync/utils/validationUtils.js",
+      "cloudSync/utils/timestampUtils.js",
+      "cloudSync/services/changeDetectionService.js",
+      "cloudSync/services/fileMetadataManager.js",
     ];
 
     const moduleInfo = [];

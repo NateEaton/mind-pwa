@@ -19,6 +19,14 @@
 import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
 import DropboxProvider from "./cloudProviders/dropboxProvider.js";
 import logger from "./logger.js";
+// Phase 1: Import extracted utilities
+import { TimestampUtils } from "./cloudSync/utils/timestampUtils.js";
+import { ValidationUtils } from "./cloudSync/utils/validationUtils.js";
+// Phase 3: Import change detection service
+import { ChangeDetectionService } from "./cloudSync/services/changeDetectionService.js";
+// Phase 2: Import merge strategies coordinator
+import { MergeCoordinator } from "./cloudSync/mergeStrategies/mergeCoordinator.js";
+import { FileMetadataManager } from "./cloudSync/services/fileMetadataManager.js";
 
 export class CloudSyncManager {
   constructor(
@@ -37,6 +45,17 @@ export class CloudSyncManager {
     this.isAuthenticated = false;
     this.lastSyncTimestamp = 0;
     this.syncInProgress = false;
+    this.lastHistorySyncTimestamp = null;
+    this.fileMetadataManager = new FileMetadataManager(dataService);
+
+    // Phase 1: Add utility instances for easy access
+    this.timestampUtils = TimestampUtils;
+    this.validationUtils = ValidationUtils;
+    // Phase 3: Initialize change detection service
+    this.changeDetection = new ChangeDetectionService({ logger });
+
+    // Phase 2: Initialize merge coordinator
+    this.mergeCoordinator = new MergeCoordinator(dataService, stateManager);
   }
 
   async initialize(providerName = "gdrive") {
@@ -81,51 +100,21 @@ export class CloudSyncManager {
         JSON.stringify(metadata, null, 2)
       );
 
-      // Check dirty flags - use both specific flags and the legacy flag
-      const dailyTotalsDirty = metadata.dailyTotalsDirty || false;
-      const weeklyTotalsDirty = metadata.weeklyTotalsDirty || false;
-      const currentWeekDirty =
-        metadata.currentWeekDirty || dailyTotalsDirty || weeklyTotalsDirty;
+      // Use change detection service to analyze flags and determine sync needs
+      const flags = this.changeDetection.analyzeDirtyFlags(metadata);
+      const syncNeeds = this.changeDetection.determineSyncNeeds(
+        flags,
+        null,
+        true
+      );
 
-      const historyDirty = metadata.historyDirty || false;
+      // Log the sync decision
+      this.changeDetection.logSyncDecision(syncNeeds, metadata);
 
-      // Check if reset was performed
-      const dateResetPerformed = metadata.dateResetPerformed || false;
-      const dateResetType = metadata.dateResetType || null;
-
-      // Always check for cloud changes regardless of dirty flags
-      const alwaysCheckCloudChanges = true;
-
-      // Sync current week if:
-      // 1. Any count is dirty
-      // 2. Date reset occurred
-      // 3. We're checking for cloud changes
-      const syncCurrent =
-        currentWeekDirty || dateResetPerformed || alwaysCheckCloudChanges;
-
-      // Sync history if:
-      // 1. It's dirty
-      // 2. Weekly reset occurred
-      // 3. We're checking for cloud changes
-      const syncHistory =
-        historyDirty ||
-        (dateResetPerformed && dateResetType === "WEEKLY") ||
-        alwaysCheckCloudChanges;
-
-      logger.info("Sync determination:", {
-        syncCurrent,
-        syncHistory,
-        dailyTotalsDirty,
-        weeklyTotalsDirty,
-        currentWeekDirty,
-        historyDirty,
-        dateResetPerformed,
-        dateResetType,
-        alwaysCheckCloudChanges,
-        metadata,
-      });
-
-      return { syncCurrent, syncHistory };
+      return {
+        syncCurrent: syncNeeds.syncCurrent,
+        syncHistory: syncNeeds.syncHistory,
+      };
     } catch (error) {
       logger.error("Error determining what to sync:", error);
       // Default to syncing everything if we can't determine
@@ -363,7 +352,8 @@ export class CloudSyncManager {
         if (this.pendingArchiveMerge) {
           logger.info("Executing pending archive merge after sync");
           try {
-            await this.executePendingArchiveMerge();
+            // Phase 2: Use merge coordinator for archive merging
+            await this.mergeCoordinator.executePendingArchiveMerge();
           } catch (archiveError) {
             logger.warn(
               "Error executing archive merge, but continuing sync:",
@@ -517,7 +507,11 @@ export class CloudSyncManager {
 
       if (remoteData && this.validateData(remoteData, "current")) {
         logger.info("Remote data found, merging with local data");
-        dataToUpload = this.mergeCurrentWeekData(localData, remoteData);
+        // Phase 2: Use merge coordinator for current week merging
+        dataToUpload = this.mergeCoordinator.mergeCurrentWeekData(
+          localData,
+          remoteData
+        );
 
         // Update local store with merged data
         logger.info("Updating local store with merged data");
@@ -635,8 +629,25 @@ export class CloudSyncManager {
    * @param {Object} localData - The local state data
    * @param {Object} remoteData - The remote state data from cloud
    * @returns {Object} The merged data
+   * @deprecated Phase 2: Use mergeCoordinator.mergeCurrentWeekData() instead
    */
   mergeCurrentWeekData(localData, remoteData) {
+    // Phase 2: Delegate to merge coordinator (with fallback for compatibility)
+    try {
+      return this.mergeCoordinator.mergeCurrentWeekData(localData, remoteData);
+    } catch (error) {
+      logger.warn("Phase 2 merge coordinator failed, using fallback:", error);
+      return this.legacyMergeCurrentWeekData(localData, remoteData);
+    }
+  }
+
+  /**
+   * Legacy merge implementation (Phase 2: kept as fallback)
+   * @param {Object} localData - The local state data
+   * @param {Object} remoteData - The remote state data from cloud
+   * @returns {Object} The merged data
+   */
+  legacyMergeCurrentWeekData(localData, remoteData) {
     logger.info("Merging current week data:");
     logger.debug("LOCAL data:", {
       dayDate: localData.currentDayDate,
@@ -949,8 +960,23 @@ export class CloudSyncManager {
   /**
    * Execute a pending archive merge operation
    * @returns {Promise<boolean>} Success status
+   * @deprecated Phase 2: Use mergeCoordinator.executePendingArchiveMerge() instead
    */
   async executePendingArchiveMerge() {
+    // Phase 2: Delegate to merge coordinator (with fallback for compatibility)
+    try {
+      return await this.mergeCoordinator.executePendingArchiveMerge();
+    } catch (error) {
+      logger.warn("Phase 2 merge coordinator failed, using fallback:", error);
+      return await this.legacyExecutePendingArchiveMerge();
+    }
+  }
+
+  /**
+   * Legacy archive merge implementation (Phase 2: kept as fallback)
+   * @returns {Promise<boolean>} Success status
+   */
+  async legacyExecutePendingArchiveMerge() {
     if (!this.pendingArchiveMerge) {
       return false;
     }
@@ -1026,13 +1052,20 @@ export class CloudSyncManager {
   }
 
   getMostRecentDate(date1, date2) {
+    // Phase 1: Use extracted utility (keeping original as fallback)
     try {
-      const d1 = new Date(date1);
-      const d2 = new Date(date2);
-      return d1 > d2 ? date1 : date2;
-    } catch (e) {
-      // If dates are invalid, return the first one
-      return date1;
+      return this.timestampUtils.getMostRecentDate(date1, date2);
+    } catch (error) {
+      logger.warn("Error in utility method, using fallback:", error);
+      // Original implementation as fallback
+      try {
+        const d1 = new Date(date1);
+        const d2 = new Date(date2);
+        return d1 > d2 ? date1 : date2;
+      } catch (e) {
+        // If dates are invalid, return the first one
+        return date1;
+      }
     }
   }
 
@@ -1548,7 +1581,33 @@ export class CloudSyncManager {
     }
   }
 
+  /**
+   * Merge history data from local and remote sources
+   * @param {Array} localHistory - Local history array
+   * @param {Array} remoteHistory - Remote history array
+   * @returns {Object} Merge result with data and change flag
+   * @deprecated Phase 2: Use mergeCoordinator.mergeHistoryData() instead
+   */
   mergeHistoryData(localHistory, remoteHistory) {
+    // Phase 2: Delegate to merge coordinator (with fallback for compatibility)
+    try {
+      return this.mergeCoordinator.mergeHistoryData(
+        localHistory,
+        remoteHistory
+      );
+    } catch (error) {
+      logger.warn("Phase 2 merge coordinator failed, using fallback:", error);
+      return this.legacyMergeHistoryData(localHistory, remoteHistory);
+    }
+  }
+
+  /**
+   * Legacy history merge implementation (Phase 2: kept as fallback)
+   * @param {Array} localHistory - Local history array
+   * @param {Array} remoteHistory - Remote history array
+   * @returns {Object} Merge result with data and change flag
+   */
+  legacyMergeHistoryData(localHistory, remoteHistory) {
     logger.info("Starting history merge process");
     logger.info(`Local history: ${localHistory.length} items`);
     logger.info(`Remote history: ${remoteHistory.length} items`);
@@ -1778,39 +1837,48 @@ export class CloudSyncManager {
 
   // Add this to CloudSyncManager
   validateData(data, type = "current") {
-    if (!data || typeof data !== "object") {
-      logger.error(`Invalid ${type} data:`, data);
-      return false;
-    }
-
-    if (type === "current") {
-      // Must have these fields for current week data
-      const requiredFields = [
-        "currentDayDate",
-        "currentWeekStartDate",
-        "dailyCounts",
-        "weeklyCounts",
-      ];
-      const missingFields = requiredFields.filter((field) => !(field in data));
-
-      if (missingFields.length > 0) {
-        logger.error(
-          `Current week data missing required fields:`,
-          missingFields
-        );
+    // Phase 1: Use extracted utility (keeping original as fallback)
+    try {
+      return this.validationUtils.validateSyncData(data, type);
+    } catch (error) {
+      logger.warn("Error in utility method, using fallback:", error);
+      // Original implementation as fallback
+      if (!data || typeof data !== "object") {
+        logger.error(`Invalid ${type} data:`, data);
         return false;
       }
 
-      // Ensure lastModified is present
-      if (!data.lastModified) {
-        logger.warn(
-          "Current week data missing lastModified timestamp, adding one"
+      if (type === "current") {
+        // Must have these fields for current week data
+        const requiredFields = [
+          "currentDayDate",
+          "currentWeekStartDate",
+          "dailyCounts",
+          "weeklyCounts",
+        ];
+        const missingFields = requiredFields.filter(
+          (field) => !(field in data)
         );
-        data.lastModified = Date.now() - 10000; // Slightly older than "now"
-      }
-    }
 
-    return true;
+        if (missingFields.length > 0) {
+          logger.error(
+            `Current week data missing required fields:`,
+            missingFields
+          );
+          return false;
+        }
+
+        // Ensure lastModified is present
+        if (!data.lastModified) {
+          logger.warn(
+            "Current week data missing lastModified timestamp, adding one"
+          );
+          data.lastModified = Date.now() - 10000; // Slightly older than "now"
+        }
+      }
+
+      return true;
+    }
   }
 
   /**
@@ -1898,67 +1966,11 @@ export class CloudSyncManager {
    * @returns {Promise<boolean>} True if file has changed, false if unchanged
    */
   async checkIfFileChanged(fileName, fileId) {
-    try {
-      // Skip check if no provider or not authenticated
-      if (!this.provider || !this.isAuthenticated) {
-        return true; // Assume changed if we can't check
-      }
-
-      // Get file info from the cloud
-      const fileInfo = await this.provider.getFileMetadata(fileId);
-
-      // If file doesn't exist or we couldn't get metadata, assume changed
-      if (!fileInfo) {
-        logger.info(`File ${fileName} not found or metadata unavailable`);
-        return true;
-      }
-
-      // Get locally stored metadata
-      const storedMetadata = await this.getStoredFileMetadata(fileName);
-
-      if (!storedMetadata) {
-        // No stored metadata, assume file has changed
-        logger.info(`No stored metadata for ${fileName}, assuming changed`);
-        return true;
-      }
-
-      let hasChanged = false;
-      let revisionInfo = "";
-
-      // Check based on provider type
-      if (this.provider.constructor.name.includes("Dropbox")) {
-        // Dropbox uses rev property
-        hasChanged = fileInfo.rev !== storedMetadata.rev;
-        revisionInfo = `rev ${fileInfo.rev} vs stored ${storedMetadata.rev}`;
-      } else {
-        // Google Drive - try different ways to detect changes in priority order
-        if (fileInfo.headRevisionId && storedMetadata.headRevisionId) {
-          // Best - compare head revision IDs
-          hasChanged =
-            fileInfo.headRevisionId !== storedMetadata.headRevisionId;
-          revisionInfo = `headRevisionId ${fileInfo.headRevisionId} vs stored ${storedMetadata.headRevisionId}`;
-        } else if (fileInfo.version && storedMetadata.version) {
-          // Next best - compare version numbers
-          hasChanged = fileInfo.version !== storedMetadata.version;
-          revisionInfo = `version ${fileInfo.version} vs stored ${storedMetadata.version}`;
-        } else if (fileInfo.md5Checksum && storedMetadata.md5Checksum) {
-          // Fallback - compare content checksums
-          hasChanged = fileInfo.md5Checksum !== storedMetadata.md5Checksum;
-          revisionInfo = `md5Checksum ${fileInfo.md5Checksum} vs stored ${storedMetadata.md5Checksum}`;
-        } else {
-          // If no reliable indicators, assume changed
-          hasChanged = true;
-          revisionInfo = "no reliable revision indicators available";
-        }
-      }
-
-      logger.debug(`File ${fileName}: ${revisionInfo}, changed: ${hasChanged}`);
-      return hasChanged;
-    } catch (error) {
-      logger.warn(`Error checking if file ${fileName} changed:`, error);
-      // If error occurs, assume file has changed to be safe
-      return true;
-    }
+    return this.fileMetadataManager.checkIfFileChanged(
+      fileName,
+      fileId,
+      this.provider
+    );
   }
 
   /**
@@ -1968,55 +1980,7 @@ export class CloudSyncManager {
    * @returns {Promise<void>}
    */
   async storeFileMetadata(fileName, fileInfo) {
-    try {
-      if (!fileInfo) return;
-
-      // Log the full fileInfo to debug
-      logger.info(`Full fileInfo for ${fileName}:`, fileInfo);
-
-      const metadata = {
-        fileName,
-        lastChecked: Date.now(),
-      };
-
-      // Store provider-specific revision info
-      if (this.provider.constructor.name.includes("Dropbox")) {
-        // Dropbox uses rev
-        const rev =
-          fileInfo.rev ||
-          fileInfo.result?.rev ||
-          (fileInfo[".tag"] === "file" && fileInfo.rev);
-
-        metadata.rev = rev;
-        logger.info(`Storing Dropbox rev for ${fileName}: ${metadata.rev}`);
-      } else {
-        // For Google Drive - store all available revision indicators
-        metadata.headRevisionId =
-          fileInfo.headRevisionId || fileInfo.result?.headRevisionId;
-        metadata.version = fileInfo.version || fileInfo.result?.version;
-        metadata.md5Checksum =
-          fileInfo.md5Checksum || fileInfo.result?.md5Checksum;
-
-        logger.info(
-          `Storing Google Drive headRevisionId for ${fileName}: ${metadata.headRevisionId}`
-        );
-        logger.info(
-          `Storing Google Drive version for ${fileName}: ${metadata.version}`
-        );
-        logger.info(
-          `Storing Google Drive md5Checksum for ${fileName}: ${metadata.md5Checksum}`
-        );
-      }
-
-      // Save in preferences
-      await this.dataService.savePreference(
-        `file_metadata_${fileName}`,
-        metadata
-      );
-      logger.info(`Stored metadata for ${fileName}:`, metadata);
-    } catch (error) {
-      logger.warn(`Error storing file metadata for ${fileName}:`, error);
-    }
+    return this.fileMetadataManager.storeFileMetadata(fileName, fileInfo);
   }
 
   /**
@@ -2025,7 +1989,7 @@ export class CloudSyncManager {
    * @returns {Promise<Object|null>} The stored metadata or null
    */
   async getStoredFileMetadata(fileName) {
-    return this.dataService.getPreference(`file_metadata_${fileName}`, null);
+    return this.fileMetadataManager.getStoredFileMetadata(fileName);
   }
 }
 

@@ -15,3 +15,10 @@ archive/*
 @eaDir/*
 screenshots/@eaDir/*
 cloudProviders/@eaDir/*
+cloudSync/@eaDir/*
+cloudSync/tests/*
+cloudSync/*.md
+cloudSync/utils/@eaDir/*
+cloudSync/tests/@eaDir/*
+cloudSync/mergeStrategies/@eaDir/*
+cloudSync/services/@eaDir/*
