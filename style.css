@@ -2252,12 +2252,11 @@ h3:first-child {
 .sync-actions-row {
     display: flex;
     gap: var(--spacing-sm);
-    /* Reduced from --spacing-md */
     align-items: center;
     flex-wrap: wrap;
 }
 
-.sync-actions-row .small-btn {
+.small-btn {
     background-color: var(--secondary-color);
     color: white;
     border: none;
@@ -2270,12 +2269,16 @@ h3:first-child {
     white-space: nowrap;
 }
 
-.sync-actions-row .small-btn:hover:not(:disabled) {
+.small-btn:hover:not(:disabled) {
     background-color: var(--secondary-dark);
 }
 
-.sync-actions-row .small-btn:disabled {
+.small-btn:disabled {
     background-color: #ccc;
     color: #888;
     cursor: not-allowed;
+}
+
+.sync-actions-row .small-btn {
+    /* Keep any specific overrides for sync actions if needed */
 }

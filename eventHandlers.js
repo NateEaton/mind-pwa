@@ -488,7 +488,7 @@ class EventHandlers {
   }
 
   /**
-   * Update the development information content including device info and module listing
+   * Update the development information content including device info
    */
   async updateDevInfoContent() {
     const devInfoContent = document.getElementById("dev-info-content");
@@ -505,12 +505,8 @@ class EventHandlers {
         infoHtml += `<div>${key}: <span>${value}</span></div>`;
       }
 
-      // Get module information
-      const moduleInfo = await this.devTools.getModuleInformation();
-      const moduleHtml = this.devTools.generateModuleInfoHtml(moduleInfo);
-
-      // Combine device and module info
-      devInfoContent.innerHTML = infoHtml + moduleHtml;
+      // Update content with device info
+      devInfoContent.innerHTML = infoHtml;
     } catch (error) {
       logger.error("Error updating dev info content:", error);
       devInfoContent.innerHTML = "Error loading development information.";

@@ -772,11 +772,15 @@ async function completeAppInitialization(fromWizard = false) {
 
           // Configure auto-sync
           if (autoSyncInterval > 0) {
-            appManager.getCloudSync().startAutoSync(autoSyncInterval);
+            appManager.getCloudSync().enableAutoSync(autoSyncInterval);
             logger.info(
               `Auto-sync configured for every ${autoSyncInterval} minutes`
             );
           }
+
+          // Trigger immediate sync after setup
+          logger.info("Triggering initial sync after setup completion");
+          await syncData(true, false); // isInitialSync=true, isManualSync=false
 
           syncInitialized = true;
           logger.info(
@@ -928,7 +932,7 @@ async function initializeCloudSync() {
 
     // Configure auto-sync
     if (autoSyncInterval > 0) {
-      appManager.getCloudSync().startAutoSync(autoSyncInterval);
+      appManager.getCloudSync().enableAutoSync(autoSyncInterval);
       logger.info(`Auto-sync configured for every ${autoSyncInterval} minutes`);
     }
 

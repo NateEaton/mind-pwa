@@ -264,6 +264,20 @@ async function processImport(importedData, dateRelationship) {
   try {
     let importResult = { success: false };
 
+    // Get current sync settings before import
+    const currentSyncEnabled = await dataService.getPreference(
+      "cloudSyncEnabled",
+      false
+    );
+    const currentSyncProvider = await dataService.getPreference(
+      "cloudSyncProvider",
+      "gdrive"
+    );
+    const currentSyncWifiOnly = await dataService.getPreference(
+      "syncWifiOnly",
+      false
+    );
+
     if (dateRelationship === "PAST_WEEK") {
       const currentState = stateManager.getState();
       const currentDailyCounts = { ...currentState.dailyCounts };
@@ -301,7 +315,12 @@ async function processImport(importedData, dateRelationship) {
           },
         },
         history: combinedHistory,
-        preferences: importedData.preferences || {},
+        preferences: {
+          ...importedData.preferences,
+          cloudSyncEnabled: currentSyncEnabled,
+          cloudSyncProvider: currentSyncProvider,
+          syncWifiOnly: currentSyncWifiOnly,
+        },
       };
 
       await dataService.importData(historyOnly);
@@ -365,7 +384,12 @@ async function processImport(importedData, dateRelationship) {
           },
         },
         history: importedData.history,
-        preferences: importedData.preferences || {},
+        preferences: {
+          ...importedData.preferences,
+          cloudSyncEnabled: currentSyncEnabled,
+          cloudSyncProvider: currentSyncProvider,
+          syncWifiOnly: currentSyncWifiOnly,
+        },
       };
 
       await dataService.importData(mergedImport);
@@ -385,6 +409,14 @@ async function processImport(importedData, dateRelationship) {
       if (importedData.history && importedData.history.length > 0) {
         importedData.currentState.metadata.historyDirty = true;
       }
+
+      // Preserve sync settings
+      importedData.preferences = {
+        ...importedData.preferences,
+        cloudSyncEnabled: currentSyncEnabled,
+        cloudSyncProvider: currentSyncProvider,
+        syncWifiOnly: currentSyncWifiOnly,
+      };
 
       await dataService.importData(importedData);
       importResult = { success: true };

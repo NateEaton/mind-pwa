@@ -1045,10 +1045,26 @@ function saveState(state) {
       weeklyCounts: state.weeklyCounts || {},
       lastModified: now,
       metadata: {
-        ...(state.metadata || {}),
+        ...(state.metadata || {}), // Preserve all existing metadata fields
         schemaVersion: SCHEMA.VERSION,
         deviceId: getDeviceId(),
         weekStartDay: state.metadata?.weekStartDay || "Sunday",
+        // Ensure these fields are preserved
+        currentWeekDirty: state.metadata?.currentWeekDirty || false,
+        historyDirty: state.metadata?.historyDirty || false,
+        dateResetPerformed: state.metadata?.dateResetPerformed || false,
+        dateResetType: state.metadata?.dateResetType,
+        dateResetTimestamp: state.metadata?.dateResetTimestamp,
+        dailyTotalsUpdatedAt: state.metadata?.dailyTotalsUpdatedAt,
+        dailyTotalsDirty: state.metadata?.dailyTotalsDirty || false,
+        dailyResetTimestamp: state.metadata?.dailyResetTimestamp,
+        weeklyTotalsUpdatedAt: state.metadata?.weeklyTotalsUpdatedAt,
+        weeklyTotalsDirty: state.metadata?.weeklyTotalsDirty || false,
+        weeklyResetTimestamp: state.metadata?.weeklyResetTimestamp,
+        previousWeekStartDate: state.metadata?.previousWeekStartDate,
+        pendingDateReset: state.metadata?.pendingDateReset || false,
+        remoteDateWas: state.metadata?.remoteDateWas,
+        isFreshInstall: state.metadata?.isFreshInstall || false,
       },
     };
 
@@ -1117,58 +1133,37 @@ async function exportData() {
  */
 async function importData(importedData) {
   try {
-    // Basic validation of the imported structure
-    if (
-      typeof importedData !== "object" ||
-      importedData === null ||
-      !importedData.currentState ||
-      !Array.isArray(importedData.history)
-    ) {
-      throw new Error(
-        "Invalid data structure. Required: 'currentState' object and 'history' array."
-      );
+    let importCount = 0;
+
+    // Import preferences first
+    if (importedData.preferences) {
+      for (const [key, value] of Object.entries(importedData.preferences)) {
+        try {
+          await savePreference(key, value);
+        } catch (prefError) {
+          logger.error(`Error importing preference '${key}':`, prefError);
+        }
+      }
+      logger.info("Preferences imported successfully");
     }
 
-    // Validate schema version if present
-    const importedVersion = importedData.appInfo?.schemaVersion || 0;
-    if (importedVersion > SCHEMA.VERSION) {
-      logger.warn(
-        `Importing data from newer schema version (${importedVersion} > ${SCHEMA.VERSION}). Some features may not work correctly.`
-      );
-    }
-
-    // Check if this is a partial import (like PAST_WEEK scenario)
-    const isPartialImport =
-      importedData.currentState?.metadata?.partialImport === true;
-
-    if (!isPartialImport) {
-      // 1. Clear existing data only for full imports
-      logger.info("Clearing existing data...");
-      await clearHistoryStore();
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-    }
-
-    // 2. Restore current state with timestamp
+    // Import current state
     if (importedData.currentState) {
-      // Add current metadata to the imported state
-      const normalizedState = {
-        ...importedData.currentState,
-        lastModified: getCurrentTimestamp(),
-        metadata: {
-          schemaVersion: SCHEMA.VERSION,
-          deviceId: getDeviceId(),
-          importedFrom: importedData.appInfo?.deviceId || "unknown",
-        },
+      // Ensure metadata exists
+      importedData.currentState.metadata = {
+        ...(importedData.currentState.metadata || {}),
+        schemaVersion: SCHEMA.VERSION,
+        deviceInfo: getDeviceInfo(),
+        deviceId: getDeviceId(),
+        lastModified: Date.now(),
       };
 
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalizedState));
-      logger.info("Current state restored to localStorage.");
-    } else {
-      logger.warn("No 'currentState' found in imported file.");
+      // Save current state
+      await saveState(importedData.currentState);
+      logger.info("Current state imported successfully");
     }
 
-    // 3. Restore history records one by one with normalization
-    let importCount = 0;
+    // Import history data
     if (importedData.history && importedData.history.length > 0) {
       for (const weekData of importedData.history) {
         try {
@@ -1190,6 +1185,7 @@ async function importData(importedData) {
                 deviceId: getDeviceId(),
                 syncStatus: "imported",
                 importedFrom: importedData.appInfo?.deviceId || "unknown",
+                historyDirty: true, // Mark as dirty to ensure it gets synced
               },
             };
 
@@ -1218,37 +1214,10 @@ async function importData(importedData) {
       );
     }
 
-    // 4. Restore preferences if present
-    if (
-      importedData.preferences &&
-      typeof importedData.preferences === "object"
-    ) {
-      let prefCount = 0;
-      for (const [key, value] of Object.entries(importedData.preferences)) {
-        try {
-          await savePreference(key, value);
-          prefCount++;
-        } catch (prefError) {
-          logger.error(`Error importing preference '${key}':`, prefError);
-        }
-      }
-      logger.info(`${prefCount} preferences restored.`);
-    }
-
-    // Log the import as a sync change
-    await logSyncChange("system", "import", "all", {
-      timestamp: getCurrentTimestamp(),
-      source: importedData.appInfo?.deviceId || "unknown",
-      recordCount: {
-        history: importedData.history?.length || 0,
-        preferences: Object.keys(importedData.preferences || {}).length || 0,
-      },
-    });
-
-    return true;
+    return { success: true, importedCount: importCount };
   } catch (error) {
-    logger.error("Error importing data:", error);
-    throw new Error(`Import failed: ${error.message}`);
+    logger.error("Error during data import:", error);
+    throw error;
   }
 }
 

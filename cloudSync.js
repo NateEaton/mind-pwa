@@ -22,12 +22,11 @@ import logger from "./logger.js";
 // Phase 1: Import extracted utilities
 import { TimestampUtils } from "./cloudSync/utils/timestampUtils.js";
 import { ValidationUtils } from "./cloudSync/utils/validationUtils.js";
-// Phase 3: Import change detection service
-import { ChangeDetectionService } from "./cloudSync/services/changeDetectionService.js";
-// Phase 2: Import merge strategies coordinator
-import { MergeCoordinator } from "./cloudSync/mergeStrategies/mergeCoordinator.js";
-import { FileMetadataManager } from "./cloudSync/services/fileMetadataManager.js";
+import { SyncOperationHandler } from "./cloudSync/services/syncOperationHandler.js";
 
+/**
+ * Manages cloud synchronization for the application
+ */
 export class CloudSyncManager {
   constructor(
     dataService,
@@ -45,19 +44,24 @@ export class CloudSyncManager {
     this.isAuthenticated = false;
     this.lastSyncTimestamp = 0;
     this.syncInProgress = false;
-    this.lastHistorySyncTimestamp = null;
-    this.fileMetadataManager = new FileMetadataManager(dataService);
+    this.syncInterval = null;
+    this.autoSyncEnabled = false;
 
-    // Phase 1: Add utility instances for easy access
+    // Initialize utility instances
     this.timestampUtils = TimestampUtils;
     this.validationUtils = ValidationUtils;
-    // Phase 3: Initialize change detection service
-    this.changeDetection = new ChangeDetectionService({ logger });
 
-    // Phase 2: Initialize merge coordinator
-    this.mergeCoordinator = new MergeCoordinator(dataService, stateManager);
+    // Initialize sync operation handler
+    this.syncOperationHandler = new SyncOperationHandler(
+      dataService,
+      this.provider
+    );
   }
 
+  /**
+   * Initialize cloud sync
+   * @returns {Promise<void>}
+   */
   async initialize(providerName = "gdrive") {
     if (providerName === "gdrive") {
       this.provider = new GoogleDriveProvider();
@@ -66,9 +70,6 @@ export class CloudSyncManager {
     } else {
       throw new Error(`Unsupported cloud provider: ${providerName}`);
     }
-
-    // Load sync state before initializing provider
-    this.loadSyncState();
 
     // Initialize the provider and check if it was successful
     const initResult = await this.provider.initialize();
@@ -79,8 +80,246 @@ export class CloudSyncManager {
       return false;
     }
 
+    // Initialize sync operation handler with the provider
+    this.syncOperationHandler = new SyncOperationHandler(
+      this.dataService,
+      this.provider
+    );
+
     this.isAuthenticated = await this.provider.checkAuth();
     return this.isAuthenticated;
+  }
+
+  /**
+   * Enable auto-sync
+   * @param {number} intervalMinutes - Sync interval in minutes
+   */
+  enableAutoSync(intervalMinutes = 15) {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+    }
+    this.syncInterval = setInterval(() => {
+      this.sync(true);
+    }, intervalMinutes * 60 * 1000);
+    this.autoSyncEnabled = true;
+    logger.info(`Auto-sync enabled every ${intervalMinutes} minutes`);
+  }
+
+  /**
+   * Disable auto-sync
+   */
+  disableAutoSync() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+    this.autoSyncEnabled = false;
+    logger.info("Auto-sync disabled");
+  }
+
+  /**
+   * Check if auto-sync is enabled
+   * @returns {boolean}
+   */
+  isAutoSyncEnabled() {
+    return this.autoSyncEnabled;
+  }
+
+  /**
+   * Get last sync time
+   * @returns {Date|null}
+   */
+  getLastSyncTime() {
+    return this.lastSyncTimestamp ? new Date(this.lastSyncTimestamp) : null;
+  }
+
+  /**
+   * Sync data between local device and cloud
+   * @param {boolean} silent - Whether to show notifications
+   * @returns {Promise<Object|boolean>} Sync results or false if sync failed
+   */
+  async sync(silent = false) {
+    if (this.syncInProgress) {
+      logger.info("Sync already in progress, skipping");
+      return false;
+    }
+
+    // Check network constraints
+    if (!this.checkNetworkConstraints()) {
+      const error = new Error("'Sync only on Wi-Fi' is enabled.");
+      error.code = "NETWORK_CONSTRAINT";
+      this.onSyncError(error);
+      return false;
+    }
+
+    try {
+      this.syncInProgress = true;
+      logger.info("Starting sync process");
+
+      // Check if we're authenticated
+      if (!this.isAuthenticated) {
+        logger.info("Not authenticated, attempting authentication");
+
+        // Show authentication toast
+        if (this.uiRenderer) {
+          this.uiRenderer.showToast(
+            "Authenticating with cloud service...",
+            "info",
+            {
+              isPersistent: true,
+              showSpinner: true,
+            }
+          );
+        }
+
+        this.isAuthenticated = await this.provider.authenticate();
+        if (!this.isAuthenticated) {
+          throw new Error("Authentication failed");
+        }
+      }
+
+      // Show sync toast
+      if (this.uiRenderer) {
+        this.uiRenderer.showToast(
+          silent ? "Auto-syncing data..." : "Synchronizing data...",
+          "info",
+          {
+            isPersistent: true,
+            showSpinner: true,
+          }
+        );
+      }
+
+      // Determine what needs to be synced
+      const syncNeeds =
+        await this.syncOperationHandler.changeDetectionService.determineSyncNeeds(
+          await this.syncOperationHandler.changeDetectionService.analyzeDirtyFlags(
+            this.dataService.loadState().metadata || {}
+          ),
+          null,
+          true
+        );
+
+      let workWasDone = false;
+      const syncResults = {};
+
+      // Sync current week if needed
+      if (syncNeeds.syncCurrent) {
+        logger.info("Syncing current week...");
+        const currentWeekResult =
+          await this.syncOperationHandler.syncCurrentWeek();
+        if (currentWeekResult) {
+          workWasDone = true;
+          syncResults.currentWeekSynced = true;
+        }
+      }
+
+      // Sync history if needed
+      if (syncNeeds.syncHistory) {
+        logger.info("Syncing history...");
+        const historyResult = await this.syncOperationHandler.syncHistory();
+        if (historyResult && historyResult.length > 0) {
+          workWasDone = true;
+          syncResults.historySynced = true;
+        }
+      }
+
+      this.lastSyncTimestamp = this.dataService.getCurrentTimestamp();
+
+      // Show completion toast if work was done OR if this was a manual sync
+      if (this.uiRenderer) {
+        this.uiRenderer.clearToasts(); // Clear the persistent sync toast
+        if (workWasDone) {
+          this.uiRenderer.showToast(
+            silent
+              ? "Auto-sync completed successfully!"
+              : "Data synchronized successfully!",
+            "success",
+            {
+              duration: 2000,
+            }
+          );
+        }
+      }
+
+      this.onSyncComplete({
+        timestamp: this.lastSyncTimestamp,
+        ...syncResults,
+      });
+
+      return syncResults;
+    } catch (error) {
+      // Clear any sync toast on error
+      if (this.uiRenderer) {
+        this.uiRenderer.clearToasts();
+      }
+      this.onSyncError(error);
+      return false;
+    } finally {
+      this.syncInProgress = false;
+      logger.info("Sync process completed");
+    }
+  }
+
+  /**
+   * Check if sync is needed
+   * @returns {Promise<boolean>}
+   */
+  async checkIfSyncNeeded() {
+    try {
+      const localData = this.dataService.loadState();
+      const hasLocalChanges =
+        localData.metadata?.currentWeekDirty ||
+        localData.metadata?.dailyTotalsDirty ||
+        localData.metadata?.weeklyTotalsDirty ||
+        false;
+
+      if (!hasLocalChanges) {
+        return false;
+      }
+
+      const currentWeekFileName = "mind-diet-current-week.json";
+      const fileInfo = await this.provider.searchFile(currentWeekFileName);
+
+      if (!fileInfo) {
+        return true;
+      }
+
+      return await this.syncOperationHandler.fileMetadataManager.checkIfFileChanged(
+        currentWeekFileName,
+        fileInfo.id,
+        this.provider
+      );
+    } catch (error) {
+      logger.error("Error checking if sync needed:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get sync status
+   * @returns {Object} Sync status information
+   */
+  getSyncStatus() {
+    return {
+      lastSyncTime: this.lastSyncTimestamp
+        ? new Date(this.lastSyncTimestamp)
+        : null,
+      autoSyncEnabled: this.autoSyncEnabled,
+      syncInProgress: this.syncInProgress,
+    };
+  }
+
+  /**
+   * Check network constraints for sync
+   * @returns {boolean} True if sync is allowed
+   */
+  checkNetworkConstraints() {
+    // If syncWifiOnly is true, check if we're on WiFi
+    if (this.syncWifiOnly) {
+      return navigator.connection?.type === "wifi";
+    }
+    return true;
   }
 
   async authenticate() {
@@ -101,15 +340,22 @@ export class CloudSyncManager {
       );
 
       // Use change detection service to analyze flags and determine sync needs
-      const flags = this.changeDetection.analyzeDirtyFlags(metadata);
-      const syncNeeds = this.changeDetection.determineSyncNeeds(
-        flags,
-        null,
-        true
-      );
+      const flags =
+        this.syncOperationHandler.changeDetectionService.analyzeDirtyFlags(
+          metadata
+        );
+      const syncNeeds =
+        this.syncOperationHandler.changeDetectionService.determineSyncNeeds(
+          flags,
+          null,
+          true
+        );
 
       // Log the sync decision
-      this.changeDetection.logSyncDecision(syncNeeds, metadata);
+      this.syncOperationHandler.changeDetectionService.logSyncDecision(
+        syncNeeds,
+        metadata
+      );
 
       return {
         syncCurrent: syncNeeds.syncCurrent,
@@ -196,752 +442,6 @@ export class CloudSyncManager {
       logger.warn("Failed to clear date reset flags:", error);
     }
   }
-
-  /**
-   * Sync data between local device and cloud
-   * @param {boolean} silent - Whether to show notifications
-   * @returns {Promise<Object|boolean>} Sync results or false if sync failed
-   */
-  async sync(silent = false) {
-    if (this.syncInProgress) {
-      logger.info("Sync already in progress, skipping");
-      return false;
-    }
-
-    // Check network constraints
-    if (!this.checkNetworkConstraints()) {
-      const error = new Error("'Sync only on Wi-Fi' is enabled.");
-      error.code = "NETWORK_CONSTRAINT";
-      this.onSyncError(error);
-      return false;
-    }
-
-    try {
-      this.syncInProgress = true;
-      logger.info("Starting sync process");
-
-      // Check if we're authenticated
-      if (!this.isAuthenticated) {
-        logger.info("Not authenticated, attempting authentication");
-
-        // Show authentication toast
-        if (this.uiRenderer) {
-          this.uiRenderer.showToast(
-            "Authenticating with cloud service...",
-            "info",
-            {
-              isPersistent: true,
-              showSpinner: true,
-            }
-          );
-        }
-
-        try {
-          await this.authenticate();
-          if (!this.isAuthenticated) {
-            if (this.uiRenderer) {
-              this.uiRenderer.clearToasts();
-              this.uiRenderer.showToast(
-                "Authentication required for sync",
-                "warning",
-                {
-                  duration: 5000,
-                }
-              );
-            }
-            const error = new Error("Authentication required");
-            error.code = "AUTH_REQUIRED";
-            throw error;
-          }
-          // Clear auth toast on success - will be replaced by sync toast if needed
-          if (this.uiRenderer) {
-            this.uiRenderer.clearToasts();
-          }
-        } catch (authError) {
-          logger.error("Authentication failed:", authError);
-          if (this.uiRenderer) {
-            this.uiRenderer.clearToasts();
-            this.uiRenderer.showToast(
-              `Authentication error: ${authError.message}`,
-              "error",
-              {
-                duration: 5000,
-              }
-            );
-          }
-          const error = new Error(
-            `Authentication failed: ${authError.message}`
-          );
-          error.code = "AUTH_FAILED";
-          error.originalError = authError;
-          throw error;
-        }
-      }
-
-      // Always determine what needs to be synced
-      const { syncCurrent, syncHistory } = await this.determineWhatToSync();
-
-      // Check if we actually have work to do before showing any toast
-      const localData = this.dataService.loadState();
-      const hasLocalChanges =
-        localData.metadata?.currentWeekDirty ||
-        localData.metadata?.historyDirty ||
-        localData.metadata?.dailyTotalsDirty ||
-        localData.metadata?.weeklyTotalsDirty;
-
-      let syncResults = { currentWeekSynced: false, historySynced: false };
-      let workWasDone = false;
-
-      // Show toast if:
-      // 1. Not silent (manual sync) - always show toast
-      // 2. Silent (auto sync) but we have local changes that need syncing
-      const shouldShowToast = !silent || hasLocalChanges;
-
-      if (shouldShowToast && this.uiRenderer) {
-        this.uiRenderer.showToast("Synchronizing data with cloud...", "info", {
-          isPersistent: true,
-          showSpinner: true,
-        });
-      }
-
-      // Now proceed with actual sync
-      try {
-        // 1. Sync current week data if needed
-        if (syncCurrent) {
-          try {
-            const currentWeekResult = (await this.syncCurrentWeek()) || {};
-            syncResults.currentWeekSynced = !currentWeekResult.noChanges;
-
-            // Track if actual work was done (uploaded or downloaded)
-            if (currentWeekResult.uploaded || currentWeekResult.downloaded) {
-              workWasDone = true;
-            }
-
-            // Clear the current week dirty flags
-            await this.clearDirtyFlag("currentWeekDirty");
-
-            // Clear date reset flags if they were set
-            await this.clearDateResetFlags();
-          } catch (weekError) {
-            logger.error("Error syncing current week:", weekError);
-            syncResults.currentWeekError = weekError.message;
-          }
-        }
-
-        // 2. Sync history data if needed
-        if (syncHistory) {
-          try {
-            const historyResult = (await this.syncHistory()) || {};
-            syncResults.historySynced =
-              historyResult && historyResult.syncedCount > 0;
-
-            // Track if actual work was done
-            if (syncResults.historySynced) {
-              workWasDone = true;
-            }
-
-            // Clear the history dirty flag
-            await this.clearDirtyFlag("historyDirty");
-          } catch (historyError) {
-            logger.error("Error syncing history:", historyError);
-            syncResults.historyError = historyError.message;
-          }
-        }
-
-        // 3. Execute any pending archive merges after the main sync operations
-        if (this.pendingArchiveMerge) {
-          logger.info("Executing pending archive merge after sync");
-          try {
-            // Phase 2: Use merge coordinator for archive merging
-            await this.mergeCoordinator.executePendingArchiveMerge();
-          } catch (archiveError) {
-            logger.warn(
-              "Error executing archive merge, but continuing sync:",
-              archiveError
-            );
-            // Don't let archive merge failure fail the entire sync
-          }
-        }
-
-        this.lastSyncTimestamp = this.dataService.getCurrentTimestamp();
-
-        // Show completion toast if work was done OR if this was a manual sync
-        if ((workWasDone || !silent) && this.uiRenderer) {
-          this.uiRenderer.clearToasts(); // Clear the persistent "Synchronizing..." toast
-          this.uiRenderer.showToast(
-            "Data synchronized successfully!",
-            "success",
-            {
-              duration: 2000,
-            }
-          );
-        } else if (this.uiRenderer) {
-          // Clear the sync toast even if no work was done (for cases where toast was shown)
-          this.uiRenderer.clearToasts();
-        }
-
-        this.onSyncComplete({
-          timestamp: this.lastSyncTimestamp,
-          ...syncResults,
-        });
-
-        return syncResults;
-      } catch (syncError) {
-        logger.error("Sync operation failed:", syncError);
-        const error = new Error(`Sync failed: ${syncError.message}`);
-        error.code = "SYNC_OPERATION_FAILED";
-        error.originalError = syncError;
-        throw error;
-      }
-    } catch (error) {
-      // Clear any sync toast on error
-      if (this.uiRenderer) {
-        this.uiRenderer.clearToasts();
-      }
-      this.onSyncError(error);
-      return false;
-    } finally {
-      this.syncInProgress = false;
-      logger.info("Sync process completed");
-    }
-  }
-
-  /**
-   * Sync current week data with improved empty response handling
-   * @returns {Promise<Object>} Result information
-   */
-  async syncCurrentWeek() {
-    try {
-      // Define the filename for current week data
-      const currentWeekFileName = "mind-diet-current-week.json";
-
-      // First, check if we have actual data to sync
-      const localData = this.dataService.loadState();
-      const hasLocalChanges =
-        localData.metadata?.currentWeekDirty ||
-        localData.metadata?.dailyTotalsDirty ||
-        localData.metadata?.weeklyTotalsDirty ||
-        false;
-      const isFreshInstall = localData.metadata?.isFreshInstall || false;
-
-      // Check if file exists in cloud first without creating it
-      let fileInfo;
-      let cloudFileExists = false;
-      try {
-        const searchResult = await this.provider.searchFile(
-          currentWeekFileName
-        );
-        if (searchResult) {
-          fileInfo = searchResult;
-          cloudFileExists = true;
-          logger.info("Found existing current week file:", fileInfo);
-        }
-      } catch (searchError) {
-        logger.warn("Error searching for cloud file:", searchError);
-      }
-
-      // Only create file if:
-      // 1. We have local changes to sync, or
-      // 2. We couldn't find an existing file and need to establish sync
-      if (!cloudFileExists && (hasLocalChanges || !isFreshInstall)) {
-        try {
-          fileInfo = await this.provider.findOrCreateFile(currentWeekFileName);
-          logger.info("Created new current week file:", fileInfo);
-        } catch (fileError) {
-          logger.error("Error creating cloud file:", fileError);
-          throw new Error(`Failed to create cloud file: ${fileError.message}`);
-        }
-      }
-
-      // If we still don't have file info, we can't proceed
-      if (!fileInfo || !fileInfo.id) {
-        logger.info("No cloud file exists or needs to be created yet");
-        return {
-          noChanges: true,
-          uploaded: false,
-          downloaded: false,
-        };
-      }
-
-      // Check if file has changed in cloud
-      let hasFileChanged = true;
-
-      // Download remote data when:
-      // 1. We have local changes to merge, or
-      // 2. Cloud file exists and has changed since last sync
-      let remoteData = null;
-      if (hasLocalChanges || (cloudFileExists && hasFileChanged)) {
-        try {
-          logger.info("Downloading remote data...");
-          remoteData = await this.provider.downloadFile(fileInfo.id);
-
-          // Important: handle the case where download returns empty data
-          if (
-            remoteData === null ||
-            (typeof remoteData === "object" &&
-              Object.keys(remoteData).length === 0)
-          ) {
-            logger.info(
-              "Remote file exists but contains no data or empty object"
-            );
-            remoteData = null;
-          } else {
-            cloudFileExists = true;
-            logger.info("Remote data downloaded successfully");
-          }
-        } catch (downloadError) {
-          logger.warn("Error downloading remote data:", downloadError);
-          // Continue with local data
-        }
-      }
-
-      // Check if there's any local data to sync
-      const hasDataToSync =
-        Object.keys(localData.dailyCounts || {}).length > 0 ||
-        Object.keys(localData.weeklyCounts || {}).length > 0;
-
-      logger.info("Has data to sync:", hasDataToSync);
-
-      // If remote data exists and is valid, merge with local
-      let dataToUpload = localData;
-
-      if (remoteData && this.validateData(remoteData, "current")) {
-        logger.info("Remote data found, merging with local data");
-        // Phase 2: Use merge coordinator for current week merging
-        dataToUpload = this.mergeCoordinator.mergeCurrentWeekData(
-          localData,
-          remoteData
-        );
-
-        // Update local store with merged data
-        logger.info("Updating local store with merged data");
-        this.dataService.saveState(dataToUpload);
-
-        // Update state manager with merged data to ensure consistency
-        logger.info("Reloading state manager after cloud sync merge");
-        if (
-          this.stateManager &&
-          typeof this.stateManager.reload === "function"
-        ) {
-          // Skip automatic recalculation in reload - we'll do it manually for proper sequencing
-          await this.stateManager.reload(true);
-
-          // Ensure weekly totals are consistent after cloud sync merge
-
-          if (typeof this.stateManager.recalculateWeeklyTotals === "function") {
-            this.stateManager.recalculateWeeklyTotals();
-            logger.info("Recalculated weekly totals after cloud sync merge");
-          }
-        }
-
-        // Store file metadata after download
-        await this.storeFileMetadata(currentWeekFileName, fileInfo);
-      } else {
-        logger.info("No valid remote data available");
-
-        // IMPORTANT CHANGE: Only force dirty flag if this is not a fresh install
-        // or if we're certain the cloud file doesn't exist
-        if (hasDataToSync && (!isFreshInstall || !cloudFileExists)) {
-          if (!dataToUpload.metadata) dataToUpload.metadata = {};
-
-          // If it's a fresh install, only set dirty if we're certain the cloud file doesn't exist
-          if (isFreshInstall) {
-            if (!cloudFileExists) {
-              dataToUpload.metadata.currentWeekDirty = true;
-              dataToUpload.metadata.dailyTotalsDirty = true;
-              dataToUpload.metadata.weeklyTotalsDirty = true;
-              logger.info(
-                "Forcing dirty flag - fresh install with no cloud data"
-              );
-            } else {
-              logger.info(
-                "Fresh install with possible cloud data - not forcing dirty flag"
-              );
-            }
-          } else {
-            dataToUpload.metadata.currentWeekDirty = true;
-            dataToUpload.metadata.dailyTotalsDirty = true;
-            dataToUpload.metadata.weeklyTotalsDirty = true;
-            logger.info(
-              "Forcing dirty flag for data upload - not fresh install"
-            );
-          }
-        }
-      }
-
-      // Determine whether to upload
-      const needsUpload =
-        hasLocalChanges ||
-        dataToUpload.metadata?.currentWeekDirty ||
-        dataToUpload.metadata?.dailyTotalsDirty ||
-        dataToUpload.metadata?.weeklyTotalsDirty;
-
-      // For fresh installs, we should be more cautious about uploading
-      const shouldSkipUploadForFreshInstall =
-        isFreshInstall && cloudFileExists && cloudFileExists;
-
-      if (shouldSkipUploadForFreshInstall) {
-        logger.info("Fresh install with existing cloud data - skipping upload");
-        return { downloaded: true, uploaded: false, freshInstallSkipped: true };
-      }
-
-      if (needsUpload) {
-        try {
-          logger.info("Uploading data to cloud");
-          const uploadResult = await this.provider.uploadFile(
-            fileInfo.id,
-            dataToUpload
-          );
-          logger.info("Successfully uploaded data to server");
-
-          // Store file metadata after upload
-          await this.storeFileMetadata(currentWeekFileName, uploadResult);
-
-          // Clear dirty flag after successful upload
-          if (dataToUpload.metadata) {
-            dataToUpload.metadata.currentWeekDirty = false;
-            dataToUpload.metadata.dailyTotalsDirty = false;
-            dataToUpload.metadata.weeklyTotalsDirty = false;
-            this.dataService.saveState(dataToUpload);
-          }
-
-          return { downloaded: !!remoteData, uploaded: true };
-        } catch (uploadError) {
-          logger.error("Error uploading to cloud:", uploadError);
-          return {
-            error: uploadError.message,
-            downloaded: !!remoteData,
-            uploaded: false,
-          };
-        }
-      } else {
-        logger.info("No data changes detected, skipping upload");
-        return { downloaded: !!remoteData, uploaded: false };
-      }
-    } catch (error) {
-      logger.error("Error in current week sync:", error);
-      return { error: error.message, uploaded: false, downloaded: false };
-    }
-  }
-
-  /**
-   * Fixed merge implementation that correctly handles weekly resets
-   * @param {Object} localData - The local state data
-   * @param {Object} remoteData - The remote state data from cloud
-   * @returns {Object} The merged data
-   * @deprecated Phase 2: Use mergeCoordinator.mergeCurrentWeekData() instead
-   */
-  mergeCurrentWeekData(localData, remoteData) {
-    // Phase 2: Delegate to merge coordinator (with fallback for compatibility)
-    try {
-      return this.mergeCoordinator.mergeCurrentWeekData(localData, remoteData);
-    } catch (error) {
-      logger.warn("Phase 2 merge coordinator failed, using fallback:", error);
-      return this.legacyMergeCurrentWeekData(localData, remoteData);
-    }
-  }
-
-  /**
-   * Legacy merge implementation (Phase 2: kept as fallback)
-   * @param {Object} localData - The local state data
-   * @param {Object} remoteData - The remote state data from cloud
-   * @returns {Object} The merged data
-   */
-  legacyMergeCurrentWeekData(localData, remoteData) {
-    logger.info("Merging current week data:");
-    logger.debug("LOCAL data:", {
-      dayDate: localData.currentDayDate,
-      weekStartDate: localData.currentWeekStartDate,
-      lastModified: localData.lastModified,
-      dailyUpdatedAt: localData.metadata?.dailyTotalsUpdatedAt,
-      weeklyUpdatedAt: localData.metadata?.weeklyTotalsUpdatedAt,
-      dailyResetAt: localData.metadata?.dailyResetTimestamp,
-      weeklyResetAt: localData.metadata?.weeklyResetTimestamp,
-      previousWeekStartDate: localData.metadata?.previousWeekStartDate,
-      dateResetType: localData.metadata?.dateResetType,
-    });
-
-    logger.debug("REMOTE data:", {
-      dayDate: remoteData.currentDayDate,
-      weekStartDate: remoteData.currentWeekStartDate,
-      lastModified: remoteData.lastModified,
-      dailyUpdatedAt: remoteData.metadata?.dailyTotalsUpdatedAt,
-      weeklyUpdatedAt: remoteData.metadata?.weeklyTotalsUpdatedAt,
-    });
-
-    // Check system date vs remote date
-    const todayStr = this.dataService.getTodayDateString();
-    const remoteDateStr = remoteData.currentDayDate;
-    const needsDateReset = todayStr !== remoteDateStr;
-
-    logger.trace(
-      `System date: ${todayStr}, Remote date: ${remoteDateStr}, Needs reset: ${needsDateReset}`
-    );
-
-    // Extract timestamps for comparison
-    const now = Date.now();
-
-    // Local timestamps (update and reset)
-    // Ensure local UpdatedAt timestamps default to 0 if not present, NOT to localData.lastModified
-    const localDailyUpdatedAt = localData.metadata?.dailyTotalsUpdatedAt || 0;
-    const localWeeklyUpdatedAt = localData.metadata?.weeklyTotalsUpdatedAt || 0;
-    const localDailyResetTimestamp =
-      localData.metadata?.dailyResetTimestamp || 0;
-    const localWeeklyResetTimestamp =
-      localData.metadata?.weeklyResetTimestamp || 0;
-
-    // Remote timestamps
-    const remoteDailyUpdatedAt =
-      remoteData.metadata?.dailyTotalsUpdatedAt || remoteData.lastModified || 0;
-    const remoteWeeklyUpdatedAt =
-      remoteData.metadata?.weeklyTotalsUpdatedAt ||
-      remoteData.lastModified ||
-      0;
-
-    // Check for reset conditions
-    const dailyResetPerformed =
-      localDailyResetTimestamp > 0 &&
-      (localData.metadata?.dateResetType === "DAILY" ||
-        localData.metadata?.dateResetType === "WEEKLY"); // Weekly reset also resets daily
-
-    const weeklyResetPerformed =
-      localWeeklyResetTimestamp > 0 &&
-      localData.metadata?.dateResetType === "WEEKLY";
-
-    logger.trace("Reset status:", {
-      dailyReset: dailyResetPerformed,
-      weeklyReset: weeklyResetPerformed,
-      previousWeekStartDate: localData.metadata?.previousWeekStartDate,
-    });
-
-    // CRITICAL FIRST CHECK: Special case for fresh installs - prefer remote data
-    if (localData.metadata?.isFreshInstall) {
-      logger.info(
-        "FRESH INSTALL detected by mergeCurrentWeekData - prioritizing cloud data if it exists."
-      );
-      const remoteHasData =
-        (remoteData &&
-          remoteData.weeklyCounts &&
-          Object.keys(remoteData.weeklyCounts).length > 0) ||
-        (remoteData &&
-          remoteData.dailyCounts &&
-          Object.values(remoteData.dailyCounts).some(
-            (day) => Object.keys(day).length > 0
-          ));
-
-      if (remoteHasData) {
-        logger.info("Fresh install: Using remote data entirely.");
-        const newLocalState = {
-          ...remoteData,
-          metadata: {
-            ...(remoteData.metadata || {}),
-            deviceId: localData.metadata.deviceId,
-            weekStartDay: localData.metadata.weekStartDay,
-            isFreshInstall: false, // CRITICAL: Mark as not fresh
-            dailyTotalsUpdatedAt:
-              remoteData.metadata?.dailyTotalsUpdatedAt ||
-              remoteData.lastModified ||
-              Date.now(),
-            weeklyTotalsUpdatedAt:
-              remoteData.metadata?.weeklyTotalsUpdatedAt ||
-              remoteData.lastModified ||
-              Date.now(),
-            lastModified: Date.now(),
-            dailyTotalsDirty: false, // Start clean after taking cloud data
-            weeklyTotalsDirty: false,
-            currentWeekDirty: false,
-          },
-        };
-        newLocalState.dailyCounts = newLocalState.dailyCounts || {};
-        newLocalState.weeklyCounts = newLocalState.weeklyCounts || {};
-        return newLocalState;
-      } else {
-        logger.info(
-          "Fresh install: No remote data found or remote data is empty. Local (empty) state will be prepared for upload."
-        );
-        const updatedLocalState = { ...localData };
-        if (!updatedLocalState.metadata) updatedLocalState.metadata = {};
-        updatedLocalState.metadata.isFreshInstall = false; // Still mark as not fresh for next time
-        // Timestamps are already sentinel/old from stateManager.initialize
-        // Mark as dirty to ensure this "initial empty state" or "initial minimal state" gets uploaded.
-        updatedLocalState.metadata.dailyTotalsDirty = true;
-        updatedLocalState.metadata.weeklyTotalsDirty = true;
-        updatedLocalState.metadata.currentWeekDirty = true;
-        updatedLocalState.metadata.lastModified = Date.now(); // Reflect this decision time
-        return updatedLocalState;
-      }
-    }
-
-    // Special weekly reset handling
-    if (weeklyResetPerformed) {
-      logger.info("WEEKLY RESET detected - this is a new week");
-
-      // Check if remote data is from the previous week
-      const localWeekStartDate = new Date(
-        localData.currentWeekStartDate + "T00:00:00"
-      );
-      const remoteWeekStartDate = new Date(
-        remoteData.currentWeekStartDate + "T00:00:00"
-      );
-
-      // If remote week start date is before local, it's from the previous week
-      const remoteIsFromPreviousWeek = remoteWeekStartDate < localWeekStartDate;
-      const remoteIsFromSameWeek =
-        remoteWeekStartDate.getTime() === localWeekStartDate.getTime();
-
-      // Schedule merge with archived previous week if needed
-      if (
-        remoteIsFromPreviousWeek &&
-        localData.metadata?.previousWeekStartDate
-      ) {
-        logger.info(
-          "Remote data is from previous week - scheduling archive merge"
-        );
-
-        // Schedule merge with archived previous week
-        this.scheduleArchiveMerge(
-          localData.metadata.previousWeekStartDate,
-          remoteData.weeklyCounts
-        );
-      }
-
-      // If remote is from the same new week and has newer data, use it
-      if (
-        remoteIsFromSameWeek &&
-        remoteWeeklyUpdatedAt > localWeeklyResetTimestamp
-      ) {
-        logger.info(
-          "Remote data is from same new week and newer than local reset - using remote data"
-        );
-
-        // Use remote data but keep local reset metadata
-        const mergedData = {
-          ...localData,
-          weeklyCounts: { ...remoteData.weeklyCounts },
-          dailyCounts: { ...remoteData.dailyCounts },
-          lastModified: now,
-          metadata: {
-            ...localData.metadata,
-            weeklyTotalsUpdatedAt: remoteWeeklyUpdatedAt,
-            dailyTotalsUpdatedAt:
-              remoteDailyUpdatedAt > localWeeklyResetTimestamp
-                ? remoteDailyUpdatedAt
-                : localData.metadata.dailyTotalsUpdatedAt,
-            weeklyTotalsDirty: false,
-            dailyTotalsDirty: false,
-            currentWeekDirty: false,
-          },
-        };
-
-        return mergedData;
-      }
-
-      // Otherwise use local zeroed state (weekly reset is newer than remote data)
-      logger.info("Weekly reset: Using local (zeroed) state for new week");
-      const mergedData = {
-        ...localData,
-        lastModified: now,
-        metadata: {
-          ...localData.metadata,
-          dailyTotalsDirty: false,
-          weeklyTotalsDirty: false,
-          currentWeekDirty: false,
-        },
-      };
-
-      return mergedData;
-    }
-
-    // Normal merge cases - prepare merged data structure
-    let mergedData = {
-      currentDayDate: localData.currentDayDate, // Always preserve local date
-      currentWeekStartDate: localData.currentWeekStartDate,
-      // We'll fill these based on timestamps
-      dailyCounts: {},
-      weeklyCounts: {},
-      lastModified: now, // Update overall timestamp
-      metadata: {
-        // Combine metadata but we'll update timestamps later
-        ...(remoteData.metadata || {}),
-        ...(localData.metadata || {}),
-        schemaVersion:
-          localData.metadata?.schemaVersion ||
-          remoteData.metadata?.schemaVersion ||
-          1,
-        deviceId: localData.metadata?.deviceId,
-      },
-    };
-
-    // ----- Daily Counts Merge Logic -----
-    // Three-part analysis for daily counts
-    if (remoteDailyUpdatedAt > localDailyUpdatedAt) {
-      // Remote data is newer than local updates
-      if (
-        dailyResetPerformed &&
-        localDailyResetTimestamp > remoteDailyUpdatedAt
-      ) {
-        // But there's been a reset since the remote update - keep local zeroed counts
-        logger.info(
-          "Using local daily counts (reset is newer than remote update)"
-        );
-        mergedData.dailyCounts = { ...localData.dailyCounts };
-        mergedData.metadata.dailyTotalsUpdatedAt = localDailyUpdatedAt;
-        mergedData.metadata.dailyResetTimestamp = localDailyResetTimestamp;
-        mergedData.metadata.dailyTotalsDirty = false;
-      } else {
-        // No reset or reset is older than remote data - use remote data
-        logger.info("Using remote daily counts (newer than local update)");
-        mergedData.dailyCounts = { ...remoteData.dailyCounts };
-        mergedData.metadata.dailyTotalsUpdatedAt = remoteDailyUpdatedAt;
-        mergedData.metadata.dailyTotalsDirty = false;
-      }
-    } else {
-      // Local update is newer than remote - keep local data
-      logger.info("Using local daily counts (newer than remote update)");
-      mergedData.dailyCounts = { ...localData.dailyCounts };
-      mergedData.metadata.dailyTotalsUpdatedAt = localDailyUpdatedAt;
-      mergedData.metadata.dailyTotalsDirty = false;
-    }
-
-    // ----- Weekly Counts Merge Logic -----
-    // Similar three-part analysis for weekly counts
-    if (remoteWeeklyUpdatedAt > localWeeklyUpdatedAt) {
-      // Remote data is newer than local updates
-      logger.info("Using remote weekly counts (newer than local update)");
-      mergedData.weeklyCounts = { ...remoteData.weeklyCounts };
-      mergedData.metadata.weeklyTotalsUpdatedAt = remoteWeeklyUpdatedAt;
-      mergedData.metadata.weeklyTotalsDirty = false;
-    } else {
-      // Local update is newer than remote - keep local data
-      logger.info("Using local weekly counts (newer than remote update)");
-      mergedData.weeklyCounts = { ...localData.weeklyCounts };
-      mergedData.metadata.weeklyTotalsUpdatedAt = localWeeklyUpdatedAt;
-      mergedData.metadata.weeklyTotalsDirty = false;
-    }
-
-    // For backward compatibility, update general dirty flag
-    mergedData.metadata.currentWeekDirty =
-      mergedData.metadata.dailyTotalsDirty ||
-      mergedData.metadata.weeklyTotalsDirty;
-
-    // Check if we need post-sync date reset
-    if (needsDateReset) {
-      mergedData.metadata.pendingDateReset = true;
-      mergedData.metadata.remoteDateWas = remoteDateStr;
-      logger.info("Flagged for post-sync date reset");
-    }
-
-    logger.debug("MERGED data:", {
-      dayDate: mergedData.currentDayDate,
-      weekStartDate: mergedData.currentWeekStartDate,
-      dailyUpdatedAt: mergedData.metadata.dailyTotalsUpdatedAt,
-      weeklyUpdatedAt: mergedData.metadata.weeklyTotalsUpdatedAt,
-    });
-
-    return mergedData;
-  }
-
-  // Add these methods to the CloudSyncManager class in cloudSync.js
 
   /**
    * Schedule an archive merge to be executed after the current sync completes
@@ -1069,772 +569,6 @@ export class CloudSyncManager {
     }
   }
 
-  async checkIfHistorySyncNeeded() {
-    // Always log the current decision factors for debugging
-    const currentState = this.dataService.loadState();
-    const currentWeekStart = currentState.currentWeekStartDate;
-
-    logger.info("Checking if history sync needed:", {
-      currentWeekStart,
-      lastSyncedWeek: this.lastSyncedWeek,
-      lastHistorySyncTimestamp: this.lastHistorySyncTimestamp || "never",
-      historyLength: (await this.dataService.getAllWeekHistory()).length,
-    });
-
-    // If we don't have a record of the last synced week, sync is needed
-    if (!this.lastSyncedWeek) {
-      logger.info("No record of last synced week, sync needed");
-      this.lastSyncedWeek = currentWeekStart;
-      return true;
-    }
-
-    // If the current week has changed since last sync, sync history
-    if (this.lastSyncedWeek !== currentWeekStart) {
-      logger.info(
-        `Week transition detected: ${this.lastSyncedWeek} -> ${currentWeekStart}, sync needed`
-      );
-      this.lastSyncedWeek = currentWeekStart;
-      return true;
-    }
-
-    // Check if local history data has been updated since last sync
-    if (currentState.metadata && currentState.metadata.historyUpdated) {
-      logger.info("History updated flag detected, sync needed");
-      // Clear the flag after detecting it
-      delete currentState.metadata.historyUpdated;
-      this.dataService.saveState(currentState);
-      return true;
-    }
-
-    // Otherwise, check if the history file has been modified
-    const historyFileName = "mind-diet-history.json";
-    try {
-      const fileInfo = await this.provider.findOrCreateFile(historyFileName);
-      // If we have a record of when we last synced history
-      if (this.lastHistorySyncTimestamp) {
-        const fileModifiedTime = new Date(fileInfo.modifiedTime).getTime();
-        // If file has been modified since our last sync, we need to sync again
-        const needsSync = fileModifiedTime > this.lastHistorySyncTimestamp;
-        logger.info(
-          `Cloud file modified: ${new Date(
-            fileModifiedTime
-          ).toISOString()}, Last sync: ${new Date(
-            this.lastHistorySyncTimestamp
-          ).toISOString()}, Needs sync: ${needsSync}`
-        );
-        return needsSync;
-      }
-    } catch (error) {
-      logger.warn("Error checking history file:", error);
-    }
-
-    // Default to needing sync if we can't determine
-    return true;
-  }
-
-  async syncHistoryIndex() {
-    try {
-      const historyIndexFileName = "mind-diet-history-index.json";
-
-      // Find or create the index file
-      const fileInfo = await this.provider.findOrCreateFile(
-        historyIndexFileName
-      );
-
-      // Get local history data for use in potential syncing
-      const localHistory = await this.dataService.getAllWeekHistory();
-      const historyDirty =
-        (await this.dataService.loadState()).metadata?.historyDirty || false;
-
-      // Check if index file has changed in the cloud
-      const hasFileChanged = await this.checkIfFileChanged(
-        historyIndexFileName,
-        fileInfo.id
-      );
-
-      // If file hasn't changed and no local changes, skip the entire process
-      if (!hasFileChanged && !historyDirty && localHistory.length > 0) {
-        logger.info(
-          "History index hasn't changed and no local changes, skipping sync entirely"
-        );
-        // Update last check time in metadata
-        await this.storeFileMetadata(historyIndexFileName, fileInfo);
-        return [];
-      }
-
-      // Create local index
-      const localIndex = {
-        lastUpdated: Date.now(),
-        weeks: localHistory.map((week) => ({
-          weekStartDate: week.weekStartDate,
-          updatedAt: week.metadata?.updatedAt || 0,
-        })),
-      };
-
-      // If we have local changes but no remote changes, just upload without downloading
-      if (!hasFileChanged && historyDirty) {
-        logger.info(
-          "Local history changes detected but no cloud changes - uploading without merging"
-        );
-        const uploadResult = await this.provider.uploadFile(
-          fileInfo.id,
-          localIndex
-        );
-        await this.storeFileMetadata(historyIndexFileName, uploadResult);
-
-        // Return week data that needs uploading (all local weeks)
-        return localHistory.map((week) => ({
-          weekStartDate: week.weekStartDate,
-          direction: "upload",
-        }));
-      }
-
-      // If we reach here, we need to download and potentially merge
-      logger.info("Downloading remote index...");
-      const remoteIndex = await this.provider.downloadFile(fileInfo.id);
-
-      // Store metadata after successful download
-      await this.storeFileMetadata(historyIndexFileName, fileInfo);
-
-      let indexToUpload = localIndex;
-      let weeksToSync = [];
-
-      // If remote index exists, merge and determine which weeks need syncing
-      if (
-        remoteIndex &&
-        remoteIndex.weeks &&
-        Array.isArray(remoteIndex.weeks)
-      ) {
-        logger.info("Remote index found, comparing with local history");
-
-        // Create a map of weeks by start date for easier lookup
-        const localWeekMap = new Map();
-        localIndex.weeks.forEach((week) => {
-          localWeekMap.set(week.weekStartDate, week);
-        });
-
-        const remoteWeekMap = new Map();
-        remoteIndex.weeks.forEach((week) => {
-          remoteWeekMap.set(week.weekStartDate, week);
-        });
-
-        // Find weeks that need downloading (remote exists but local doesn't, or remote is newer)
-        for (const [weekStart, remoteWeek] of remoteWeekMap.entries()) {
-          const localWeek = localWeekMap.get(weekStart);
-          if (!localWeek) {
-            // Week exists in remote but not local - mark for download
-            logger.info(
-              `Week ${weekStart} exists in cloud but not locally - adding to download queue`
-            );
-            weeksToSync.push({
-              weekStartDate: weekStart,
-              direction: "download",
-            });
-          } else if (remoteWeek.updatedAt > localWeek.updatedAt) {
-            // Remote is newer than local - mark for download
-            logger.info(
-              `Remote week ${weekStart} is newer (${remoteWeek.updatedAt} > ${localWeek.updatedAt}) - adding to download queue`
-            );
-            weeksToSync.push({
-              weekStartDate: weekStart,
-              direction: "download",
-            });
-          }
-        }
-
-        // Find weeks that need uploading (local exists but remote doesn't, or local is newer)
-        for (const [weekStart, localWeek] of localWeekMap.entries()) {
-          const remoteWeek = remoteWeekMap.get(weekStart);
-          if (!remoteWeek) {
-            // Week exists in local but not remote - mark for upload
-            logger.info(
-              `Week ${weekStart} exists locally but not in cloud - adding to upload queue`
-            );
-            weeksToSync.push({
-              weekStartDate: weekStart,
-              direction: "upload",
-            });
-          } else if (localWeek.updatedAt > remoteWeek.updatedAt) {
-            // Local is newer than remote - mark for upload
-            logger.info(
-              `Local week ${weekStart} is newer (${localWeek.updatedAt} > ${remoteWeek.updatedAt}) - adding to upload queue`
-            );
-            weeksToSync.push({
-              weekStartDate: weekStart,
-              direction: "upload",
-            });
-          }
-        }
-
-        // Merge the index data
-        const mergedWeeks = [];
-
-        // Include all weeks from both sources, using the more up-to-date information
-        const allWeekStarts = new Set([
-          ...localIndex.weeks.map((w) => w.weekStartDate),
-          ...remoteIndex.weeks.map((w) => w.weekStartDate),
-        ]);
-
-        allWeekStarts.forEach((weekStart) => {
-          const localWeek = localWeekMap.get(weekStart);
-          const remoteWeek = remoteWeekMap.get(weekStart);
-
-          if (localWeek && remoteWeek) {
-            // Both exist, use the newer one
-            mergedWeeks.push(
-              localWeek.updatedAt >= remoteWeek.updatedAt
-                ? localWeek
-                : remoteWeek
-            );
-          } else {
-            // Only one exists
-            mergedWeeks.push(localWeek || remoteWeek);
-          }
-        });
-
-        // Create the merged index
-        indexToUpload = {
-          lastUpdated: Date.now(),
-          weeks: mergedWeeks,
-        };
-      } else {
-        logger.info(
-          "No remote index found or it's invalid - will create new index"
-        );
-        // Since we're creating a new index, mark all local weeks for upload
-        localIndex.weeks.forEach((week) => {
-          weeksToSync.push({
-            weekStartDate: week.weekStartDate,
-            direction: "upload",
-          });
-        });
-      }
-
-      // Only upload if there are weeks to sync or we have changes
-      if (weeksToSync.length > 0 || historyDirty) {
-        // Upload the index
-        const uploadResult = await this.provider.uploadFile(
-          fileInfo.id,
-          indexToUpload
-        );
-        logger.info("History index synced successfully");
-
-        // Store metadata after successful operation
-        await this.storeFileMetadata(historyIndexFileName, uploadResult);
-      } else {
-        logger.info("No history changes detected, skipping index upload");
-      }
-
-      // Return the list of weeks that need syncing
-      return weeksToSync;
-    } catch (error) {
-      logger.error("Error in history index sync:", error);
-      throw error;
-    }
-  }
-
-  async syncWeek(weekStartDate, direction) {
-    logger.info(`=== Syncing week ${weekStartDate} (${direction}) ===`);
-
-    try {
-      const weekFileName = `mind-diet-week-${weekStartDate}.json`;
-
-      // Find or create the week file
-      const fileInfo = await this.provider.findOrCreateFile(weekFileName);
-
-      let syncSuccessful = false;
-
-      if (direction === "upload") {
-        // Get the local week data
-        const localWeek = await this.dataService.getWeekHistory(weekStartDate);
-
-        if (!localWeek) {
-          logger.warn(`Local week ${weekStartDate} not found for upload`);
-          return false;
-        }
-
-        // Check if file has changed before uploading
-        const hasFileChanged = await this.checkIfFileChanged(
-          weekFileName,
-          fileInfo.id
-        );
-
-        // If uploading and remote file exists but hasn't changed,
-        // compare timestamps to determine if upload is needed
-        if (!hasFileChanged) {
-          const storedMetadata = await this.getStoredFileMetadata(weekFileName);
-          // Modified condition to ensure newly archived weeks are uploaded
-          if (
-            storedMetadata &&
-            localWeek.metadata &&
-            storedMetadata.lastModified >= localWeek.metadata.updatedAt &&
-            !this.dataService.loadState().metadata.historyDirty // Add this check
-          ) {
-            logger.info(
-              `Week ${weekStartDate} has no changes, skipping upload`
-            );
-            return true;
-          }
-        }
-
-        // Upload to cloud
-        const uploadResult = await this.provider.uploadFile(
-          fileInfo.id,
-          localWeek
-        );
-        logger.debug(`Week ${weekStartDate} uploaded successfully`);
-
-        // Store metadata after upload - IMPORTANT: skip verification download
-        await this.storeFileMetadata(weekFileName, uploadResult || fileInfo);
-
-        syncSuccessful = true;
-      } else {
-        // download
-        // Check if local week already exists with same or newer timestamp
-        const localWeek = await this.dataService.getWeekHistory(weekStartDate);
-        if (localWeek) {
-          // Check if we should skip download
-          const hasFileChanged = await this.checkIfFileChanged(
-            weekFileName,
-            fileInfo.id
-          );
-          if (!hasFileChanged) {
-            logger.info(
-              `Week ${weekStartDate} has no changes, skipping download`
-            );
-            return true;
-          }
-        }
-
-        // Download the remote week data
-        const remoteWeek = await this.provider.downloadFile(fileInfo.id);
-
-        if (!remoteWeek || !remoteWeek.weekStartDate) {
-          logger.warn(`Remote week ${weekStartDate} not found or invalid`);
-          return false;
-        }
-
-        // Save to local database
-        await this.dataService.saveWeekHistory(remoteWeek, {
-          syncStatus: "synced",
-        });
-        logger.info(`Week ${weekStartDate} downloaded successfully`);
-
-        // Store metadata after download
-        await this.storeFileMetadata(weekFileName, fileInfo);
-
-        // Update local state if history data changed
-        const historyData = await this.dataService.getAllWeekHistory();
-        if (this.stateManager) {
-          this.stateManager.dispatch({
-            type: this.stateManager.ACTION_TYPES.SET_HISTORY,
-            payload: { history: historyData },
-          });
-        }
-
-        syncSuccessful = true;
-      }
-
-      // If sync was successful, update the index file too
-      if (syncSuccessful) {
-        try {
-          // Get the index file
-          const indexFileName = "mind-diet-history-index.json";
-          const indexFileInfo = await this.provider.findOrCreateFile(
-            indexFileName
-          );
-
-          // Check if index has changed before updating it
-          const hasIndexChanged = await this.checkIfFileChanged(
-            indexFileName,
-            indexFileInfo.id
-          );
-
-          // Download current index if needed
-          let indexData;
-          if (hasIndexChanged) {
-            indexData = await this.provider.downloadFile(indexFileInfo.id);
-          } else {
-            // Use cached index data if possible
-            const storedMetadata = await this.getStoredFileMetadata(
-              indexFileName
-            );
-            if (storedMetadata && storedMetadata.indexData) {
-              indexData = storedMetadata.indexData;
-            } else {
-              indexData = await this.provider.downloadFile(indexFileInfo.id);
-            }
-          }
-
-          // If no valid index exists, create a new one
-          if (
-            !indexData ||
-            !indexData.weeks ||
-            !Array.isArray(indexData.weeks)
-          ) {
-            indexData = {
-              lastUpdated: Date.now(),
-              weeks: [],
-            };
-          }
-
-          // Get the week we just synced
-          const syncedWeek = await this.dataService.getWeekHistory(
-            weekStartDate
-          );
-
-          if (syncedWeek) {
-            // Find if this week is already in the index
-            const weekIndex = indexData.weeks.findIndex(
-              (w) => w.weekStartDate === weekStartDate
-            );
-
-            const weekEntry = {
-              weekStartDate: weekStartDate,
-              updatedAt:
-                syncedWeek.metadata?.updatedAt ||
-                this.dataService.getCurrentTimestamp(),
-            };
-
-            if (weekIndex >= 0) {
-              // Update existing entry
-              indexData.weeks[weekIndex] = weekEntry;
-            } else {
-              // Add new entry
-              indexData.weeks.push(weekEntry);
-            }
-
-            // Update the index file
-            const uploadResult = await this.provider.uploadFile(
-              indexFileInfo.id,
-              indexData
-            );
-
-            // Store metadata after index update
-            const metadataToStore = {
-              ...(uploadResult || indexFileInfo),
-              indexData: indexData, // Cache the index data
-            };
-            await this.storeFileMetadata(indexFileName, metadataToStore);
-
-            logger.debug(`Updated history index for week ${weekStartDate}`);
-          }
-        } catch (indexError) {
-          logger.warn(
-            `Error updating index after week sync: ${indexError.message}`
-          );
-          // Don't fail the sync if index update fails
-        }
-      }
-
-      return syncSuccessful;
-    } catch (error) {
-      logger.error(`Error syncing week ${weekStartDate}:`, error);
-      return false;
-    }
-  }
-
-  async syncHistory() {
-    try {
-      // First sync the index to determine which weeks need syncing
-      const weeksToSync = await this.syncHistoryIndex();
-
-      logger.info(`Found ${weeksToSync.length} weeks that need syncing`);
-
-      if (weeksToSync.length === 0) {
-        logger.info("No history weeks need syncing");
-        return true;
-      }
-
-      // Sync each week
-      let syncSuccessCount = 0;
-
-      for (const weekInfo of weeksToSync) {
-        const success = await this.syncWeek(
-          weekInfo.weekStartDate,
-          weekInfo.direction
-        );
-
-        if (success) {
-          syncSuccessCount++;
-        }
-      }
-
-      logger.info(
-        `Synced ${syncSuccessCount} out of ${weeksToSync.length} weeks`
-      );
-
-      // Update the last sync timestamp
-      this.lastHistorySyncTimestamp = this.dataService.getCurrentTimestamp();
-      this.storeLastSyncedState();
-
-      // Clear the history dirty flag after successful sync
-      await this.clearDirtyFlag("historyDirty");
-
-      return {
-        success: true,
-        syncedCount: syncSuccessCount,
-      };
-    } catch (error) {
-      logger.error("Error in history sync:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Merge history data from local and remote sources
-   * @param {Array} localHistory - Local history array
-   * @param {Array} remoteHistory - Remote history array
-   * @returns {Object} Merge result with data and change flag
-   * @deprecated Phase 2: Use mergeCoordinator.mergeHistoryData() instead
-   */
-  mergeHistoryData(localHistory, remoteHistory) {
-    // Phase 2: Delegate to merge coordinator (with fallback for compatibility)
-    try {
-      return this.mergeCoordinator.mergeHistoryData(
-        localHistory,
-        remoteHistory
-      );
-    } catch (error) {
-      logger.warn("Phase 2 merge coordinator failed, using fallback:", error);
-      return this.legacyMergeHistoryData(localHistory, remoteHistory);
-    }
-  }
-
-  /**
-   * Legacy history merge implementation (Phase 2: kept as fallback)
-   * @param {Array} localHistory - Local history array
-   * @param {Array} remoteHistory - Remote history array
-   * @returns {Object} Merge result with data and change flag
-   */
-  legacyMergeHistoryData(localHistory, remoteHistory) {
-    logger.info("Starting history merge process");
-    logger.info(`Local history: ${localHistory.length} items`);
-    logger.info(`Remote history: ${remoteHistory.length} items`);
-
-    // Validate both arrays and create safe copies
-    if (!Array.isArray(localHistory)) {
-      logger.warn("Local history is not an array, using empty array");
-      localHistory = [];
-    }
-    if (!Array.isArray(remoteHistory)) {
-      logger.warn("Remote history is not an array, using empty array");
-      remoteHistory = [];
-    }
-
-    // Create a map of weeks by start date for easy lookup
-    const weekMap = new Map();
-
-    // Process all local history first - ensure structure is valid
-    localHistory.forEach((week, index) => {
-      // Skip if week is missing a start date
-      if (!week.weekStartDate) {
-        logger.warn(
-          `Local history item at index ${index} missing weekStartDate, skipping`,
-          week
-        );
-        return;
-      }
-
-      // Log week data for debugging
-      logger.info(`Local week ${week.weekStartDate}:`, {
-        hasTotals: !!week.totals,
-        hasTargets: !!week.targets,
-        updatedAt: week.metadata?.updatedAt || 0,
-      });
-
-      // Ensure totals exists
-      if (!week.totals) {
-        logger.warn(
-          `Local week ${week.weekStartDate} missing totals, adding empty object`
-        );
-        week.totals = {};
-      }
-
-      // Ensure metadata exists
-      if (!week.metadata) {
-        week.metadata = { updatedAt: this.dataService.getCurrentTimestamp() };
-      } else if (!week.metadata.updatedAt) {
-        week.metadata.updatedAt = this.dataService.getCurrentTimestamp();
-      }
-
-      weekMap.set(week.weekStartDate, {
-        source: "local",
-        data: week,
-        updatedAt: week.metadata.updatedAt || 0,
-      });
-    });
-
-    // Track if anything changed
-    let changed = false;
-
-    // Process remote history, overwriting local only if newer
-    remoteHistory.forEach((week, index) => {
-      // Skip if week is missing a start date
-      if (!week.weekStartDate) {
-        logger.warn(
-          `Remote history item at index ${index} missing weekStartDate, skipping`,
-          week
-        );
-        return;
-      }
-
-      // Log week data for debugging
-      logger.info(`Remote week ${week.weekStartDate}:`, {
-        hasTotals: !!week.totals,
-        hasTargets: !!week.targets,
-        updatedAt: week.metadata?.updatedAt || 0,
-      });
-
-      // Ensure totals exists
-      if (!week.totals) {
-        logger.warn(
-          `Remote week ${week.weekStartDate} missing totals, adding empty object`
-        );
-        week.totals = {};
-      }
-
-      // Ensure metadata exists
-      if (!week.metadata) {
-        week.metadata = { updatedAt: this.dataService.getCurrentTimestamp() };
-      } else if (!week.metadata.updatedAt) {
-        week.metadata.updatedAt = this.dataService.getCurrentTimestamp();
-      }
-
-      const existingWeek = weekMap.get(week.weekStartDate);
-
-      if (!existingWeek) {
-        // New week from remote, add it
-        logger.info(`New week found in remote data: ${week.weekStartDate}`);
-        weekMap.set(week.weekStartDate, {
-          source: "remote",
-          data: week,
-          updatedAt: week.metadata.updatedAt || 0,
-        });
-        changed = true;
-      } else {
-        // Week exists in both - compare timestamps and use newer
-        const remoteUpdatedAt = week.metadata?.updatedAt || 0;
-
-        if (remoteUpdatedAt > existingWeek.updatedAt) {
-          // Remote is newer
-          logger.info(
-            `Newer version found for week ${week.weekStartDate}: remote (${remoteUpdatedAt}) > local (${existingWeek.updatedAt})`
-          );
-          weekMap.set(week.weekStartDate, {
-            source: "remote",
-            data: week,
-            updatedAt: remoteUpdatedAt,
-          });
-          changed = true;
-        } else {
-          logger.info(
-            `Using local version for week ${week.weekStartDate}: local (${existingWeek.updatedAt}) >= remote (${remoteUpdatedAt})`
-          );
-        }
-      }
-    });
-
-    // Convert map back to array and sort by date (newest first)
-    const mergedData = Array.from(weekMap.values())
-      .map((item) => item.data)
-      .sort((a, b) => {
-        return new Date(b.weekStartDate) - new Date(a.weekStartDate);
-      });
-
-    logger.info(
-      `Merge complete. Result has ${mergedData.length} weeks, changed: ${changed}`
-    );
-
-    // Do a final validation to ensure all weeks have the required structure
-    const validatedData = mergedData.filter((week) => {
-      if (!week.weekStartDate) {
-        logger.warn("Filtering out history item missing weekStartDate", week);
-        return false;
-      }
-
-      // Ensure totals exists
-      if (!week.totals) {
-        logger.warn(
-          `Week ${week.weekStartDate} missing totals, adding empty object`
-        );
-        week.totals = {};
-      }
-
-      // Ensure metadata exists
-      if (!week.metadata) {
-        week.metadata = { updatedAt: this.dataService.getCurrentTimestamp() };
-      }
-
-      return true;
-    });
-
-    if (validatedData.length !== mergedData.length) {
-      logger.warn(
-        `Filtered out ${
-          mergedData.length - validatedData.length
-        } invalid history items`
-      );
-      changed = true;
-    }
-
-    return {
-      data: validatedData,
-      changed: changed || validatedData.length !== localHistory.length,
-    };
-  }
-
-  startAutoSync(intervalMinutes = 15) {
-    // Stop any existing auto-sync
-    this.stopAutoSync();
-
-    // Convert minutes to milliseconds
-    const interval = intervalMinutes * 60 * 1000;
-
-    // Start a new auto-sync timer
-    this.autoSyncTimer = setInterval(() => {
-      if (navigator.onLine) {
-        this.sync().catch((error) => {
-          logger.warn("Auto-sync failed:", error);
-        });
-      }
-    }, interval);
-
-    logger.info(`Auto-sync started, interval: ${intervalMinutes} minutes`);
-  }
-
-  stopAutoSync() {
-    if (this.autoSyncTimer) {
-      clearInterval(this.autoSyncTimer);
-      this.autoSyncTimer = null;
-      logger.info("Auto-sync stopped");
-    }
-  }
-
-  checkNetworkConstraints() {
-    // Check if online
-    if (!navigator.onLine) {
-      return false;
-    }
-
-    // Check Wi-Fi only constraint if applicable
-    const syncWifiOnly = this.syncWifiOnly || false;
-
-    if (syncWifiOnly) {
-      // Try to detect connection type
-      if ("connection" in navigator) {
-        const connection = navigator.connection;
-        if (connection && connection.type) {
-          // Only proceed if on wifi
-          return connection.type === "wifi";
-        }
-      }
-    }
-
-    // If no constraints or can't detect, allow sync
-    return true;
-  }
-
   // Add this to CloudSyncManager
   validateData(data, type = "current") {
     // Phase 1: Use extracted utility (keeping original as fallback)
@@ -1957,39 +691,6 @@ export class CloudSyncManager {
       logger.error("Error in sync debug:", error);
       return { error: error.message };
     }
-  }
-
-  /**
-   * Check if a cloud file has changed by comparing revision/ETag
-   * @param {string} fileName - The file name to check
-   * @param {string} fileId - The file ID in the cloud
-   * @returns {Promise<boolean>} True if file has changed, false if unchanged
-   */
-  async checkIfFileChanged(fileName, fileId) {
-    return this.fileMetadataManager.checkIfFileChanged(
-      fileName,
-      fileId,
-      this.provider
-    );
-  }
-
-  /**
-   * Store file metadata after sync
-   * @param {string} fileName - The file name used as key
-   * @param {Object} fileInfo - The file info returned from provider
-   * @returns {Promise<void>}
-   */
-  async storeFileMetadata(fileName, fileInfo) {
-    return this.fileMetadataManager.storeFileMetadata(fileName, fileInfo);
-  }
-
-  /**
-   * Get stored file metadata
-   * @param {string} fileName - The file name to get metadata for
-   * @returns {Promise<Object|null>} The stored metadata or null
-   */
-  async getStoredFileMetadata(fileName) {
-    return this.fileMetadataManager.getStoredFileMetadata(fileName);
   }
 }
 

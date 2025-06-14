@@ -274,7 +274,11 @@ class SetupWizard {
         <div class="wizard-progress">Step 4 of 4</div>
         <div class="wizard-buttons">
           <button id="cloud-provider-back-btn" class="secondary-btn">Back</button>
-          <button id="cloud-provider-connect-btn" class="primary-btn">Connect</button>
+          <button id="cloud-provider-connect-btn" class="${
+            this.selections.cloudSyncProvider ? "primary-btn" : "small-btn"
+          }" ${
+      !this.selections.cloudSyncProvider ? "disabled" : ""
+    }>Connect</button>
         </div>
       </div>
     `;
@@ -468,6 +472,12 @@ class SetupWizard {
           .forEach((radio) => {
             radio.addEventListener("change", (e) => {
               this.selections.cloudSyncProvider = e.target.value;
+              const connectBtn = document.getElementById(
+                "cloud-provider-connect-btn"
+              );
+              if (connectBtn) {
+                connectBtn.disabled = false;
+              }
             });
           });
         break;
