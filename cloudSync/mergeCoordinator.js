@@ -1,14 +1,23 @@
 /**
- * Merge Coordinator
+ * MIND Diet Tracker PWA
+ * Copyright (c) 2024
  *
- * Coordinates all merge strategies and provides a unified interface for cloudSync.js.
- * Manages the different merge scenarios and delegates to appropriate strategies.
+ * Merge Coordinator
+ * Coordinates merge operations between local and cloud data
  */
 
-import { logger } from "../../logger.js";
-import { CurrentWeekMergeStrategy } from "./currentWeekMergeStrategy.js";
-import { HistoryMergeStrategy } from "./historyMergeStrategy.js";
-import { ArchiveMergeStrategy } from "./archiveMergeStrategy.js";
+import { logger } from "../logger.js";
+import {
+  CurrentWeekMergeStrategy,
+  HistoryMergeStrategy,
+  ArchiveMergeStrategy,
+} from "./mergeStrategies.js";
+import {
+  validateMergeResult,
+  getCurrentTimestamp,
+  compareTimestamps,
+  logSyncError,
+} from "./syncUtils.js";
 
 export class MergeCoordinator {
   constructor(dataService, stateManager) {

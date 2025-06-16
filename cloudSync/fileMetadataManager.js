@@ -1,6 +1,21 @@
-import { logger } from "../../logger.js";
-import { ValidationUtils } from "../utils/validationUtils.js";
-import { ChangeDetectionUtils } from "../utils/changeDetectionUtils.js";
+/**
+ * MIND Diet Tracker PWA
+ * Copyright (c) 2024
+ *
+ * File Metadata Manager
+ * Manages metadata for cloud storage files
+ */
+
+import { logger } from "../logger.js";
+import {
+  getCurrentTimestamp,
+  isTimestampValid,
+  compareTimestamps,
+  validateSyncData,
+  logSyncError,
+  compareRevisionInfo,
+  hasValidFileMetadata,
+} from "./syncUtils.js";
 
 /**
  * Manages file metadata for cloud synchronization
@@ -109,7 +124,7 @@ export class FileMetadataManager {
         ? "dropbox"
         : "gdrive";
 
-      const comparison = ChangeDetectionUtils.compareRevisionInfo(
+      const comparison = compareRevisionInfo(
         storedMetadata,
         fileInfo,
         providerType
@@ -138,6 +153,6 @@ export class FileMetadataManager {
       .includes("dropbox")
       ? "dropbox"
       : "gdrive";
-    return ValidationUtils.hasValidFileMetadata(fileMetadata, providerType);
+    return hasValidFileMetadata(fileMetadata, providerType);
   }
 }

@@ -1,7 +1,27 @@
-import { logger } from "../../logger.js";
+/**
+ * MIND Diet Tracker PWA
+ * Copyright (c) 2024
+ *
+ * Sync Operation Handler
+ * Handles sync operations and coordinates between services
+ */
+
+import { logger } from "../logger.js";
 import { ChangeDetectionService } from "./changeDetectionService.js";
 import { FileMetadataManager } from "./fileMetadataManager.js";
-import { MergeCoordinator } from "../mergeStrategies/mergeCoordinator.js";
+import { MergeCoordinator } from "./mergeCoordinator.js";
+import {
+  generateSyncId,
+  isNetworkAvailable,
+  getSyncStatus,
+  updateSyncStatus,
+  clearSyncStatus,
+  getSyncError,
+  logSyncError,
+  retryWithBackoff,
+  debounce,
+  throttle,
+} from "./syncUtils.js";
 
 /**
  * Handles sync operations for cloud synchronization

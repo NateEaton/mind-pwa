@@ -1,28 +1,35 @@
-/*
+/**
  * MIND Diet Tracker PWA
- * Copyright (C) 2025 Nathan A. Eaton Jr.
+ * Copyright (c) 2024
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ * Cloud Sync Manager
+ * Handles synchronization between local data and cloud storage
+ * Dependencies:
+ * - Google Drive Provider
+ * - Dropbox Provider
  */
 
 import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
 import DropboxProvider from "./cloudProviders/dropboxProvider.js";
 import logger from "./logger.js";
-// Phase 1: Import extracted utilities
-import { TimestampUtils } from "./cloudSync/utils/timestampUtils.js";
-import { ValidationUtils } from "./cloudSync/utils/validationUtils.js";
-import { SyncOperationHandler } from "./cloudSync/services/syncOperationHandler.js";
+import {
+  getCurrentTimestamp,
+  isTimestampValid,
+  compareTimestamps,
+  validateSyncData,
+  validateMergeResult,
+  generateSyncId,
+  isNetworkAvailable,
+  getSyncStatus,
+  updateSyncStatus,
+  clearSyncStatus,
+  getSyncError,
+  logSyncError,
+  retryWithBackoff,
+  debounce,
+  throttle,
+} from "./cloudSync/syncUtils.js";
+import { SyncOperationHandler } from "./cloudSync/syncOperationHandler.js";
 
 /**
  * Manages cloud synchronization for the application
@@ -46,10 +53,6 @@ export class CloudSyncManager {
     this.syncInProgress = false;
     this.syncInterval = null;
     this.autoSyncEnabled = false;
-
-    // Initialize utility instances
-    this.timestampUtils = TimestampUtils;
-    this.validationUtils = ValidationUtils;
 
     // Initialize sync operation handler
     this.syncOperationHandler = new SyncOperationHandler(

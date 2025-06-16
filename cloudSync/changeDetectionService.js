@@ -16,7 +16,14 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import logger from "../../logger.js";
+import logger from "../logger.js";
+import {
+  getCurrentTimestamp,
+  isTimestampValid,
+  compareTimestamps,
+  debounce,
+  throttle,
+} from "./syncUtils.js";
 
 /**
  * Change Detection Service
