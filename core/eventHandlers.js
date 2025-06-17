@@ -161,14 +161,6 @@ class EventHandlers {
       this.handleVisibilityChange();
     });
 
-    // Attempt to sync before unload
-    window.addEventListener("beforeunload", () => {
-      this.handleBeforeUnload();
-    });
-
-    // Add periodic sync check when app is active
-    this.setupPeriodicSyncCheck();
-
     logger.info("Event listeners setup complete");
   }
 
@@ -690,60 +682,6 @@ class EventHandlers {
         }
       }
     }
-  }
-
-  /**
-   * Handle before unload events
-   */
-  handleBeforeUnload() {
-    if (
-      this.appManager.getSyncEnabled() &&
-      this.appManager.getCloudSync() &&
-      navigator.onLine
-    ) {
-      try {
-        // Create a sync record but don't wait for response
-        const currentState = this.dataService.loadState();
-        if (
-          this.appManager.getCloudSync().provider &&
-          this.appManager.getCloudSync().isAuthenticated
-        ) {
-          const fileInfo = this.appManager
-            .getCloudSync()
-            .provider.findOrCreateFile("mind-diet-current-week.json");
-          if (fileInfo && fileInfo.id) {
-            this.appManager
-              .getCloudSync()
-              .provider.uploadFile(fileInfo.id, currentState);
-          }
-        }
-      } catch (e) {
-        logger.warn("Could not sync on page unload:", e);
-      }
-    }
-  }
-
-  /**
-   * Setup periodic sync check when app is active
-   */
-  setupPeriodicSyncCheck() {
-    if (this.syncCheckInterval) clearInterval(this.syncCheckInterval);
-
-    // Check every 10 minutes when app is active
-    this.syncCheckInterval = setInterval(() => {
-      if (
-        !document.hidden &&
-        this.appManager.getSyncEnabled() &&
-        this.appManager.getCloudSync() &&
-        navigator.onLine
-      ) {
-        const timeSinceLastSync = Date.now() - this.appManager.lastSyncTime;
-        if (timeSinceLastSync >= this.appManager.MIN_SYNC_INTERVAL) {
-          logger.debug("Periodic sync check triggered");
-          this.syncData();
-        }
-      }
-    }, this.appManager.MIN_SYNC_INTERVAL);
   }
 }
 

@@ -117,47 +117,49 @@ class GoogleDriveProvider {
   }
 
   async checkAuth() {
-    try {
-      logger.info("Checking Google authentication");
-      // Try to get cached token from localStorage first
-      const cachedTokenStr = localStorage.getItem("google_drive_token");
-
-      if (cachedTokenStr) {
-        try {
-          const cachedToken = JSON.parse(cachedTokenStr);
-          logger.info("Found cached token, setting in gapi");
-
-          // Set the token in gapi
-          this.gapi.client.setToken(cachedToken);
-
-          // Schedule token refresh if needed
-          this.scheduleTokenRefresh(cachedToken);
-
-          // Test if token works
+      try {
+        logger.info("Checking Google authentication");
+        const cachedTokenStr = localStorage.getItem("google_drive_token");
+  
+        if (cachedTokenStr) {
           try {
-            await this.gapi.client.drive.files.list({
-              pageSize: 1,
-              spaces: "appDataFolder",
-            });
-            logger.info("Token is valid!");
-            return true;
+            const cachedToken = JSON.parse(cachedTokenStr);
+            logger.info("Found cached token, setting in gapi");
+  
+            // Set the token in gapi
+            this.gapi.client.setToken(cachedToken);
+  
+            // Schedule token refresh if needed
+            this.scheduleTokenRefresh(cachedToken);
+  
+            // Test if token works
+            try {
+              // A simple metadata call is a better test than listing files
+              await this.gapi.client.drive.about.get({ fields: "user" });
+              logger.info("Token is valid!");
+              return true;
+            } catch (e) {
+              // CHANGE: Check if the error is an auth error (401) before refreshing
+              if (e.status === 401) {
+                logger.warn("Cached token is not valid, attempting to refresh", e);
+                // Try to silently refresh the token
+                return await this.refreshToken();
+              }
+              // For other errors (e.g., network), re-throw or handle differently
+              logger.error("Error during token validation (not an auth error):", e);
+              return false;
+            }
           } catch (e) {
-            logger.warn("Cached token not valid, attempting to refresh", e);
-            // Try to silently refresh the token
-            return await this.refreshToken();
+            logger.error("Error parsing or validating cached token:", e);
+            localStorage.removeItem("google_drive_token");
           }
-        } catch (e) {
-          logger.error("Error parsing cached token:", e);
-          localStorage.removeItem("google_drive_token");
         }
+  
+        return false;
+      } catch (error) {
+        logger.warn("Not authenticated with Google Drive:", error);
+        return false;
       }
-
-      // If we get here, either no token or invalid token
-      return false;
-    } catch (error) {
-      logger.warn("Not authenticated with Google Drive:", error);
-      return false;
-    }
   }
 
   scheduleTokenRefresh(token) {
@@ -189,47 +191,48 @@ class GoogleDriveProvider {
   }
 
   async refreshToken() {
-    try {
-      logger.info("Attempting to refresh token");
-
-      return new Promise((resolve) => {
-        // Set up a temporary callback for token refresh
-        this.tokenClient.callback = async (resp) => {
-          if (resp.error) {
-            logger.error("Token refresh failed:", resp);
-            // Clear the token from storage on refresh failure
-            localStorage.removeItem("google_drive_token");
-            resolve(false);
-            return;
-          }
-
-          // Get the new token
-          try {
-            const token = this.gapi.client.getToken();
-            if (token) {
-              logger.info("Got new token, saving and scheduling next refresh");
-              localStorage.setItem("google_drive_token", JSON.stringify(token));
-
-              // Schedule the next refresh
-              this.scheduleTokenRefresh(token);
-
-              resolve(true);
-              return;
-            }
-          } catch (e) {
-            logger.error("Error saving refreshed token:", e);
-          }
-
-          resolve(false);
-        };
-
-        // Request token refresh
-        this.tokenClient.requestAccessToken({ prompt: "" });
-      });
-    } catch (error) {
-      logger.error("Error during token refresh:", error);
-      return false;
-    }
+      try {
+          logger.info("Attempting to silently refresh token");
+  
+          return new Promise((resolve) => {
+              // Set up a temporary callback for token refresh
+              this.tokenClient.callback = async (resp) => {
+                  if (resp.error) {
+                      logger.error("Silent token refresh failed:", resp);
+                      // Clear the token from storage on refresh failure
+                      localStorage.removeItem("google_drive_token");
+                      resolve(false);
+                      return;
+                  }
+  
+                  // --- START OF FIX ---
+  
+                  logger.info("Token refreshed successfully, applying new token.");
+  
+                  // 1. CRITICAL: Update the gapi client with the new token
+                  this.gapi.client.setToken(resp);
+  
+                  // 2. Use the `resp` object, which IS the new token, not gapi.client.getToken()
+                  const newToken = resp;
+  
+                  // 3. Save the NEW token to storage
+                  localStorage.setItem("google_drive_token", JSON.stringify(newToken));
+  
+                  // 4. Schedule the NEXT refresh using the new token's expiry info
+                  this.scheduleTokenRefresh(newToken);
+  
+                  resolve(true);
+  
+                  // --- END OF FIX ---
+              };
+  
+              // Request token refresh silently (no UI prompt)
+              this.tokenClient.requestAccessToken({ prompt: "" });
+          });
+      } catch (error) {
+          logger.error("Error during token refresh initiation:", error);
+          return false;
+      }
   }
 
   async authenticate() {
