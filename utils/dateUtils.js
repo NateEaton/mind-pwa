@@ -20,7 +20,7 @@
  * DateUtils - Centralized date utility functions
  */
 
-import logger from "./logger.js";
+import logger from "../core/logger.js";
 
 /**
  * Format a date object to a human-readable string

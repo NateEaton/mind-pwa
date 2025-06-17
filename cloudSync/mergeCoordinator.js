@@ -6,7 +6,7 @@
  * Coordinates merge operations between local and cloud data
  */
 
-import { logger } from "../logger.js";
+import { logger } from "../core/logger.js";
 import {
   CurrentWeekMergeStrategy,
   HistoryMergeStrategy,

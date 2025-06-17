@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import logger from "../logger.js";
+import logger from "../core/logger.js";
 import {
   getCurrentTimestamp,
   isTimestampValid,

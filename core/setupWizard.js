@@ -19,9 +19,9 @@
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
-import cloudSync from "./cloudSync.js";
-import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
-import DropboxProvider from "./cloudProviders/dropboxProvider.js";
+import cloudSync from "../cloudSync/cloudSync.js";
+import GoogleDriveProvider from "../cloudProviders/googleDriveProvider.js";
+import DropboxProvider from "../cloudProviders/dropboxProvider.js";
 
 const logger = createLogger("setupWizard");
 

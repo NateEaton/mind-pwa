@@ -20,7 +20,7 @@
  * AppUtils - Common utility functions for the application
  */
 
-import logger from "./logger.js";
+import logger from "../core/logger.js";
 
 /**
  * Trigger haptic feedback for device vibration

@@ -56,18 +56,18 @@ const isDemoHost = window?.location?.hostname?.includes("vercel.app");
   }
 })();
 
-import dataService from "./dataService.js";
-import stateManager from "./stateManager.js";
+import dataService from "./core/dataService.js";
+import stateManager from "./core/stateManager.js";
 import uiRenderer from "./uiRenderer.js";
-import appUtils from "./appUtils.js";
-import dateUtils from "./dateUtils.js";
-import historyModalManager from "./historyModalManager.js";
-import importExportManager from "./importExportManager.js";
-import settingsManager from "./settingsManager.js";
-import CloudSyncManager from "./cloudSync.js";
-import EventHandlers from "./eventHandlers.js";
+import appUtils from "./utils/appUtils.js";
+import dateUtils from "./utils/dateUtils.js";
+import historyModalManager from "./core/historyModalManager.js";
+import importExportManager from "./core/importExportManager.js";
+import settingsManager from "./core/settingsManager.js";
+import CloudSyncManager from "./cloudSync/cloudSync.js";
+import EventHandlers from "./core/eventHandlers.js";
 
-import { createLogger, configure, LOG_LEVELS } from "./logger.js";
+import { createLogger, configure, LOG_LEVELS } from "./core/logger.js";
 const logger = createLogger("app");
 
 (function initializeLogger() {
@@ -582,7 +582,7 @@ async function finalizeLoggerConfig() {
 }
 
 // ... existing imports ...
-import setupWizard from "./setupWizard.js";
+import setupWizard from "./core/setupWizard.js";
 
 // ... existing code ...
 

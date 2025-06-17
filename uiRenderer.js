@@ -16,9 +16,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import dataService from "./dataService.js";
-import stateManager from "./stateManager.js";
-import logger from "./logger.js";
+import dataService from "./core/dataService.js";
+import stateManager from "./core/stateManager.js";
+import logger from "./core/logger.js";
 
 /**
  * UIRenderer - Responsible for rendering UI components based on application state

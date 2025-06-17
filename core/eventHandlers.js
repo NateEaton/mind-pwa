@@ -17,7 +17,7 @@
  */
 
 import { createLogger } from "./logger.js";
-import appUtils from "./appUtils.js";
+import appUtils from "../utils/appUtils.js";
 import DevTools from "./devTools.js";
 
 const logger = createLogger("eventHandlers");
@@ -414,7 +414,7 @@ class EventHandlers {
     // Import config to check DEV_MODE
     let isDevMode = false;
     try {
-      const config = await import("./config.js");
+      const config = await import("../config.js");
       isDevMode = config.CONFIG.DEV_MODE || false;
     } catch (error) {
       logger.warn(

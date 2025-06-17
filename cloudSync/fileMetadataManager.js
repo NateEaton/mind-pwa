@@ -6,7 +6,7 @@
  * Manages metadata for cloud storage files
  */
 
-import { logger } from "../logger.js";
+import { logger } from "../core/logger.js";
 import {
   getCurrentTimestamp,
   isTimestampValid,

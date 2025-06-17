@@ -21,7 +21,7 @@
  */
 
 import logger from "./logger.js";
-import dateUtils from "./dateUtils.js";
+import dateUtils from "../utils/dateUtils.js";
 
 /**
  * Calculate weekly totals from daily breakdown data

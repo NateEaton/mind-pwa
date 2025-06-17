@@ -9,9 +9,9 @@
  * - Dropbox Provider
  */
 
-import GoogleDriveProvider from "./cloudProviders/googleDriveProvider.js";
-import DropboxProvider from "./cloudProviders/dropboxProvider.js";
-import logger from "./logger.js";
+import GoogleDriveProvider from "../cloudProviders/googleDriveProvider.js";
+import DropboxProvider from "../cloudProviders/dropboxProvider.js";
+import logger from "../core/logger.js";
 import {
   getCurrentTimestamp,
   isTimestampValid,
@@ -28,8 +28,8 @@ import {
   retryWithBackoff,
   debounce,
   throttle,
-} from "./cloudSync/syncUtils.js";
-import { SyncOperationHandler } from "./cloudSync/syncOperationHandler.js";
+} from "./syncUtils.js";
+import { SyncOperationHandler } from "./syncOperationHandler.js";
 
 /**
  * Manages cloud synchronization for the application

@@ -18,7 +18,7 @@
 
 // cloudProviders/dropboxProvider.js
 
-import logger from "../logger.js";
+import logger from "../core/logger.js";
 
 class DropboxProvider {
   constructor() {

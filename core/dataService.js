@@ -29,7 +29,7 @@
  */
 
 import logger from "./logger.js";
-import dateUtils from "./dateUtils.js";
+import dateUtils from "../utils/dateUtils.js";
 
 // Constants
 const DB_NAME = "MindDietTrackerDB";

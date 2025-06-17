@@ -6,7 +6,7 @@
  * Handles sync operations and coordinates between services
  */
 
-import { logger } from "../logger.js";
+import { logger } from "../core/logger.js";
 import { ChangeDetectionService } from "./changeDetectionService.js";
 import { FileMetadataManager } from "./fileMetadataManager.js";
 import { MergeCoordinator } from "./mergeCoordinator.js";

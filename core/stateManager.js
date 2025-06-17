@@ -17,9 +17,9 @@
  */
 
 import dataService from "./dataService.js";
-import appUtils from "./appUtils.js";
-import dateUtils from "./dateUtils.js";
-import uiRenderer from "./uiRenderer.js";
+import appUtils from "../utils/appUtils.js";
+import dateUtils from "../utils/dateUtils.js";
+import uiRenderer from "../uiRenderer.js";
 import logger from "./logger.js";
 
 /**

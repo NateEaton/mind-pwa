@@ -18,7 +18,7 @@
 
 // cloudProviders/googleDriveProvider.js
 
-import logger from "../logger.js";
+import logger from "../core/logger.js";
 
 class GoogleDriveProvider {
   constructor() {

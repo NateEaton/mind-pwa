@@ -21,8 +21,8 @@
  */
 
 import stateManager from "./stateManager.js";
-import uiRenderer from "./uiRenderer.js";
-import dateUtils from "./dateUtils.js";
+import uiRenderer from "../uiRenderer.js";
+import dateUtils from "../utils/dateUtils.js";
 import dataService from "./dataService.js";
 import logger from "./logger.js";
 

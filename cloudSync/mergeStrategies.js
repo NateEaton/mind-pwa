@@ -6,7 +6,7 @@
  * Handles merging of data between local and remote sources
  */
 
-import { logger } from "../logger.js";
+import { logger } from "../core/logger.js";
 
 /**
  * Current Week Merge Strategy

@@ -5,7 +5,7 @@
  * Utility functions for cloud sync operations
  */
 
-import { logger } from "../logger.js";
+import { logger } from "../core/logger.js";
 
 // Timestamp Utilities
 export function getCurrentTimestamp() {
