@@ -21,7 +21,7 @@
  */
 
 import stateManager from "./stateManager.js";
-import uiRenderer from "../uiRenderer.js";
+import uiRenderer from "../ui/renderer.js";
 import dataService from "./dataService.js";
 import logger from "./logger.js";
 

@@ -21,7 +21,7 @@
  */
 
 import dataService from "./dataService.js";
-import uiRenderer from "../uiRenderer.js";
+import uiRenderer from "../ui/renderer.js";
 import logger from "./logger.js";
 
 // Module state

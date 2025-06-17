@@ -58,7 +58,7 @@ const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
 import dataService from "./core/dataService.js";
 import stateManager from "./core/stateManager.js";
-import uiRenderer from "./uiRenderer.js";
+import uiRenderer from "./ui/renderer.js";
 import appUtils from "./utils/appUtils.js";
 import dateUtils from "./utils/dateUtils.js";
 import historyModalManager from "./core/historyModalManager.js";
@@ -66,6 +66,7 @@ import importExportManager from "./core/importExportManager.js";
 import settingsManager from "./core/settingsManager.js";
 import CloudSyncManager from "./cloudSync/cloudSync.js";
 import EventHandlers from "./core/eventHandlers.js";
+import AppManager from "./core/appManager.js";
 
 import { createLogger, configure, LOG_LEVELS } from "./core/logger.js";
 const logger = createLogger("app");
@@ -253,219 +254,6 @@ const foodGroups = [
       "Limit fried food (especially commercial) and fast food to less than 1 serving/week (target ≤1).",
   },
 ];
-
-// Application Manager Class - Encapsulates global state
-class AppManager {
-  constructor() {
-    this.cloudSync = null;
-    this.syncEnabled = false;
-    this.syncReady = false;
-    this.lastSyncTime = 0;
-    this.lastFocusChangeTime = 0;
-    this.visibilityChangeTimeout = null;
-    this.initialSyncInProgress = false;
-    this.MIN_SYNC_INTERVAL = 1 * 60 * 1000; // 1 minute between auto-syncs
-
-    // DOM Elements cache
-    this.domElements = {
-      // Menu elements
-      mainMenu: null,
-      aboutBtn: null,
-      settingsBtn: null,
-      exportBtn: null,
-      importBtnTrigger: null,
-      importFileInput: null,
-
-      // Edit totals modal elements
-      editCurrentWeekBtn: null,
-      editHistoryWeekBtn: null,
-      editTotalsModal: null,
-      editTotalsTitle: null,
-      editTotalsList: null,
-      editTotalsItemTemplate: null,
-      editTotalsCloseBtn: null,
-      editTotalsCancelBtn: null,
-      editTotalsSaveBtn: null,
-
-      // Footer elements
-      appVersionElement: null,
-    };
-
-    // Initialization state
-    this.initialized = false;
-  }
-
-  // Initialize DOM element references
-  initializeDOMElements() {
-    this.domElements.mainMenu = document.getElementById("main-menu");
-    this.domElements.aboutBtn = document.getElementById("about-btn");
-    this.domElements.settingsBtn = document.getElementById("settings-btn");
-    this.domElements.exportBtn = document.getElementById("export-btn");
-    this.domElements.importBtnTrigger =
-      document.getElementById("import-btn-trigger");
-    this.domElements.importFileInput =
-      document.getElementById("import-file-input");
-    this.domElements.editCurrentWeekBtn = document.getElementById(
-      "edit-current-week-btn"
-    );
-    this.domElements.editHistoryWeekBtn = document.getElementById(
-      "edit-history-week-btn"
-    );
-    this.domElements.editTotalsModal =
-      document.getElementById("edit-totals-modal");
-    this.domElements.editTotalsTitle =
-      document.getElementById("edit-totals-title");
-    this.domElements.editTotalsList =
-      document.getElementById("edit-totals-list");
-    this.domElements.editTotalsItemTemplate = document.getElementById(
-      "edit-totals-item-template"
-    );
-    this.domElements.editTotalsCloseBtn = document.getElementById(
-      "edit-totals-close-btn"
-    );
-    this.domElements.editTotalsCancelBtn = document.getElementById(
-      "edit-totals-cancel-btn"
-    );
-    this.domElements.editTotalsSaveBtn = document.getElementById(
-      "edit-totals-save-btn"
-    );
-    this.domElements.appVersionElement = document.getElementById("app-version");
-  }
-
-  // Getters for controlled access
-  getCloudSync() {
-    return this.cloudSync;
-  }
-  getSyncEnabled() {
-    return this.syncEnabled;
-  }
-  getSyncReady() {
-    return this.syncReady;
-  }
-  getDomElements() {
-    return this.domElements;
-  }
-
-  // Setters with validation
-  setCloudSync(cloudSync) {
-    this.cloudSync = cloudSync;
-    this.updateSyncUIElements();
-  }
-
-  setSyncEnabled(enabled) {
-    this.syncEnabled = enabled;
-    this.updateSyncUIElements();
-  }
-
-  setSyncReady(ready) {
-    this.syncReady = ready;
-    this.updateSyncUIElements();
-    logger.info("Sync readiness set to:", this.syncReady);
-  }
-
-  /**
-   * Update the sync UI elements based on current state
-   */
-  updateSyncUIElements() {
-    // Check if online
-    const isOnline = navigator.onLine;
-
-    // Check if we have a cloud sync manager
-    const hasSyncManager = !!this.cloudSync;
-
-    // Check authentication status (provider-specific)
-    let isAuthenticated = false;
-    let providerName = "none";
-
-    if (hasSyncManager && this.cloudSync.provider) {
-      // Get provider name for more detailed logging
-      providerName = this.cloudSync.provider.constructor.name;
-
-      // Check if the current provider is authenticated
-      if (providerName.includes("Dropbox")) {
-        // For Dropbox, check if we have an access token
-        isAuthenticated = !!this.cloudSync.provider.ACCESS_TOKEN;
-      } else {
-        // For Google Drive, use the internal flag
-        isAuthenticated = this.cloudSync.isAuthenticated;
-      }
-    }
-
-    // Get other sync state
-    const isReady = this.syncReady;
-    const syncInProgress = hasSyncManager && this.cloudSync.syncInProgress;
-
-    // Condition for when sync should be enabled
-    const syncButtonEnabled =
-      isOnline &&
-      hasSyncManager &&
-      isAuthenticated &&
-      !syncInProgress &&
-      this.syncEnabled;
-
-    logger.info("Updating sync UI elements with state:", {
-      online: isOnline,
-      cloudSyncExists: hasSyncManager,
-      providerName,
-      isAuthenticated,
-      syncReady: isReady,
-      syncInProgress,
-      syncEnabled: this.syncEnabled,
-      syncButtonEnabled,
-    });
-
-    // Update main menu sync button
-    const menuSyncBtn = document.getElementById("sync-btn");
-    if (menuSyncBtn) {
-      menuSyncBtn.disabled = !syncButtonEnabled;
-
-      if (syncInProgress) {
-        menuSyncBtn.innerHTML = `<i class="mdi mdi-sync mdi-spin"></i> Syncing...`;
-        menuSyncBtn.classList.add("syncing");
-      } else {
-        menuSyncBtn.innerHTML = `<i class="mdi mdi-cloud-sync-outline"></i> Sync Now`;
-        menuSyncBtn.classList.remove("syncing");
-      }
-    }
-
-    // Update settings dialog sync button
-    const settingsSyncBtn = document.getElementById("sync-now-btn");
-    if (settingsSyncBtn) {
-      settingsSyncBtn.disabled = !syncButtonEnabled;
-
-      // Optionally update button text here too
-      if (syncInProgress) {
-        settingsSyncBtn.textContent = "Syncing...";
-        settingsSyncBtn.classList.add("syncing");
-      } else {
-        settingsSyncBtn.textContent = "Sync Now";
-        settingsSyncBtn.classList.remove("syncing");
-      }
-    }
-
-    // Update sync status indicator in settings if it exists
-    const syncStatusEl = document.getElementById("sync-status");
-    if (syncStatusEl) {
-      let statusText = "Not connected";
-
-      if (!isOnline) {
-        statusText = "Offline";
-      } else if (!hasSyncManager) {
-        statusText = "Not initialized";
-      } else if (syncInProgress) {
-        statusText = "Syncing...";
-      } else if (isAuthenticated) {
-        statusText = "Connected";
-      } else {
-        statusText = "Authentication required";
-      }
-
-      syncStatusEl.textContent = statusText;
-      syncStatusEl.className =
-        "status-value " + (isAuthenticated ? "connected" : "disconnected");
-    }
-  }
-}
 
 // Create single app manager instance
 const appManager = new AppManager();
@@ -1050,42 +838,6 @@ function setupSyncButton() {
   // Initial button state
   appManager.updateSyncUIElements();
 }
-
-/**
- * Callback for when a day is selected in the Daily Tracker's day navigation bar.
- * @param {string} newSelectedDateStr - The YYYY-MM-DD string of the newly selected date.
- */
-function handleTrackerDaySelect(newSelectedDateStr) {
-  logger.debug(`Tracker day selected: ${newSelectedDateStr}`);
-  const currentState = stateManager.getState();
-
-  // Basic validation: ensure the newSelectedDateStr is within the current week
-  const weekStartDateObj = new Date(
-    currentState.currentWeekStartDate + "T00:00:00"
-  );
-  const weekEndDateObj = new Date(weekStartDateObj);
-  weekEndDateObj.setDate(weekStartDateObj.getDate() + 6);
-  const newSelectedDateObj = new Date(newSelectedDateStr + "T00:00:00");
-
-  if (
-    newSelectedDateObj >= weekStartDateObj &&
-    newSelectedDateObj <= weekEndDateObj
-  ) {
-    stateManager.dispatch({
-      type: stateManager.ACTION_TYPES.SET_SELECTED_TRACKER_DATE,
-      payload: { date: newSelectedDateStr },
-    });
-  } else {
-    logger.warn(
-      `Attempted to select date ${newSelectedDateStr} outside of current week ${currentState.currentWeekStartDate}. Ignoring.`
-    );
-    // Optionally, provide feedback to the user or revert the visual selection in UI
-    // The UI will re-render based on state changes via the subscription system.
-  }
-}
-
-// Track day selection handler for uiRenderer callbacks
-appManager.handleTrackerDaySelect = handleTrackerDaySelect;
 
 /**
  * Close the main menu

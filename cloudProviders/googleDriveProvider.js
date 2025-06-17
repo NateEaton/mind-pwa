@@ -33,6 +33,8 @@ class GoogleDriveProvider {
     this.tokenClient = null;
     this.currentUser = null;
     this.configLoaded = false;
+    this.tokenRefreshTimeout = null;
+    this.TOKEN_REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes before expiration
   }
 
   async initialize() {
@@ -128,6 +130,9 @@ class GoogleDriveProvider {
           // Set the token in gapi
           this.gapi.client.setToken(cachedToken);
 
+          // Schedule token refresh if needed
+          this.scheduleTokenRefresh(cachedToken);
+
           // Test if token works
           try {
             await this.gapi.client.drive.files.list({
@@ -138,7 +143,6 @@ class GoogleDriveProvider {
             return true;
           } catch (e) {
             logger.warn("Cached token not valid, attempting to refresh", e);
-
             // Try to silently refresh the token
             return await this.refreshToken();
           }
@@ -156,16 +160,45 @@ class GoogleDriveProvider {
     }
   }
 
-  // Add a new method to GoogleDriveProvider for token refresh
+  scheduleTokenRefresh(token) {
+    // Clear any existing refresh timeout
+    if (this.tokenRefreshTimeout) {
+      clearTimeout(this.tokenRefreshTimeout);
+    }
+
+    // Calculate time until token expires
+    const expiresIn = token.expires_in * 1000; // Convert to milliseconds
+    const timeUntilExpiry = expiresIn - this.TOKEN_REFRESH_THRESHOLD;
+
+    if (timeUntilExpiry > 0) {
+      logger.info(
+        `Scheduling token refresh in ${timeUntilExpiry / 1000} seconds`
+      );
+      this.tokenRefreshTimeout = setTimeout(() => {
+        this.refreshToken().catch((error) => {
+          logger.error("Failed to refresh token:", error);
+        });
+      }, timeUntilExpiry);
+    } else {
+      // Token is already close to expiring, refresh immediately
+      logger.info("Token close to expiry, refreshing immediately");
+      this.refreshToken().catch((error) => {
+        logger.error("Failed to refresh token:", error);
+      });
+    }
+  }
+
   async refreshToken() {
     try {
-      logger.info("Attempting to silently refresh token");
+      logger.info("Attempting to refresh token");
 
       return new Promise((resolve) => {
-        // Set up a temporary callback for silent token refresh
+        // Set up a temporary callback for token refresh
         this.tokenClient.callback = async (resp) => {
           if (resp.error) {
-            logger.error("Silent token refresh failed:", resp);
+            logger.error("Token refresh failed:", resp);
+            // Clear the token from storage on refresh failure
+            localStorage.removeItem("google_drive_token");
             resolve(false);
             return;
           }
@@ -174,8 +207,12 @@ class GoogleDriveProvider {
           try {
             const token = this.gapi.client.getToken();
             if (token) {
-              logger.info("Got new token via silent refresh, saving");
+              logger.info("Got new token, saving and scheduling next refresh");
               localStorage.setItem("google_drive_token", JSON.stringify(token));
+
+              // Schedule the next refresh
+              this.scheduleTokenRefresh(token);
+
               resolve(true);
               return;
             }
@@ -186,7 +223,7 @@ class GoogleDriveProvider {
           resolve(false);
         };
 
-        // Request token silently (no UI prompt)
+        // Request token refresh
         this.tokenClient.requestAccessToken({ prompt: "" });
       });
     } catch (error) {
@@ -198,46 +235,34 @@ class GoogleDriveProvider {
   async authenticate() {
     logger.info("Starting Google authentication");
     return new Promise((resolve) => {
+      // Set up the callback for authentication
       this.tokenClient.callback = async (resp) => {
-        logger.debug("Auth callback received", resp);
         if (resp.error) {
-          logger.error("Error authenticating with Google:", resp);
-          // Signal that sync is not ready
-          if (window.setSyncReady) window.setSyncReady(false);
+          logger.error("Authentication failed:", resp);
           resolve(false);
           return;
         }
 
-        // Get the actual token from gapi
         try {
           const token = this.gapi.client.getToken();
           if (token) {
-            logger.debug("Got valid token, saving to localStorage");
+            logger.info("Authentication successful, saving token");
             localStorage.setItem("google_drive_token", JSON.stringify(token));
+
+            // Schedule the first token refresh
+            this.scheduleTokenRefresh(token);
+
+            resolve(true);
+            return;
           }
         } catch (e) {
-          logger.error("Error saving token:", e);
+          logger.error("Error saving authentication token:", e);
         }
 
-        // Check if this auth is happening from settings dialog context
-        // If so, delay setting sync ready to prevent immediate auto-sync
-        const isFromSettingsDialog = document.querySelector(
-          "#settings-modal, .modal-overlay"
-        );
-
-        if (isFromSettingsDialog) {
-          logger.info(
-            "Authentication successful from settings dialog - delaying sync ready"
-          );
-          // Don't set sync ready immediately - let the settings dialog control when to sync
-        } else {
-          // Signal that sync is ready for normal auth flows
-          if (window.setSyncReady) window.setSyncReady(true);
-          logger.info("Authentication successful - sync ready");
-        }
-
-        resolve(true);
+        resolve(false);
       };
+
+      // Request token with UI prompt
       this.tokenClient.requestAccessToken({ prompt: "consent" });
     });
   }

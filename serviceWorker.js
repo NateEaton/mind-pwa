@@ -28,7 +28,7 @@ const urlsToCache = [
   "/core/dataService.js",
   "/serviceWorker.js",
   "/core/stateManager.js",
-  "/uiRenderer.js",
+  "/ui/renderer.js",
   "/core/eventHandlers.js",
   "/core/devTools.js",
   "/core/historyModalManager.js",

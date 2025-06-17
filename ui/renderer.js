@@ -16,9 +16,22 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import dataService from "./core/dataService.js";
-import stateManager from "./core/stateManager.js";
-import logger from "./core/logger.js";
+import dataService from "../core/dataService.js";
+import stateManager from "../core/stateManager.js";
+import logger from "../core/logger.js";
+import {
+  renderFoodGroupItem,
+  renderDaySelectorButton,
+  renderCurrentWeekCard,
+  renderHistoryCard,
+  renderEditTotalsItem,
+  renderSummaryCardsContainer,
+  updateBadgeColor,
+  formatDate,
+  getBadgeClass,
+  getCurrentWeekStatusClass,
+  getHistoryStatusClass,
+} from "./components.js";
 
 /**
  * UIRenderer - Responsible for rendering UI components based on application state
@@ -36,9 +49,10 @@ const domElements = {
     foodGroupTemplate: null,
   },
   currentWeekElements: {
-    currentWeekStartDateEl: null,
-    currentWeekSummaryContent: null,
-    editCurrentWeekBtn: null,
+    currentWeekStartDateEl: document.getElementById("current-week-start-date"),
+    currentWeekSummaryContent: document.getElementById(
+      "current-week-summary-content"
+    ),
   },
   historyElements: {
     historyContent: null,
@@ -109,7 +123,6 @@ function initialize(appManager = null) {
     currentWeekSummaryContent: document.getElementById(
       "current-week-summary-content"
     ),
-    editCurrentWeekBtn: document.getElementById("edit-current-week-btn"),
   };
 
   // Cache history view elements
@@ -277,28 +290,31 @@ function renderDaySelectorBar(
     const day = String(dayInWeekObj.getDate()).padStart(2, "0");
     const dayDateStr = `${year}-${month}-${day}`;
 
-    const button = document.createElement("button");
-    button.className = "day-selector-btn";
+    const buttonHtml = renderDaySelectorButton(
+      dayLetters[i],
+      dayDateStr,
+      dayDateStr === selectedDateStr,
+      dayAriaLabels[i]
+    );
+
+    const button = document.createElement("div");
+    button.innerHTML = buttonHtml;
+    const buttonElement = button.firstElementChild;
+
     if (isModal) {
-      button.classList.add("modal-day-selector-btn"); // For specific modal styling if needed
-    }
-    button.textContent = dayLetters[i];
-    button.dataset.date = dayDateStr;
-    button.setAttribute("aria-label", dayAriaLabels[i]);
-
-    if (dayDateStr === selectedDateStr) {
-      button.classList.add("active");
+      buttonElement.classList.add("modal-day-selector-btn");
     }
 
-    button.addEventListener("click", () => {
+    buttonElement.addEventListener("click", () => {
       // Visually update active button immediately for responsiveness before state change propagates
       parentElement
         .querySelectorAll(".day-selector-btn")
         .forEach((btn) => btn.classList.remove("active"));
-      button.classList.add("active");
+      buttonElement.classList.add("active");
       onDaySelectCallback(dayDateStr);
     });
-    parentElement.appendChild(button);
+
+    parentElement.appendChild(buttonElement);
   }
 }
 
@@ -387,17 +403,10 @@ function renderDateElements() {
       domElements.trackerElements.trackerDateEl &&
       state.selectedTrackerDate
     ) {
-      const selectedDateForDisplay = new Date(
-        `${state.selectedTrackerDate}T00:00:00`
+      domElements.trackerElements.trackerDateEl.textContent = formatDate(
+        state.selectedTrackerDate,
+        "short"
       );
-      domElements.trackerElements.trackerDateEl.textContent =
-        `${selectedDateForDisplay.toLocaleDateString(undefined, {
-          weekday: "short",
-        })}, ` + // Use "short" weekday
-        `${selectedDateForDisplay.toLocaleDateString(undefined, {
-          month: "short",
-          day: "numeric",
-        })}`;
     } else if (domElements.trackerElements.trackerDateEl) {
       domElements.trackerElements.trackerDateEl.textContent = "Date not set";
     }
@@ -407,18 +416,8 @@ function renderDateElements() {
       domElements.currentWeekElements.currentWeekStartDateEl &&
       state.currentWeekStartDate
     ) {
-      const weekStartDateDisplay = new Date(
-        `${state.currentWeekStartDate}T00:00:00`
-      );
-      // The "Week of " part is now static in HTML. We only set the date part.
       domElements.currentWeekElements.currentWeekStartDateEl.textContent =
-        `${weekStartDateDisplay.toLocaleDateString(undefined, {
-          weekday: "short",
-        })}, ` +
-        `${weekStartDateDisplay.toLocaleDateString(undefined, {
-          month: "short", // MMM format
-          day: "numeric",
-        })}`;
+        formatDate(state.currentWeekStartDate, "short");
     } else if (domElements.currentWeekElements.currentWeekStartDateEl) {
       domElements.currentWeekElements.currentWeekStartDateEl.textContent =
         "Week not set";
@@ -439,7 +438,6 @@ function renderTrackerItems() {
   const state = stateManager.getState();
   const foodItemsList = document.getElementById("food-items-list");
   const foodGroupTemplate = document.getElementById("food-group-item-template");
-  // const dateElement = document.getElementById("tracker-date"); // Main date handled by renderDateElements
   const daySelectorBarElement = document.getElementById(
     "tracker-day-selector-bar"
   );
@@ -489,116 +487,33 @@ function renderTrackerItems() {
     state.dailyCounts[state.selectedTrackerDate] || {};
 
   state.foodGroups.forEach((group) => {
-    const item = foodGroupTemplate.content
-      .cloneNode(true)
-      .querySelector(".food-group-item");
-    item.dataset.id = group.id;
+    const dailyCount = dailyCountsForSelectedDate[group.id] || 0;
+    const weeklyTotal = state.weeklyCounts[group.id] || 0;
 
-    const nameElement = item.querySelector(".name");
-    const weeklyBadge = item.querySelector(".weekly-badge");
+    const html = renderFoodGroupItem(group, dailyCount, weeklyTotal, state);
+    const item = document.createElement("div");
+    item.innerHTML = html;
+    const foodGroupItem = item.firstElementChild;
+
+    const nameElement = foodGroupItem.querySelector(".name");
+    const weeklyBadge = foodGroupItem.querySelector(".weekly-badge");
     const weeklyBadgeValue = weeklyBadge
       ? weeklyBadge.querySelector(".wk-val")
       : null;
 
-    nameElement.textContent = group.name;
-    const infoBtn = item.querySelector(".info-btn");
+    const infoBtn = foodGroupItem.querySelector(".info-btn");
     if (infoBtn) infoBtn.dataset.groupId = group.id;
-
-    let targetDesc = ""; // (Target description logic remains the same)
-    // ... (copy existing target description logic) ...
-    const targetVal = group.target;
-    const freqText = group.frequency === "day" ? "day" : "week";
-    const unitText = group.unit || "servings";
-    if (group.type === "positive") {
-      targetDesc = `Target: ≥ ${targetVal} ${unitText}/${freqText}`;
-    } else {
-      targetDesc = `Limit: ≤ ${targetVal} ${unitText}/${freqText}`;
-      if (group.isOptional) targetDesc += " (optional)";
-    }
-    item.querySelector(".target").textContent = targetDesc;
-
-    const countInput = item.querySelector(".count-input");
-    // Count input ALWAYS reflects the count for the state.selectedTrackerDate
-    countInput.value = dailyCountsForSelectedDate[group.id] || 0;
-    countInput.dataset.groupid = group.id;
-    // No need for data-frequency on input if all interactions update selectedTrackerDate's counts
 
     // Weekly badge ALWAYS shows the total for state.weeklyCounts for the current week
     if (weeklyBadge && weeklyBadgeValue) {
-      const weeklyTotalForGroup = state.weeklyCounts[group.id] || 0;
-      weeklyBadgeValue.textContent = weeklyTotalForGroup;
       weeklyBadge.style.display = "inline-flex"; // Ensure it's visible
-      updateBadgeColor(weeklyBadge, group, weeklyTotalForGroup); // updateBadgeColor uses weekly total
+      updateBadgeColor(weeklyBadge, group, weeklyTotal, state); // updateBadgeColor uses weekly total
     } else if (weeklyBadge) {
       weeklyBadge.style.display = "none"; // Hide if value span not found
     }
 
-    foodItemsList.appendChild(item);
+    foodItemsList.appendChild(foodGroupItem);
   });
-}
-
-/**
- * Update the badge color based on the progress
- * @param {HTMLElement} badge - The badge element
- * @param {Object} group - The food group data
- * @param {number} count - The current count
- */
-function updateBadgeColor(badge, group, count) {
-  badge.classList.remove(
-    "badge-primary",
-    "badge-secondary",
-    "badge-warning",
-    "badge-danger"
-  );
-
-  // Get current day of the week (0-6, where 0 is Sunday)
-  const state = stateManager.getState();
-  const currentDate = new Date(`${state.currentDayDate}T00:00:00`);
-  const weekStartDate = new Date(`${state.currentWeekStartDate}T00:00:00`);
-  const daysSinceWeekStart = Math.floor(
-    (currentDate - weekStartDate) / (24 * 60 * 60 * 1000)
-  );
-  const daysIntoWeek = Math.max(0, daysSinceWeekStart) + 1; // Add 1 to include current day
-
-  // Determine which color to use based on progress
-  if (group.type === "positive") {
-    // Target-based item
-    if (
-      count >=
-      group.target * (group.frequency === "day" ? daysIntoWeek : 1)
-    ) {
-      // Target met or exceeded for current point in week
-      badge.classList.add("badge-primary");
-    } else {
-      // Target in progress
-      badge.classList.add("badge-secondary");
-    }
-  } else {
-    // Limit-based item
-
-    // Special case: if count is 0, always use secondary color (not warning)
-    if (count === 0) {
-      badge.classList.add("badge-secondary");
-      return;
-    }
-
-    // Calculate the prorated max for daily items
-    const maxAllowed =
-      group.frequency === "day"
-        ? group.target * daysIntoWeek // Daily limit × days into week
-        : group.target; // Weekly limit as is
-
-    if (count > maxAllowed) {
-      // Limit exceeded for current point in week
-      badge.classList.add("badge-danger");
-    } else if (count >= maxAllowed - 1) {
-      // Within 1 of limit
-      badge.classList.add("badge-warning");
-    } else {
-      // Well below limit
-      badge.classList.add("badge-secondary");
-    }
-  }
 }
 
 /**
@@ -606,8 +521,7 @@ function updateBadgeColor(badge, group, count) {
  */
 function renderCurrentWeekSummary() {
   const state = stateManager.getState();
-  const { currentWeekSummaryContent, editCurrentWeekBtn } =
-    domElements.currentWeekElements;
+  const { currentWeekSummaryContent } = domElements.currentWeekElements;
 
   // Ensure we have the required element
   if (!currentWeekSummaryContent) {
@@ -618,10 +532,6 @@ function renderCurrentWeekSummary() {
   // Clear previous content
   currentWeekSummaryContent.innerHTML = "";
 
-  // Create cards container
-  const cardsContainer = document.createElement("div");
-  cardsContainer.className = "summary-cards";
-
   // Helper function to get effective weekly target
   const getWeeklyTarget = (group) => {
     if (group.frequency === "week") return group.target;
@@ -630,64 +540,16 @@ function renderCurrentWeekSummary() {
   };
 
   // Render each food group
-  state.foodGroups.forEach((group) => {
-    const card = document.createElement("div");
-    card.className = "food-card";
-
+  const cards = state.foodGroups.map((group) => {
     const currentTotal = state.weeklyCounts[group.id] || 0;
     const weeklyTarget = getWeeklyTarget(group);
 
-    // For current week, only apply status classes for completed conditions
-    let statusClass = "";
-
-    if (group.type === "positive") {
-      // Only apply goal-met to positive targets that have been achieved
-      if (currentTotal >= weeklyTarget) statusClass = "goal-met";
-      // Do not apply goal-missed since the week is still in progress
-    } else {
-      // For limits, only show warning/error states
-      if (currentTotal > weeklyTarget) {
-        statusClass = "limit-exceeded";
-      } else if (
-        currentTotal > weeklyTarget * 0.75 &&
-        currentTotal <= weeklyTarget
-      ) {
-        statusClass = "limit-near";
-      }
-    }
-
-    // Apply status class if assigned
-    if (statusClass) card.classList.add(statusClass);
-
-    // Create the card content
-    card.innerHTML = `
-      <div class="status-indicator"></div>
-      <div class="card-content">
-        <div class="card-food-name">${group.name}</div>
-        <div class="metric-container">
-          <div class="metric-label">SERVINGS</div>
-          <div class="metric-value">${currentTotal}</div>
-        </div>
-        <div class="metric-container">
-          <div class="metric-label">TARGET</div>
-          <div class="metric-value">${
-            group.type === "limit" ? "≤" : "≥"
-          } ${weeklyTarget}</div>
-        </div>
-      </div>
-    `;
-
-    // Add the card to the container
-    cardsContainer.appendChild(card);
+    return renderCurrentWeekCard(group, currentTotal, weeklyTarget);
   });
 
   // Add the cards container to the view
-  currentWeekSummaryContent.appendChild(cardsContainer);
-
-  // Enable the edit button if it exists
-  if (editCurrentWeekBtn) {
-    editCurrentWeekBtn.disabled = false;
-  }
+  const containerHtml = renderSummaryCardsContainer(cards);
+  currentWeekSummaryContent.innerHTML = containerHtml;
 }
 
 /**
@@ -722,24 +584,6 @@ function renderHistory(weekIndex) {
   if (editHistoryWeekBtn) editHistoryWeekBtn.disabled = true;
 
   // Reset navigation UI elements
-
-  if (prevWeekBtn) prevWeekBtn.disabled = true;
-  if (nextWeekBtn) nextWeekBtn.disabled = true;
-  if (historyDatePicker) historyDatePicker.value = "";
-
-  if (!state.history || state.history.length === 0) {
-    historyContent.innerHTML = "<p>No history data available yet.</p>";
-    mainHistoryTitleEl.textContent = "No History";
-    return;
-  }
-
-  // Default to disabled edit button
-  if (editHistoryWeekBtn) {
-    editHistoryWeekBtn.disabled = true;
-  }
-
-  // Reset history UI elements
-  if (historyWeekLabel) historyWeekLabel.textContent = "Select a week";
   if (prevWeekBtn) prevWeekBtn.disabled = true;
   if (nextWeekBtn) nextWeekBtn.disabled = true;
   if (historyDatePicker) historyDatePicker.value = "";
@@ -747,7 +591,7 @@ function renderHistory(weekIndex) {
   // Check if we have any history data
   if (!state.history || state.history.length === 0) {
     historyContent.innerHTML = "<p>No history data available yet.</p>";
-    if (historyWeekLabel) historyWeekLabel.textContent = "No History";
+    mainHistoryTitleEl.textContent = "No History";
     return;
   }
 
@@ -776,15 +620,9 @@ function renderHistory(weekIndex) {
   }
 
   // Update the main history title with the week's date
-  const weekStartDateForTitle = new Date(`${weekData.weekStartDate}T00:00:00`);
-  mainHistoryTitleEl.textContent = `Week of ${weekStartDateForTitle.toLocaleDateString(
-    undefined,
-    {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }
+  mainHistoryTitleEl.textContent = `Week of ${formatDate(
+    weekData.weekStartDate,
+    "title"
   )}`;
 
   // Enable the edit button now that we have valid data
@@ -804,10 +642,6 @@ function renderHistory(weekIndex) {
   if (historyDatePicker) {
     historyDatePicker.value = weekData.weekStartDate;
   }
-
-  // Create cards container
-  const cardsContainer = document.createElement("div");
-  cardsContainer.className = "summary-cards";
 
   // Use stored targets if available, otherwise use current config
   const targets =
@@ -831,70 +665,31 @@ function renderHistory(weekIndex) {
   );
 
   // Render each food group in the history view
-  foodGroupsToDisplay.forEach((group) => {
-    const groupId = group.id;
-    const total = weekData.totals[groupId] || 0;
-    const targetInfo = targets[groupId];
+  const cards = foodGroupsToDisplay
+    .map((group) => {
+      const groupId = group.id;
+      const total = weekData.totals[groupId] || 0;
+      const targetInfo = targets[groupId];
 
-    if (!targetInfo) return; // Skip if no target info found
+      if (!targetInfo) return null; // Skip if no target info found
 
-    // Calculate effective weekly target
-    let effectiveWeeklyTarget;
-    if (targetInfo.frequency === "week") {
-      effectiveWeeklyTarget = targetInfo.target;
-    } else if (targetInfo.frequency === "day") {
-      effectiveWeeklyTarget = targetInfo.target * 7;
-    } else {
-      effectiveWeeklyTarget = targetInfo.target;
-    }
-
-    // Create card
-    const card = document.createElement("div");
-    card.className = "food-card";
-
-    // In history view, always apply status classes since the weeks are complete
-    let statusClass = "";
-    if (targetInfo.type === "positive") {
-      statusClass = total >= effectiveWeeklyTarget ? "goal-met" : "goal-missed";
-    } else {
-      // limit
-      if (total <= effectiveWeeklyTarget) {
-        statusClass = "limit-ok";
-        if (effectiveWeeklyTarget > 0 && total > effectiveWeeklyTarget * 0.75) {
-          statusClass = "limit-near";
-        }
+      // Calculate effective weekly target
+      let effectiveWeeklyTarget;
+      if (targetInfo.frequency === "week") {
+        effectiveWeeklyTarget = targetInfo.target;
+      } else if (targetInfo.frequency === "day") {
+        effectiveWeeklyTarget = targetInfo.target * 7;
       } else {
-        statusClass = "limit-exceeded";
+        effectiveWeeklyTarget = targetInfo.target;
       }
-    }
 
-    // Apply status class
-    if (statusClass) card.classList.add(statusClass);
-
-    // Create the card content
-    card.innerHTML = `
-      <div class="status-indicator"></div>
-      <div class="card-content">
-        <div class="card-food-name">${targetInfo.name || group.name}</div>
-        <div class="metric-container">
-          <div class="metric-label">SERVINGS</div>
-          <div class="metric-value">${total}</div>
-        </div>
-        <div class="metric-container">
-          <div class="metric-label">TARGET</div>
-          <div class="metric-value">${
-            targetInfo.type === "limit" ? "≤" : "≥"
-          } ${effectiveWeeklyTarget}</div>
-        </div>
-      </div>
-    `;
-
-    // Add card to the container
-    cardsContainer.appendChild(card);
-  });
+      return renderHistoryCard(targetInfo, total, effectiveWeeklyTarget);
+    })
+    .filter((card) => card !== null); // Remove null cards
 
   // Add the cards container to the view
-  historyContent.appendChild(cardsContainer);
+  const containerHtml = renderSummaryCardsContainer(cards);
+  historyContent.innerHTML = containerHtml;
 }
 
 /**
@@ -1236,21 +1031,7 @@ function updateModalSelectedDayDisplay(dateStr) {
   }
 
   if (dateStr) {
-    try {
-      const dateObj = new Date(dateStr + "T00:00:00"); // Ensure parsing in local timezone
-      displayElement.textContent = dateObj.toLocaleDateString(undefined, {
-        weekday: "short", // e.g., "Mon"
-        month: "numeric", // e.g., "3"
-        day: "numeric", // e.g., "8"
-      });
-    } catch (e) {
-      logger.error(
-        "uiRenderer.updateModalSelectedDayDisplay: Error formatting date string:",
-        dateStr,
-        e
-      );
-      displayElement.textContent = "Invalid Date";
-    }
+    displayElement.textContent = formatDate(dateStr, "modal");
   } else {
     displayElement.textContent = "Select a day";
   }
@@ -1315,78 +1096,15 @@ function renderModalDayDetailsList(
   logger.debug("Calculated weekly totals:", weeklyTotals);
 
   foodGroups.forEach((group) => {
-    const itemFragment = itemTemplate.content.cloneNode(true);
-    const item = itemFragment.querySelector(".edit-totals-item"); // Get the actual item element
-
-    if (!item) {
-      logger.warn(
-        "uiRenderer.renderModalDayDetailsList: Could not find .edit-totals-item in template."
-      );
-      return; // Skip this item if template is broken
-    }
-
-    item.dataset.id = group.id;
-
-    // Create name container div for name and weekly badge
-    const nameContainer = document.createElement("div");
-    nameContainer.className = "name-row";
-
-    // Add name span
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "edit-item-name";
-    nameSpan.textContent = group.name;
-    nameContainer.appendChild(nameSpan);
-
-    // Add weekly badge
-    const weeklyBadge = document.createElement("div");
-    weeklyBadge.className = "weekly-badge";
+    const count = counts[group.id] || 0;
     const weeklyTotal = weeklyTotals[group.id] || 0;
-    weeklyBadge.innerHTML = `<span class="wk-val">${weeklyTotal}</span>`;
 
-    // Calculate effective weekly target
-    let effectiveWeeklyTarget;
-    if (group.frequency === "week") {
-      effectiveWeeklyTarget = group.target;
-    } else if (group.frequency === "day") {
-      effectiveWeeklyTarget = group.target * 7;
-    } else {
-      effectiveWeeklyTarget = group.target;
-    }
+    const html = renderEditTotalsItem(group, count, weeklyTotal);
+    const item = document.createElement("div");
+    item.innerHTML = html;
+    const editTotalsItem = item.firstElementChild;
 
-    // Update badge color based on progress
-    if (group.type === "positive") {
-      if (weeklyTotal >= effectiveWeeklyTarget) {
-        weeklyBadge.classList.add("badge-primary");
-      }
-    } else {
-      // For limits
-      if (weeklyTotal > effectiveWeeklyTarget) {
-        weeklyBadge.classList.add("badge-danger");
-      } else if (weeklyTotal > effectiveWeeklyTarget * 0.75) {
-        weeklyBadge.classList.add("badge-warning");
-      }
-    }
-
-    nameContainer.appendChild(weeklyBadge);
-
-    // Replace the original name span with our new container
-    const oldNameSpan = item.querySelector(".edit-item-name");
-    if (oldNameSpan) {
-      oldNameSpan.replaceWith(nameContainer);
-    } else {
-      item.insertBefore(nameContainer, item.firstChild);
-    }
-
-    // Set up the count display and controls
-    const totalSpan = item.querySelector(".edit-current-total");
-    const decBtn = item.querySelector(".edit-decrement-btn");
-    const incBtn = item.querySelector(".edit-increment-btn");
-
-    if (totalSpan) totalSpan.textContent = counts[group.id] || 0;
-    if (decBtn) decBtn.dataset.groupId = group.id;
-    if (incBtn) incBtn.dataset.groupId = group.id;
-
-    listElement.appendChild(itemFragment); // Append the fragment containing the item
+    listElement.appendChild(editTotalsItem);
   });
 }
 
@@ -1446,7 +1164,6 @@ function clearToasts() {
 
 // Export public API
 export default {
-  initialize,
   initialize,
   renderEverything,
   renderTrackerItems,

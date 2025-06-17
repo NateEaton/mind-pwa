@@ -16,6 +16,7 @@ archive/*
 screenshots/@eaDir/*
 core/@eaDir/*
 utils/@eaDir/*
+ui/@eaDir/*
 cloudProviders/@eaDir/*
 cloudSync/@eaDir/*
 cloudSync/tests/*
