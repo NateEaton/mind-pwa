@@ -33,8 +33,6 @@ class GoogleDriveProvider {
     this.tokenClient = null;
     this.currentUser = null;
     this.configLoaded = false;
-    this.tokenRefreshTimeout = null;
-    this.TOKEN_REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes before expiration
   }
 
   async initialize() {
@@ -117,157 +115,154 @@ class GoogleDriveProvider {
   }
 
   async checkAuth() {
-      try {
-        logger.info("Checking Google authentication");
-        const cachedTokenStr = localStorage.getItem("google_drive_token");
-  
-        if (cachedTokenStr) {
+    try {
+      logger.info("Checking Google authentication");
+      const cachedTokenStr = localStorage.getItem("google_drive_token");
+
+      if (cachedTokenStr) {
+        try {
+          const cachedToken = JSON.parse(cachedTokenStr);
+          logger.info("Found cached token, setting in gapi");
+
+          // Set the token in gapi
+          this.gapi.client.setToken(cachedToken);
+
+          // Test if token works with a lightweight call
           try {
-            const cachedToken = JSON.parse(cachedTokenStr);
-            logger.info("Found cached token, setting in gapi");
-  
-            // Set the token in gapi
-            this.gapi.client.setToken(cachedToken);
-  
-            // Schedule token refresh if needed
-            this.scheduleTokenRefresh(cachedToken);
-  
-            // Test if token works
-            try {
-              // A simple metadata call is a better test than listing files
-              await this.gapi.client.drive.about.get({ fields: "user" });
-              logger.info("Token is valid!");
-              return true;
-            } catch (e) {
-              // CHANGE: Check if the error is an auth error (401) before refreshing
-              if (e.status === 401) {
-                logger.warn("Cached token is not valid, attempting to refresh", e);
-                // Try to silently refresh the token
-                return await this.refreshToken();
-              }
-              // For other errors (e.g., network), re-throw or handle differently
-              logger.error("Error during token validation (not an auth error):", e);
-              return false;
-            }
+            // Using about.get is more efficient than listing files for a simple auth check.
+            await this.gapi.client.drive.about.get({ fields: "user" });
+            logger.info("Token from localStorage is valid!");
+            return true;
           } catch (e) {
-            logger.error("Error parsing or validating cached token:", e);
-            localStorage.removeItem("google_drive_token");
+            // Only try to refresh on a 401 Unauthorized error.
+            if (e.status === 401) {
+              logger.warn(
+                "Cached token not valid (401), attempting to refresh",
+                e
+              );
+              // Try to silently refresh the token.
+              return await this.refreshToken();
+            }
+            // For other errors (network, etc.), don't proceed.
+            logger.error("Error validating token (not a 401 error):", e);
+            return false;
           }
+        } catch (e) {
+          logger.error("Error parsing or validating cached token:", e);
+          localStorage.removeItem("google_drive_token");
         }
-  
-        return false;
-      } catch (error) {
-        logger.warn("Not authenticated with Google Drive:", error);
-        return false;
       }
-  }
 
-  scheduleTokenRefresh(token) {
-    // Clear any existing refresh timeout
-    if (this.tokenRefreshTimeout) {
-      clearTimeout(this.tokenRefreshTimeout);
-    }
-
-    // Calculate time until token expires
-    const expiresIn = token.expires_in * 1000; // Convert to milliseconds
-    const timeUntilExpiry = expiresIn - this.TOKEN_REFRESH_THRESHOLD;
-
-    if (timeUntilExpiry > 0) {
-      logger.info(
-        `Scheduling token refresh in ${timeUntilExpiry / 1000} seconds`
-      );
-      this.tokenRefreshTimeout = setTimeout(() => {
-        this.refreshToken().catch((error) => {
-          logger.error("Failed to refresh token:", error);
-        });
-      }, timeUntilExpiry);
-    } else {
-      // Token is already close to expiring, refresh immediately
-      logger.info("Token close to expiry, refreshing immediately");
-      this.refreshToken().catch((error) => {
-        logger.error("Failed to refresh token:", error);
-      });
+      // No token in storage.
+      return false;
+    } catch (error) {
+      logger.warn("Not authenticated with Google Drive:", error);
+      return false;
     }
   }
 
+  // Add a new method to GoogleDriveProvider for token refresh
   async refreshToken() {
-      try {
-          logger.info("Attempting to silently refresh token");
-  
-          return new Promise((resolve) => {
-              // Set up a temporary callback for token refresh
-              this.tokenClient.callback = async (resp) => {
-                  if (resp.error) {
-                      logger.error("Silent token refresh failed:", resp);
-                      // Clear the token from storage on refresh failure
-                      localStorage.removeItem("google_drive_token");
-                      resolve(false);
-                      return;
-                  }
-  
-                  // --- START OF FIX ---
-  
-                  logger.info("Token refreshed successfully, applying new token.");
-  
-                  // 1. CRITICAL: Update the gapi client with the new token
-                  this.gapi.client.setToken(resp);
-  
-                  // 2. Use the `resp` object, which IS the new token, not gapi.client.getToken()
-                  const newToken = resp;
-  
-                  // 3. Save the NEW token to storage
-                  localStorage.setItem("google_drive_token", JSON.stringify(newToken));
-  
-                  // 4. Schedule the NEXT refresh using the new token's expiry info
-                  this.scheduleTokenRefresh(newToken);
-  
-                  resolve(true);
-  
-                  // --- END OF FIX ---
-              };
-  
-              // Request token refresh silently (no UI prompt)
-              this.tokenClient.requestAccessToken({ prompt: "" });
-          });
-      } catch (error) {
-          logger.error("Error during token refresh initiation:", error);
-          return false;
-      }
+    try {
+      logger.info("Attempting to silently refresh token");
+
+      return new Promise((resolve) => {
+        this.tokenClient.callback = async (resp) => {
+          if (resp.error) {
+            logger.error("Silent token refresh failed:", resp);
+            // On failure, remove the bad token to prevent retries.
+            localStorage.removeItem("google_drive_token");
+            resolve(false);
+            return;
+          }
+
+          // --- START OF FIX ---
+          logger.info(
+            "Token refreshed successfully. Applying and saving new token."
+          );
+
+          // 1. CRITICAL: Update the gapi client with the NEW token from the response.
+          this.gapi.client.setToken(resp);
+
+          // 2. The `resp` object *is* the new token. Use it directly.
+          const newToken = resp;
+
+          // 3. Save the NEW, valid token to storage.
+          localStorage.setItem("google_drive_token", JSON.stringify(newToken));
+
+          // 4. Resolve true to signal success to the caller (e.g., handleAuthError).
+          resolve(true);
+          // --- END OF FIX ---
+        };
+
+        // Request a new token silently (no UI prompt).
+        this.tokenClient.requestAccessToken({ prompt: "" });
+      });
+    } catch (error) {
+      logger.error("Error initiating token refresh flow:", error);
+      return false;
+    }
   }
 
   async authenticate() {
     logger.info("Starting Google authentication");
     return new Promise((resolve) => {
-      // Set up the callback for authentication
       this.tokenClient.callback = async (resp) => {
+        logger.debug("Auth callback received", resp);
         if (resp.error) {
-          logger.error("Authentication failed:", resp);
+          logger.error("Error authenticating with Google:", resp);
+          // Signal that sync is not ready
+          if (window.setSyncReady) window.setSyncReady(false);
           resolve(false);
           return;
         }
 
+        // Get the actual token from gapi
         try {
           const token = this.gapi.client.getToken();
           if (token) {
-            logger.info("Authentication successful, saving token");
+            logger.debug("Got valid token, saving to localStorage");
             localStorage.setItem("google_drive_token", JSON.stringify(token));
-
-            // Schedule the first token refresh
-            this.scheduleTokenRefresh(token);
-
-            resolve(true);
-            return;
           }
         } catch (e) {
-          logger.error("Error saving authentication token:", e);
+          logger.error("Error saving token:", e);
         }
 
-        resolve(false);
-      };
+        // Signal that sync is ready
+        if (window.setSyncReady) window.setSyncReady(true);
 
-      // Request token with UI prompt
+        logger.info("Authentication successful");
+        resolve(true);
+      };
       this.tokenClient.requestAccessToken({ prompt: "consent" });
     });
+  }
+
+  /**
+   * Handle 401 errors by attempting to refresh the token and retry the operation
+   * @param {Function} operation - The operation to retry after token refresh
+   * @returns {Promise} The result of the operation
+   */
+  async handleAuthError(operation) {
+    try {
+      logger.info("Handling 401 error, attempting token refresh");
+      const refreshSuccess = await this.refreshToken();
+
+      if (refreshSuccess) {
+        logger.info("Token refreshed successfully, retrying operation");
+        const result = await operation();
+        logger.info("Operation retry successful after token refresh");
+        return result;
+      } else {
+        logger.error("Token refresh failed, authentication required");
+        throw new Error(
+          "Authentication failed. Please reconnect your Google Drive account."
+        );
+      }
+    } catch (error) {
+      logger.error("Error in handleAuthError:", error);
+      throw error;
+    }
   }
 
   /**
@@ -277,98 +272,111 @@ class GoogleDriveProvider {
    * @returns {Promise<Object>} File information object
    */
   async findOrCreateFile(filename, mimeType = "application/json") {
-    try {
-      // Search for the file in the app data folder
-      logger.debug(
-        `Searching for Google Drive file '${filename}' in appDataFolder...`
-      );
-      const response = await this.gapi.client.drive.files.list({
-        spaces: "appDataFolder",
-        fields: "files(id, name, modifiedTime, size)",
-        q: `name='${filename}'`,
-      });
-
-      // Check if we got any results
-      if (response.result.files && response.result.files.length > 0) {
-        const file = response.result.files[0];
-        logger.debug(
-          `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${
-            file.modifiedTime
-          }, Size: ${file.size || "unknown"} bytes)`
-        );
-        return file;
-      }
-
-      // If file not found, create it with an empty JSON object
-      logger.info(`File '${filename}' not found, creating new file...`);
-      const fileMetadata = {
-        name: filename,
-        parents: ["appDataFolder"],
-        mimeType: mimeType,
-      };
-
+    const operation = async () => {
       try {
-        const createResponse = await this.gapi.client.drive.files.create({
-          resource: fileMetadata,
-          fields: "id, name, modifiedTime, size",
+        // Search for the file in the app data folder
+        logger.debug(
+          `Searching for Google Drive file '${filename}' in appDataFolder...`
+        );
+        const response = await this.gapi.client.drive.files.list({
+          spaces: "appDataFolder",
+          fields: "files(id, name, modifiedTime, size)",
+          q: `name='${filename}'`,
         });
 
-        const newFile = createResponse.result;
-        logger.debug(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
+        // Check if we got any results
+        if (response.result.files && response.result.files.length > 0) {
+          const file = response.result.files[0];
+          logger.debug(
+            `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${
+              file.modifiedTime
+            }, Size: ${file.size || "unknown"} bytes)`
+          );
+          return file;
+        }
 
-        // Upload empty JSON content to initialize the file
+        // If file not found, create it with an empty JSON object
+        logger.info(`File '${filename}' not found, creating new file...`);
+        const fileMetadata = {
+          name: filename,
+          parents: ["appDataFolder"],
+          mimeType: mimeType,
+        };
+
         try {
-          await this.uploadFile(newFile.id, {});
-          logger.info(`Initialized new file ${newFile.id} with empty content`);
-        } catch (initError) {
-          logger.warn(
-            `Note: Initial content upload failed, but file was created: ${initError.message}`
-          );
-          // Continue anyway since the file exists
+          const createResponse = await this.gapi.client.drive.files.create({
+            resource: fileMetadata,
+            fields: "id, name, modifiedTime, size",
+          });
+
+          const newFile = createResponse.result;
+          logger.debug(`Created new file: ${newFile.name} (ID: ${newFile.id})`);
+
+          // Upload empty JSON content to initialize the file
+          try {
+            await this.uploadFile(newFile.id, {});
+            logger.info(
+              `Initialized new file ${newFile.id} with empty content`
+            );
+          } catch (initError) {
+            logger.warn(
+              `Note: Initial content upload failed, but file was created: ${initError.message}`
+            );
+            // Continue anyway since the file exists
+          }
+
+          return newFile;
+        } catch (createError) {
+          // Handle specific creation errors
+          if (createError.status === 403) {
+            logger.error(
+              "Permission error creating file - check app permissions"
+            );
+            throw new Error(
+              "Google Drive permission denied. Check app permissions."
+            );
+          }
+
+          if (createError.status === 401) {
+            logger.error(
+              "Authentication error creating file - token may be expired"
+            );
+            throw new Error(
+              "Google Drive authentication failed. Please reconnect your account."
+            );
+          }
+
+          throw createError;
+        }
+      } catch (error) {
+        // Handle network errors
+        if (
+          error.name === "TypeError" &&
+          error.message.includes("NetworkError")
+        ) {
+          logger.error("Network error:", error.message);
+          throw new Error("Network error. Please check your connection.");
         }
 
-        return newFile;
-      } catch (createError) {
-        // Handle specific creation errors
-        if (createError.status === 403) {
-          logger.error(
-            "Permission error creating file - check app permissions"
-          );
+        // Handle rate limiting
+        if (error.status === 429) {
+          logger.warn("Google Drive rate limit reached");
           throw new Error(
-            "Google Drive permission denied. Check app permissions."
+            "Google Drive rate limit reached. Please try again later."
           );
         }
 
-        if (createError.status === 401) {
-          logger.error(
-            "Authentication error creating file - token may be expired"
-          );
-          throw new Error(
-            "Google Drive authentication failed. Please reconnect your account."
-          );
-        }
-
-        throw createError;
+        logger.error("Error finding/creating file:", error);
+        throw error;
       }
+    };
+
+    try {
+      return await operation();
     } catch (error) {
-      // Handle network errors
-      if (
-        error.name === "TypeError" &&
-        error.message.includes("NetworkError")
-      ) {
-        logger.error("Network error:", error.message);
-        throw new Error("Network error. Please check your connection.");
+      if (error.status === 401) {
+        return await this.handleAuthError(operation);
       }
-
-      // Handle rate limiting
-      if (error.status === 429) {
-        logger.warn("Google Drive rate limit reached");
-        throw new Error(
-          "Google Drive rate limit reached. Please try again later."
-        );
-      }
-
-      logger.error("Error finding/creating file:", error);
       throw error;
     }
   }
@@ -380,108 +388,122 @@ class GoogleDriveProvider {
    * @returns {Promise<Object>} The upload result information
    */
   async uploadFile(fileId, content) {
-    logger.info(`Uploading to Google Drive file ID: ${fileId}...`);
+    const operation = async () => {
+      logger.info(`Uploading to Google Drive file ID: ${fileId}...`);
 
-    // Handle empty content cases more gracefully
-    if (!content) {
-      logger.info(
-        `No content provided for upload to ${fileId}, using empty object`
-      );
-      content = {}; // Use empty object instead of failing
-    }
+      // Handle empty content cases more gracefully
+      if (!content) {
+        logger.info(
+          `No content provided for upload to ${fileId}, using empty object`
+        );
+        content = {}; // Use empty object instead of failing
+      }
 
-    // For empty objects, log but continue
-    if (typeof content === "object" && Object.keys(content).length === 0) {
-      logger.info(`Uploading empty object to ${fileId}`);
-      // Continue with upload rather than throwing error
-    }
+      // For empty objects, log but continue
+      if (typeof content === "object" && Object.keys(content).length === 0) {
+        logger.info(`Uploading empty object to ${fileId}`);
+        // Continue with upload rather than throwing error
+      }
+
+      try {
+        const contentStr = JSON.stringify(content);
+        const accessToken = this.gapi.client.getToken().access_token;
+
+        logger.debug(`Content size: ${contentStr.length} bytes`);
+
+        // Upload the file, requesting valid fields in the response
+        const response = await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,name,version,headRevisionId,md5Checksum,modifiedTime`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              "Content-Length": contentStr.length.toString(),
+            },
+            body: contentStr,
+          }
+        );
+
+        // Handle errors
+        if (!response.ok) {
+          let errorText = "Unknown error";
+          try {
+            const errorData = await response.json();
+            errorText = JSON.stringify(errorData);
+          } catch (e) {
+            errorText = await response.text();
+          }
+
+          // Check for specific error conditions
+          if (response.status === 401) {
+            logger.info(`Authentication error: Token may have expired`);
+            throw new Error(
+              `Google Drive authentication failed. Please reconnect your account.`
+            );
+          }
+
+          if (response.status === 403) {
+            logger.info(`Permission denied for file ${fileId}`);
+            throw new Error(
+              `Google Drive permission denied. Check app permissions.`
+            );
+          }
+
+          if (response.status === 404) {
+            logger.info(`File ${fileId} not found during upload`);
+            throw new Error(`File not found. It may have been deleted.`);
+          }
+
+          if (response.status === 429) {
+            logger.info(`Google Drive rate limit reached`);
+            throw new Error(
+              `Google Drive rate limit reached. Please try again later.`
+            );
+          }
+
+          throw new Error(
+            `Upload failed with status ${response.status}: ${errorText}`
+          );
+        }
+
+        const result = await response.json();
+        logger.info("Upload successful:", {
+          id: result.id,
+          name: result.name,
+          version: result.version || "unknown",
+        });
+
+        // Return complete file info
+        return {
+          id: result.id,
+          name: result.name,
+          version: result.version,
+          headRevisionId: result.headRevisionId,
+          md5Checksum: result.md5Checksum,
+          modifiedTime: result.modifiedTime,
+        };
+      } catch (error) {
+        // Handle network errors
+        if (error.name === "TypeError" && error.message.includes("fetch")) {
+          logger.info("Network error during upload:", error.message);
+          throw new Error(`Network error: Please check your connection.`);
+        }
+
+        logger.error("Upload failed:", error);
+        throw error;
+      }
+    };
 
     try {
-      const contentStr = JSON.stringify(content);
-      const accessToken = this.gapi.client.getToken().access_token;
-
-      logger.debug(`Content size: ${contentStr.length} bytes`);
-
-      // Upload the file, requesting valid fields in the response
-      const response = await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,name,version,headRevisionId,md5Checksum,modifiedTime`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            "Content-Length": contentStr.length.toString(),
-          },
-          body: contentStr,
-        }
-      );
-
-      // Handle errors
-      if (!response.ok) {
-        let errorText = "Unknown error";
-        try {
-          const errorData = await response.json();
-          errorText = JSON.stringify(errorData);
-        } catch (e) {
-          errorText = await response.text();
-        }
-
-        // Check for specific error conditions
-        if (response.status === 401) {
-          logger.info(`Authentication error: Token may have expired`);
-          throw new Error(
-            `Google Drive authentication failed. Please reconnect your account.`
-          );
-        }
-
-        if (response.status === 403) {
-          logger.info(`Permission denied for file ${fileId}`);
-          throw new Error(
-            `Google Drive permission denied. Check app permissions.`
-          );
-        }
-
-        if (response.status === 404) {
-          logger.info(`File ${fileId} not found during upload`);
-          throw new Error(`File not found. It may have been deleted.`);
-        }
-
-        if (response.status === 429) {
-          logger.info(`Google Drive rate limit reached`);
-          throw new Error(
-            `Google Drive rate limit reached. Please try again later.`
-          );
-        }
-
-        throw new Error(
-          `Upload failed with status ${response.status}: ${errorText}`
-        );
-      }
-
-      const result = await response.json();
-      logger.info("Upload successful:", {
-        id: result.id,
-        name: result.name,
-        version: result.version || "unknown",
-      });
-
-      // Return complete file info
-      return {
-        id: result.id,
-        name: result.name,
-        version: result.version,
-        headRevisionId: result.headRevisionId,
-        md5Checksum: result.md5Checksum,
-        modifiedTime: result.modifiedTime,
-      };
+      return await operation();
     } catch (error) {
-      // Handle network errors
-      if (error.name === "TypeError" && error.message.includes("fetch")) {
-        logger.info("Network error during upload:", error.message);
-        throw new Error(`Network error: Please check your connection.`);
+      if (
+        error.status === 401 ||
+        (error.message && error.message.includes("authentication failed"))
+      ) {
+        return await this.handleAuthError(operation);
       }
-
-      logger.error("Upload failed:", error);
       throw error;
     }
   }
@@ -492,171 +514,204 @@ class GoogleDriveProvider {
    * @returns {Promise<Object|null>} The file content or null if not found/empty
    */
   async downloadFile(fileId) {
-    try {
-      logger.info(`Downloading Google Drive file with ID: ${fileId}...`);
+    const operation = async () => {
+      try {
+        logger.info(`Downloading Google Drive file with ID: ${fileId}...`);
 
-      // First, try to get the file metadata to check properties
-      const metadataResponse = await this.gapi.client.drive.files.get({
-        fileId: fileId,
-        fields: "id,name,mimeType,size",
-      });
+        // First, try to get the file metadata to check properties
+        const metadataResponse = await this.gapi.client.drive.files.get({
+          fileId: fileId,
+          fields: "id,name,mimeType,size",
+        });
 
-      // Check if file is empty or very small based on metadata
-      const fileMetadata = metadataResponse.result;
-      logger.info("File metadata:", fileMetadata);
+        // Check if file is empty or very small based on metadata
+        const fileMetadata = metadataResponse.result;
+        logger.info("File metadata:", fileMetadata);
 
-      if (fileMetadata.size === "0" || fileMetadata.size === 0) {
-        logger.info(`File ${fileId} exists but is empty, returning null`);
-        return null;
-      }
-
-      // Then download the content
-      const response = await this.gapi.client.drive.files.get({
-        fileId: fileId,
-        alt: "media",
-      });
-
-      // Basic validation - no logger.error, just log
-      if (!response || !response.body) {
-        logger.info(
-          `Empty API response for file ${fileId} - file may be empty or not accessible`
-        );
-        return null;
-      }
-
-      // Check for empty content but don't treat as error
-      if (response.body === "{}" || response.body === "") {
-        logger.info(`File ${fileId} contains empty object or string`);
-        return {}; // Return empty object instead of null for empty JSON
-      }
-
-      // Process the response based on type
-      let parsedContent;
-
-      if (typeof response.body === "string") {
-        // Handle string response
-        if (response.body.trim() === "") {
-          logger.info(`Downloaded empty string content from file ${fileId}`);
-          return {};
+        if (fileMetadata.size === "0" || fileMetadata.size === 0) {
+          logger.info(`File ${fileId} exists but is empty, returning null`);
+          return null;
         }
 
-        try {
-          // Try to parse as JSON
-          parsedContent = JSON.parse(response.body);
-          logger.info("Successfully parsed string response as JSON object");
-        } catch (e) {
-          logger.info("Response is not JSON, treating as plain text");
+        // Then download the content
+        const response = await this.gapi.client.drive.files.get({
+          fileId: fileId,
+          alt: "media",
+        });
+
+        // Basic validation - no logger.error, just log
+        if (!response || !response.body) {
+          logger.info(
+            `Empty API response for file ${fileId} - file may be empty or not accessible`
+          );
+          return null;
+        }
+
+        // Check for empty content but don't treat as error
+        if (response.body === "{}" || response.body === "") {
+          logger.info(`File ${fileId} contains empty object or string`);
+          return {}; // Return empty object instead of null for empty JSON
+        }
+
+        // Process the response based on type
+        let parsedContent;
+
+        if (typeof response.body === "string") {
+          // Handle string response
+          if (response.body.trim() === "") {
+            logger.info(`Downloaded empty string content from file ${fileId}`);
+            return {};
+          }
+
+          try {
+            // Try to parse as JSON
+            parsedContent = JSON.parse(response.body);
+            logger.info("Successfully parsed string response as JSON object");
+          } catch (e) {
+            logger.info("Response is not JSON, treating as plain text");
+            parsedContent = response.body;
+          }
+        } else {
+          // Handle object response
           parsedContent = response.body;
         }
-      } else {
-        // Handle object response
-        parsedContent = response.body;
-      }
 
-      // Final validation of content - downgrade from error to info
-      if (
-        !parsedContent ||
-        (typeof parsedContent === "object" &&
-          Object.keys(parsedContent).length === 0)
-      ) {
-        logger.info(`File ${fileId} content is empty or invalid`);
-        return {}; // Return empty object for consistency
-      }
+        // Final validation of content - downgrade from error to info
+        if (
+          !parsedContent ||
+          (typeof parsedContent === "object" &&
+            Object.keys(parsedContent).length === 0)
+        ) {
+          logger.info(`File ${fileId} content is empty or invalid`);
+          return {}; // Return empty object for consistency
+        }
 
-      // Successful download
-      logger.info(`Successfully downloaded file ${fileId}`);
-      return parsedContent;
+        // Successful download
+        logger.info(`Successfully downloaded file ${fileId}`);
+        return parsedContent;
+      } catch (error) {
+        if (error.status === 404) {
+          logger.info(
+            `File with ID ${fileId} not found - this is normal for first sync`
+          );
+          return null; // File not found, which is expected in some cases
+        }
+
+        // Only log as error for unexpected issues
+        logger.error(`Error downloading file ${fileId}:`, error);
+        throw error;
+      }
+    };
+
+    try {
+      return await operation();
     } catch (error) {
-      if (error.status === 404) {
-        logger.info(
-          `File with ID ${fileId} not found - this is normal for first sync`
-        );
-        return null; // File not found, which is expected in some cases
+      if (error.status === 401) {
+        return await this.handleAuthError(operation);
       }
-
-      // Only log as error for unexpected issues
-      logger.error(`Error downloading file ${fileId}:`, error);
       throw error;
     }
   }
 
   async getFileMetadata(fileId) {
-    try {
-      logger.info(`Getting metadata for Google Drive file: ${fileId}`);
+    const operation = async () => {
+      try {
+        logger.info(`Getting metadata for Google Drive file: ${fileId}`);
 
-      // Request specific fields we need, using valid fields from the API
-      const response = await this.gapi.client.drive.files.get({
-        fileId: fileId,
-        fields:
-          "id,name,version,headRevisionId,modifiedTime,size,mimeType,md5Checksum",
-      });
+        // Request specific fields we need, using valid fields from the API
+        const response = await this.gapi.client.drive.files.get({
+          fileId: fileId,
+          fields:
+            "id,name,version,headRevisionId,modifiedTime,size,mimeType,md5Checksum",
+        });
 
-      // Log the full response for debugging
-      logger.info("Google Drive metadata response:", response.result);
+        // Log the full response for debugging
+        logger.info("Google Drive metadata response:", response.result);
 
-      // Return essential metadata
-      return {
-        id: response.result.id,
-        name: response.result.name,
-        version: response.result.version,
-        headRevisionId: response.result.headRevisionId,
-        md5Checksum: response.result.md5Checksum,
-        modifiedTime: response.result.modifiedTime,
-        size: response.result.size || 0,
-        mimeType: response.result.mimeType,
-      };
-    } catch (error) {
-      if (error.status === 404) {
-        logger.info(`File with ID ${fileId} not found`);
-        return null;
+        // Return essential metadata
+        return {
+          id: response.result.id,
+          name: response.result.name,
+          version: response.result.version,
+          headRevisionId: response.result.headRevisionId,
+          md5Checksum: response.result.md5Checksum,
+          modifiedTime: response.result.modifiedTime,
+          size: response.result.size || 0,
+          mimeType: response.result.mimeType,
+        };
+      } catch (error) {
+        if (error.status === 404) {
+          logger.info(`File with ID ${fileId} not found`);
+          return null;
+        }
+
+        logger.error(`Error getting metadata for file ${fileId}:`, error);
+        throw error;
       }
+    };
 
-      logger.error(`Error getting metadata for file ${fileId}:`, error);
-      return null;
+    try {
+      return await operation();
+    } catch (error) {
+      if (error.status === 401) {
+        return await this.handleAuthError(operation);
+      }
+      throw error;
     }
   }
 
   async clearAllAppDataFiles() {
-    let deletedCount = 0;
-    let pageToken = null;
+    const operation = async () => {
+      let deletedCount = 0;
+      let pageToken = null;
+
+      try {
+        do {
+          // Get files with pagination
+          const listResponse = await this.gapi.client.drive.files.list({
+            spaces: "appDataFolder",
+            fields: "nextPageToken, files(id, name)",
+            pageSize: 100, // Get up to 100 files per request
+            pageToken: pageToken || undefined,
+          });
+
+          const files = listResponse.result.files || [];
+          pageToken = listResponse.result.nextPageToken;
+
+          if (files.length === 0 && deletedCount === 0) {
+            logger.info("No files found to delete.");
+            return 0;
+          }
+
+          // Delete each file
+          for (const file of files) {
+            try {
+              logger.info(`Deleting file: ${file.name} (ID: ${file.id})`);
+              await this.gapi.client.drive.files.delete({ fileId: file.id });
+              deletedCount++;
+            } catch (deleteError) {
+              logger.error(`Error deleting file ${file.name}:`, deleteError);
+              // Continue with other files
+            }
+          }
+        } while (pageToken); // Continue if there are more pages
+
+        logger.info(
+          `Successfully deleted ${deletedCount} files from appDataFolder`
+        );
+        return deletedCount;
+      } catch (error) {
+        logger.error("Error clearing appDataFolder files:", error);
+        throw error;
+      }
+    };
 
     try {
-      do {
-        // Get files with pagination
-        const listResponse = await this.gapi.client.drive.files.list({
-          spaces: "appDataFolder",
-          fields: "nextPageToken, files(id, name)",
-          pageSize: 100, // Get up to 100 files per request
-          pageToken: pageToken || undefined,
-        });
-
-        const files = listResponse.result.files || [];
-        pageToken = listResponse.result.nextPageToken;
-
-        if (files.length === 0 && deletedCount === 0) {
-          logger.info("No files found to delete.");
-          return 0;
-        }
-
-        // Delete each file
-        for (const file of files) {
-          try {
-            logger.info(`Deleting file: ${file.name} (ID: ${file.id})`);
-            await this.gapi.client.drive.files.delete({ fileId: file.id });
-            deletedCount++;
-          } catch (deleteError) {
-            logger.error(`Error deleting file ${file.name}:`, deleteError);
-            // Continue with other files
-          }
-        }
-      } while (pageToken); // Continue if there are more pages
-
-      logger.info(
-        `Successfully deleted ${deletedCount} files from appDataFolder`
-      );
-      return deletedCount;
+      return await operation();
     } catch (error) {
-      logger.error("Error clearing appDataFolder files:", error);
+      if (error.status === 401) {
+        return await this.handleAuthError(operation);
+      }
       throw error;
     }
   }
@@ -667,29 +722,40 @@ class GoogleDriveProvider {
    * @returns {Promise<Object|null>} The file information or null if not found
    */
   async searchFile(filename) {
-    try {
-      logger.debug(
-        `Searching for Google Drive file '${filename}' in appDataFolder...`
-      );
-      const response = await this.gapi.client.drive.files.list({
-        spaces: "appDataFolder",
-        fields: "files(id, name, modifiedTime, size)",
-        q: `name='${filename}'`,
-      });
-
-      // Check if we got any results
-      if (response.result.files && response.result.files.length > 0) {
-        const file = response.result.files[0];
+    const operation = async () => {
+      try {
         logger.debug(
-          `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${file.modifiedTime})`
+          `Searching for Google Drive file '${filename}' in appDataFolder...`
         );
-        return file;
-      }
+        const response = await this.gapi.client.drive.files.list({
+          spaces: "appDataFolder",
+          fields: "files(id, name, modifiedTime, size)",
+          q: `name='${filename}'`,
+        });
 
-      logger.info(`File '${filename}' not found in Google Drive`);
-      return null;
+        // Check if we got any results
+        if (response.result.files && response.result.files.length > 0) {
+          const file = response.result.files[0];
+          logger.debug(
+            `Found existing file: ${file.name} (ID: ${file.id}, Modified: ${file.modifiedTime})`
+          );
+          return file;
+        }
+
+        logger.info(`File '${filename}' not found in Google Drive`);
+        return null;
+      } catch (error) {
+        logger.error("Error in Google Drive searchFile:", error);
+        throw error;
+      }
+    };
+
+    try {
+      return await operation();
     } catch (error) {
-      logger.error("Error in Google Drive searchFile:", error);
+      if (error.status === 401) {
+        return await this.handleAuthError(operation);
+      }
       throw error;
     }
   }
