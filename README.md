@@ -69,10 +69,11 @@ If you'd like to test these features, open an issue or contact me with the email
 - localStorage (for storing current daily/weekly state)
 - Service Workers (for PWA offline caching)
 - Manifest.json (for PWA installability)
-- Centralized logging (for troubleshooting)
+- Centralized logging system (for troubleshooting and debugging)
 - Material Design Icons
 - Google Drive & Dropbox APIs (for cloud synchronization)
 - Node.js (for Git hook version generation during development)
+- Modular architecture with separated concerns (core, UI, utilities, cloud providers)
 
 ## Installation / Deployment (Self-Hosting)
 
@@ -132,8 +133,8 @@ For detailed cloud sync documentation, see the [Cloud Sync Guide](../../wiki/Clo
 
 This project was developed with assistance from several AI tools following the [vibe coding approach](https://en.wikipedia.org/wiki/vibe_coding):
 
-- **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro Preview.
-- **Refactoring and Enhancement**: Major refactoring, code organization improvements, UI enhancements, and cloud synchronization features were developed with assistance from Anthropic's Claude Sonnet 3.7.
+- **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro Preview. This model was also used for various debugging and diagnostics. 
+- **Refactoring and Enhancement**: Major refactoring, code organization improvements, UI enhancements, and cloud synchronization features were developed with assistance from Anthropic's Claude Sonnet 3.7 and then with Claude Sonnet 4.0 via Cursor. 
 - **Workflow and Code Review**: OpenAI's ChatGPT (GPT-4o) provided assistance with development workflow optimization and code review.
 
 AI assistance was used primarily for code generation, architecture suggestions, and debugging support. The underlying application concept, design decisions, and final implementation responsibility remained with the human developer.
