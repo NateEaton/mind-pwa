@@ -1,27 +1,50 @@
-*.txt
-.DS_Store
-.prettierrc
-config.js
-manifest.json
-export*.json
-client_secret*
-mind-diet*.json
-*.diff
-*.log
-*.tmp
-*.bak
-scratch/*
-archive/*
-@eaDir/*
-screenshots/@eaDir/*
-core/@eaDir/*
-utils/@eaDir/*
-ui/@eaDir/*
-cloudProviders/@eaDir/*
-cloudSync/@eaDir/*
-cloudSync/tests/*
-cloudSync/*.md
-cloudSync/utils/@eaDir/*
-cloudSync/tests/@eaDir/*
-cloudSync/mergeStrategies/@eaDir/*
-cloudSync/services/@eaDir/*
+# --- System / OS Files --- Ignore 
+# macOS and Windows specific files
+.DS_Store 
+Thumbs.db
+
+# Ignore Synology system directories 
+# globally
+@eaDir/
+
+# --- Project Dependencies --- Ignore 
+# node_modules folders at any level 
+# (root, client/, server/)
+node_modules/
+
+# --- Build & Distribution --- Ignore 
+# the client-side build output 
+# directory
+/client/dist/
+
+# Ignore optional build report files
+/client/.vite/
+
+# --- Configuration & Secrets --- 
+# Ignore sensitive configuration 
+# files. Use .template files instead.
+/client/src/config.js
+
+# In the future, if you have a server 
+# config: /server/config.js Ignore 
+# all .env files containing secrets 
+# and environment-specific variables 
+# Only .env.example should ever be 
+# committed.
+.env .env.*
+!.env.example
+
+# --- IDE / Editor --- Ignore common 
+# IDE and editor-specific directories
+.idea/ .vscode/ *.swp
+
+# --- Logs --- Ignore log files
+logs/ *.log npm-debug.log* 
+yarn-debug.log* yarn-error.log*
+
+# --- Sub-Repositories --- Ignore the 
+# separately-cloned wiki Git 
+# repository. This prevents git from 
+# treating it as a submodule.
+/wiki/
+

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Track your MIND diet goals with this free, privacy-focused web app. No ads, no tracking - just simple daily tracking for brain-healthy eating.">
+  <meta property="og:title" content="MIND Diet Tracker">
+  <meta property="og:description" content="Free web app for tracking MIND diet goals. Privacy-focused, works offline.">
+  <meta property="og:image" content="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/daily-tracker.png">
+  <title>MIND Diet Tracker</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #fdfdfd;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      line-height: 1.6;
+    }
+    header, section, footer {
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    h1, h2 {
+      color: #2a2a2a;
+    }
+    .subtitle {
+      font-size: 1.2rem;
+      color: #555;
+      margin-bottom: 2rem;
+    }
+    .benefits {
+      display: flex;
+      gap: 1rem;
+      margin: 1rem 0;
+      flex-wrap: wrap;
+    }
+    .benefit {
+      flex: 1;
+      min-width: 200px;
+      text-align: center;
+    }
+    .benefit .icon {
+      font-size: 2rem;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+    .cta-button {
+      display: inline-block;
+      background: #4CAF50;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      margin: 1rem 0;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .cta-button:hover {
+      background: #45a049;
+      transform: translateY(-2px);
+      transition: all 0.2s ease;
+    }
+    
+    /* Carousel styles */
+    .carousel {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      gap: 1rem;
+      padding: 1rem 0;
+      -webkit-overflow-scrolling: touch;
+    }
+    .carousel > div {
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+      width: 300px;
+    }
+    .carousel img {
+      width: 100%;
+      height: auto;
+      min-height: 400px;
+      object-fit: cover;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    .carousel-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .caption {
+      text-align: center;
+      font-size: 0.9rem;
+      margin-top: 0.3rem;
+    }
+    
+    .features-list {
+      list-style: none;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 0.5rem;
+    }
+    .features-list li {
+      padding: 0.25rem 0;
+    }
+    
+    .steps {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    .step {
+      flex: 1;
+      min-width: 200px;
+      text-align: center;
+    }
+    .step-number {
+      width: 40px;
+      height: 40px;
+      background: #4CAF50;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+    
+    .what-is {
+      margin: 2rem 0;
+    }
+    
+    .device-note {
+      margin: 1rem 0;
+      color: #555;
+    }
+    
+    .how-it-works {
+      margin-top: 3rem;
+      margin-bottom: 3rem;
+    }
+    
+    footer {
+      font-size: 0.9rem;
+      color: #666;
+      border-top: 1px solid #ccc;
+      padding-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>MIND Diet Tracker</h1>
+  <p class="subtitle">Track your brain-healthy eating habits with science-backed simplicity</p>
+  
+  <div class="benefits">
+    <div class="benefit">
+      <span class="icon">🧠</span>
+      <p>Research-based MIND diet principles</p>
+    </div>
+    <div class="benefit">
+      <span class="icon">📱</span>
+      <p>Works online or offline</p>
+    </div>
+    <div class="benefit">
+      <span class="icon">🔒</span>
+      <p>100% private - no tracking</p>
+    </div>
+  </div>
+  
+  <div class="what-is">
+    <h2>What is the MIND Diet Tracker?</h2>
+    <p>The MIND Diet Tracker is a simple, free tool that helps you follow the <a href="https://github.com/NateEaton/mind-pwa/wiki/About-the-MIND-Diet" target="_blank">Diet (Mediterranean-DASH Intervention for Neurodegenerative Delay)</a> - an eating pattern shown to support brain health and reduce cognitive decline risk.</p>
+  </div>
+  
+  <a class="cta-button" href="https://mind-pwa-fawn.vercel.app/" target="_blank">Try It Now</a>
+  
+  <p class="device-note">Works on any device with a modern web browser. For the best experience, use the "Add to Home Screen" option on your device to install it like a regular app.</p>
+</header>
+
+<section>
+  <h2>Features</h2>
+  <ul class="features-list">
+    <li>✓ Daily tracking of food groups</li>
+    <li>✓ Weekly progress summaries</li>
+    <li>✓ Historical data review</li>
+    <li>✓ Edit daily history</li>
+    <li>✓ Guided setup wizard</li>
+    <li>✓ Sync to cloud</li>
+    <li>✓ Export/import your data</li>
+    <li>✓ Install as a mobile app</li>
+    <li>✓ Color-coded feedback</li>
+    <li>✓ Simple, intuitive interface</li>
+    <li>✓ Built by fellow user</li>
+  </ul>
+</section>
+
+<section class="how-it-works">
+  <h2>How It Works</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-number">1</div>
+      <h3>Track Daily</h3>
+      <p>Log your servings of leafy greens, berries, nuts, and other MIND diet foods</p>
+    </div>
+    <div class="step">
+      <div class="step-number">2</div>
+      <h3>Review Weekly</h3>
+      <p>See your progress towards weekly targets with color-coded summaries</p>
+    </div>
+    <div class="step">
+      <div class="step-number">3</div>
+      <h3>Build Habits</h3>
+      <p>Track your history and watch your brain-healthy eating habits improve</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Screenshots</h2>
+  <div class="carousel-container">
+    <div class="carousel">
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/daily-tracker.png" alt="Daily tracker view" />
+        <div class="caption">Daily Tracker</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/weekly-summary.png" alt="Weekly summary view" />
+        <div class="caption">Weekly Summary</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/history-view.png" alt="Weekly history view" />
+        <div class="caption">History View</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/edit-totals-modal.png" alt="Edit history dialog" />
+        <div class="caption">History View</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/food-info-modal.png" alt="Food info dialog" />
+        <div class="caption">Food Info</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/menu.png" alt="Menu" />
+        <div class="caption">App Menu</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/settings-modal.png" alt="Settings dialog" />
+        <div class="caption">Settings</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/setup-wizard.png" alt="Settings dialog" />
+        <div class="caption">Setup Wizard</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/first-day-of-week.png" alt="Settings dialog" />
+        <div class="caption">First Day of Week</div>
+      </div>
+      <div>
+        <img src="https://github.com/NateEaton/mind-pwa-pages/raw/main/screenshots/cloud-sync.png" alt="Settings dialog" />
+        <div class="caption">Cloud Sync</div>
+      </div>
+    </div>
+</section>
+
+<section>
+  <h2>About This App</h2>
+  <p>
+    Developed by a retired hobbyist (with help from AI) for personal use following the MIND diet, this app is and always will be free, with no ads or tracking. 
+    It's a personal project shared in the hope that it helps others live a little healthier.
+  </p>
+</section>
+
+<footer>
+  <p>Have feedback or questions? <a href="mailto:nate@example.com">Email me</a>.</p>
+  <p>View the source on <a href="https://github.com/NateEaton/mind-pwa" target="_blank">GitHub</a>.</p>
+</footer>
+</body>
+</html>
