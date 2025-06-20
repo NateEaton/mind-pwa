@@ -118,11 +118,13 @@ class GoogleDriveProvider {
     try {
       logger.info("Checking Google authentication");
       const cachedTokenStr = localStorage.getItem("google_drive_token");
+      const loginHint = localStorage.getItem("google_drive_login_hint");
 
       if (cachedTokenStr) {
         try {
           const cachedToken = JSON.parse(cachedTokenStr);
           logger.info("Found cached token, setting in gapi");
+          logger.debug("[auth] Login hint available for refresh:", !!loginHint);
 
           // Set the token in gapi
           this.gapi.client.setToken(cachedToken);
@@ -161,49 +163,6 @@ class GoogleDriveProvider {
     }
   }
 
-  // Add a new method to GoogleDriveProvider for token refresh
-  async refreshToken() {
-    try {
-      logger.info("Attempting to silently refresh token");
-
-      return new Promise((resolve) => {
-        this.tokenClient.callback = async (resp) => {
-          if (resp.error) {
-            logger.error("Silent token refresh failed:", resp);
-            // On failure, remove the bad token to prevent retries.
-            localStorage.removeItem("google_drive_token");
-            resolve(false);
-            return;
-          }
-
-          // --- START OF FIX ---
-          logger.info(
-            "Token refreshed successfully. Applying and saving new token."
-          );
-
-          // 1. CRITICAL: Update the gapi client with the NEW token from the response.
-          this.gapi.client.setToken(resp);
-
-          // 2. The `resp` object *is* the new token. Use it directly.
-          const newToken = resp;
-
-          // 3. Save the NEW, valid token to storage.
-          localStorage.setItem("google_drive_token", JSON.stringify(newToken));
-
-          // 4. Resolve true to signal success to the caller (e.g., handleAuthError).
-          resolve(true);
-          // --- END OF FIX ---
-        };
-
-        // Request a new token silently (no UI prompt).
-        this.tokenClient.requestAccessToken({ prompt: "" });
-      });
-    } catch (error) {
-      logger.error("Error initiating token refresh flow:", error);
-      return false;
-    }
-  }
-
   async authenticate() {
     logger.info("Starting Google authentication");
     return new Promise((resolve) => {
@@ -223,6 +182,21 @@ class GoogleDriveProvider {
           if (token) {
             logger.debug("Got valid token, saving to localStorage");
             localStorage.setItem("google_drive_token", JSON.stringify(token));
+
+            // Store login hint for future silent refresh
+            try {
+              const userInfo = await this.getUserInfo();
+              if (userInfo?.email) {
+                localStorage.setItem("google_drive_login_hint", userInfo.email);
+                logger.info(
+                  "[auth] Stored login hint for future silent refresh:",
+                  userInfo.email
+                );
+              }
+            } catch (hintError) {
+              logger.warn("[auth] Failed to store login hint:", hintError);
+              // Continue anyway - this is not critical for authentication
+            }
           }
         } catch (e) {
           logger.error("Error saving token:", e);
@@ -236,6 +210,164 @@ class GoogleDriveProvider {
       };
       this.tokenClient.requestAccessToken({ prompt: "consent" });
     });
+  }
+
+  /**
+   * Enhanced token refresh with login hint and fallback strategy
+   * @returns {Promise<boolean>} True if refresh successful, false otherwise
+   */
+  async performTokenRefreshWithHintFallback() {
+    try {
+      logger.info(
+        "[refreshToken] Starting enhanced token refresh with hint fallback"
+      );
+
+      // Get stored login hint
+      const loginHint = localStorage.getItem("google_drive_login_hint");
+      logger.debug("[refreshToken] Login hint available:", !!loginHint);
+
+      // Attempt silent refresh with login hint
+      const silentSuccess = await this.attemptSilentRefresh(loginHint);
+      if (silentSuccess) {
+        logger.info("[refreshToken] Silent refresh successful");
+        return true;
+      }
+
+      // Fallback to account picker if silent refresh failed
+      logger.info(
+        "[refreshToken] Silent refresh failed, attempting fallback with account picker"
+      );
+      const fallbackSuccess = await this.attemptFallbackRefresh();
+
+      if (fallbackSuccess) {
+        logger.info("[refreshToken] Fallback refresh successful");
+        return true;
+      }
+
+      logger.error("[refreshToken] Both silent and fallback refresh failed");
+      return false;
+    } catch (error) {
+      logger.error("[refreshToken] Error in enhanced token refresh:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Attempt silent token refresh using login hint
+   * @param {string} loginHint - The user's email for login hint
+   * @returns {Promise<boolean>} True if successful, false otherwise
+   */
+  async attemptSilentRefresh(loginHint) {
+    return new Promise((resolve) => {
+      this.tokenClient.callback = async (resp) => {
+        if (resp.error) {
+          logger.debug("[refreshToken] Silent refresh failed:", resp.error);
+          // Clear login hint if silent refresh fails - it may be invalid
+          if (loginHint) {
+            localStorage.removeItem("google_drive_login_hint");
+            logger.debug("[refreshToken] Cleared invalid login hint");
+          }
+          resolve(false);
+          return;
+        }
+
+        logger.info(
+          "[refreshToken] Silent refresh successful, applying and saving new token"
+        );
+
+        // Update the gapi client with the new token
+        this.gapi.client.setToken(resp);
+
+        // Save the new token
+        localStorage.setItem("google_drive_token", JSON.stringify(resp));
+
+        resolve(true);
+      };
+
+      // Request silent refresh with login hint
+      const requestParams = { prompt: "none" };
+      if (loginHint) {
+        requestParams.hint = loginHint;
+      }
+
+      logger.debug(
+        "[refreshToken] Attempting silent refresh with params:",
+        requestParams
+      );
+      this.tokenClient.requestAccessToken(requestParams);
+    });
+  }
+
+  /**
+   * Attempt fallback refresh with account picker
+   * @returns {Promise<boolean>} True if successful, false otherwise
+   */
+  async attemptFallbackRefresh() {
+    return new Promise((resolve) => {
+      this.tokenClient.callback = async (resp) => {
+        if (resp.error) {
+          logger.error("[refreshToken] Fallback refresh failed:", resp.error);
+          // On failure, remove all stored auth data to prevent retries
+          this.clearStoredAuth();
+          resolve(false);
+          return;
+        }
+
+        logger.info(
+          "[refreshToken] Fallback refresh successful, applying and saving new token"
+        );
+
+        // Update the gapi client with the new token
+        this.gapi.client.setToken(resp);
+
+        // Save the new token
+        localStorage.setItem("google_drive_token", JSON.stringify(resp));
+
+        // Update login hint if we got user info
+        try {
+          const userInfo = await this.getUserInfo();
+          if (userInfo?.email) {
+            localStorage.setItem("google_drive_login_hint", userInfo.email);
+            logger.info(
+              "[refreshToken] Updated login hint from fallback:",
+              userInfo.email
+            );
+          }
+        } catch (hintError) {
+          logger.warn(
+            "[refreshToken] Failed to update login hint from fallback:",
+            hintError
+          );
+        }
+
+        resolve(true);
+      };
+
+      logger.debug(
+        "[refreshToken] Attempting fallback refresh with account picker"
+      );
+      this.tokenClient.requestAccessToken({ prompt: "select_account" });
+    });
+  }
+
+  // Add a new method to GoogleDriveProvider for token refresh
+  async refreshToken() {
+    try {
+      logger.info("Attempting enhanced token refresh with hint fallback");
+      return await this.performTokenRefreshWithHintFallback();
+    } catch (error) {
+      logger.error("Error initiating enhanced token refresh flow:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Clear stored login hint and token
+   */
+  clearStoredAuth() {
+    localStorage.removeItem("google_drive_token");
+    localStorage.removeItem("google_drive_login_hint");
+    logger.info("[auth] Cleared stored Google Drive authentication data");
   }
 
   /**
@@ -255,6 +387,8 @@ class GoogleDriveProvider {
         return result;
       } else {
         logger.error("Token refresh failed, authentication required");
+        // Clear stored auth data since refresh failed
+        this.clearStoredAuth();
         throw new Error(
           "Authentication failed. Please reconnect your Google Drive account."
         );
