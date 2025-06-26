@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { createLogger } from "./logger.js";
+import { createLogger, configure, LOG_LEVELS } from "./logger.js";
 const logger = createLogger("devTools");
 
 /**
@@ -32,6 +32,10 @@ class DevTools {
     this.dataService = dependencies.dataService;
     this.stateManager = dependencies.stateManager;
     this.appUtils = dependencies.appUtils;
+
+    // Add logger configuration functions with fallbacks
+    this.configureLogger = dependencies.configureLogger || configure;
+    this.logLevels = dependencies.logLevels || LOG_LEVELS;
 
     // Bind methods to maintain context
     this.showViewFilesDialog = this.showViewFilesDialog.bind(this);
@@ -353,26 +357,24 @@ class DevTools {
       applyLogLevelBtn.addEventListener("click", () => {
         const selectedLevel = logLevelSelect.value;
 
-        // Update logger configuration
-        import("./logger.js").then(({ configure, LOG_LEVELS }) => {
-          configure({
-            defaultLevel: LOG_LEVELS[selectedLevel],
-          });
-
-          // Store selection in localStorage for persistence
-          localStorage.setItem("appLogLevel", selectedLevel);
-
-          // Update status text
-          if (logLevelStatus) {
-            logLevelStatus.textContent = `Current application log level: ${selectedLevel}`;
-          }
-
-          // Show toast notification
-          this.uiRenderer.showToast(
-            `Log level set to ${selectedLevel}`,
-            "success"
-          );
+        // Use injected functions instead of dynamic import
+        this.configureLogger({
+          defaultLevel: this.logLevels[selectedLevel],
         });
+
+        // Store selection in localStorage for persistence
+        localStorage.setItem("appLogLevel", selectedLevel);
+
+        // Update status text
+        if (logLevelStatus) {
+          logLevelStatus.textContent = `Current application log level: ${selectedLevel}`;
+        }
+
+        // Show toast notification
+        this.uiRenderer.showToast(
+          `Log level set to ${selectedLevel}`,
+          "success"
+        );
       });
     }
 

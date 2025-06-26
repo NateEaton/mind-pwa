@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { createLogger } from "./logger.js";
+import { createLogger, configure, LOG_LEVELS } from "./logger.js";
 import appUtils from "../utils/appUtils.js";
 import DevTools from "./devTools.js";
 import { CONFIG } from "../config.js";
@@ -47,6 +47,8 @@ class EventHandlers {
       dataService: this.dataService,
       stateManager: this.stateManager,
       appUtils: appUtils,
+      configureLogger: configure,
+      logLevels: LOG_LEVELS,
     });
 
     // Bind methods to preserve 'this' context
