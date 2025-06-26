@@ -1,50 +1,44 @@
-# --- System / OS Files --- Ignore 
-# macOS and Windows specific files
+# --- System / OS Files --- Ignore macOS and Windows specific files
 .DS_Store 
 Thumbs.db
 
-# Ignore Synology system directories 
-# globally
+# Ignore Synology system directories globally
 @eaDir/
+\#recycle/
 
-# --- Project Dependencies --- Ignore 
-# node_modules folders at any level 
+# --- Project Dependencies --- Ignore node_modules folders at any level 
 # (root, client/, server/)
 node_modules/
 
-# --- Build & Distribution --- Ignore 
-# the client-side build output 
-# directory
+# --- Build & Distribution --- Ignore the client-side build output directory
 /client/dist/
 
 # Ignore optional build report files
 /client/.vite/
 
-# --- Configuration & Secrets --- 
-# Ignore sensitive configuration 
-# files. Use .template files instead.
-/client/src/config.js
+# --- Configuration & Secrets --- Ignore sensitive configuration files. 
+# Use .template files instead.
+client_secret*.json
 
-# In the future, if you have a server 
-# config: /server/config.js Ignore 
-# all .env files containing secrets 
-# and environment-specific variables 
-# Only .env.example should ever be 
-# committed.
+# In the future, if you have a server config: /server/config.js Ignore 
+# all .env files containing secrets and environment-specific variables 
+# Only .env.example should ever be committed.
 .env .env.*
 !.env.example
 
-# --- IDE / Editor --- Ignore common 
-# IDE and editor-specific directories
+# --- IDE / Editor --- Ignore common IDE and editor-specific directories
 .idea/ .vscode/ *.swp
+.history/
+.prettierrc
 
 # --- Logs --- Ignore log files
 logs/ *.log npm-debug.log* 
 yarn-debug.log* yarn-error.log*
 
-# --- Sub-Repositories --- Ignore the 
-# separately-cloned wiki Git 
-# repository. This prevents git from 
-# treating it as a submodule.
+# --- Sub-Repositories --- Ignore the separately-cloned wiki Git 
+# repository. This prevents git from treating it as a submodule.
 /wiki/
 
+# For now, transient notes that are useful locally but not necessarily 
+# a permenant part of project or something to push to Github
+/notes/

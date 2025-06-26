@@ -11,7 +11,7 @@ try {
     commitHash: commitHash,
     buildTime: buildTime,
   };
-  const outputPath = path.join(__dirname, "version.json"); // Or public/version.json
+  const outputPath = path.join(__dirname, '..', 'client', 'public', 'version.json'); 
   fs.writeFileSync(outputPath, JSON.stringify(versionData, null, 2));
   console.log(`Updated version.json with commit ${commitHash}`);
 } catch (error) {

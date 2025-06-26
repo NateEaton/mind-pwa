@@ -1,13 +1,17 @@
 {
-    "name": "mind-pwa",
-    "version": "1.0.0",
-    "description": "MIND diet tracker PWA",
-    "type": "module",
-    "scripts": {
-      "generate-config": "node scripts/generateConfig.js",
-      "build": "npm run generate-config"
-    },
-    "dependencies": {},
-    "devDependencies": {}
+  "name": "mind-pwa-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "install:client": "npm install --workspace=client",
+    "dev": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client",
+    "install:server": "npm install --workspace=server",
+    "dev:server": "npm run dev --workspace=server"
   }
-  
+}

@@ -19,6 +19,7 @@
 // cloudProviders/googleDriveProvider.js
 
 import logger from "../core/logger.js";
+import { CONFIG } from "../config.js";
 
 class GoogleDriveProvider {
   constructor() {
@@ -37,23 +38,15 @@ class GoogleDriveProvider {
 
   async initialize() {
     try {
-      // Dynamically load config
-      try {
-        const configModule = await import("../config.js");
-        this.GOOGLE_CLIENT_ID = configModule.CONFIG.GOOGLE_CLIENT_ID;
-        this.GOOGLE_API_KEY = configModule.CONFIG.GOOGLE_API_KEY;
-        this.configLoaded = true;
-        logger.info("Google Drive config loaded successfully");
-      } catch (configError) {
-        logger.warn("Failed to load config.js:", configError);
-        this.configLoaded = false;
-        return false;
-      }
+      this.GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID;
+      this.GOOGLE_API_KEY = CONFIG.GOOGLE_API_KEY;
 
       // If config didn't load properly, don't proceed
       if (!this.GOOGLE_CLIENT_ID || !this.GOOGLE_API_KEY) {
         logger.warn("Google Drive API keys not available");
         return false;
+      } else {
+        this.configLoaded = true;
       }
 
       // Load the Google API client library

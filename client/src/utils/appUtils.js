@@ -165,7 +165,7 @@ function removeTestModeBanner() {
  */
 async function loadAppVersion(versionElement = null) {
   try {
-    const response = await fetch("version.json?t=" + Date.now());
+    const response = await fetch("/version.json?t=" + Date.now());
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

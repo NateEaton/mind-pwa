@@ -1,0 +1,23 @@
+#!/bin/sh
+# pre-commit hook to update version.json
+# To use this hook, copy it to the .git/hooks directory:
+# cp scripts/pre-commit.example .git/hooks/pre-commit
+# And make it executable:
+# chmod +x .git/hooks/pre-commit
+
+echo "Running pre-commit hook to update version..."
+
+# Run the node script.
+node ./scripts/update-version.cjs
+
+# Check if the script failed
+if [ $? -ne 0 ]; then
+   echo "pre-commit hook failed: Could not update version.json" >&2
+   exit 1
+fi
+
+# --- THIS IS THE FIX ---
+# Add the updated version.json using its new path.
+git add client/public/version.json
+
+echo "Added updated version.json to commit."

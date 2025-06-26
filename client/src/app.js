@@ -67,8 +67,9 @@ import settingsManager from "./core/settingsManager.js";
 import CloudSyncManager from "./cloudSync/cloudSync.js";
 import EventHandlers from "./core/eventHandlers.js";
 import AppManager from "./core/appManager.js";
-
 import { createLogger, configure, LOG_LEVELS } from "./core/logger.js";
+import { CONFIG } from "./config.js";
+
 const logger = createLogger("app");
 
 (function initializeLogger() {
@@ -333,8 +334,7 @@ function setupNetworkListeners() {
 
 async function finalizeLoggerConfig() {
   try {
-    const configModule = await import("./config.js");
-    const isDevMode = configModule.CONFIG?.DEV_MODE || false;
+    const isDevMode = CONFIG?.DEV_MODE || false;
 
     const storedLogLevel = localStorage.getItem("appLogLevel");
     const effectiveLevel = storedLogLevel

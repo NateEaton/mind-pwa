@@ -19,6 +19,7 @@
 import { createLogger } from "./logger.js";
 import appUtils from "../utils/appUtils.js";
 import DevTools from "./devTools.js";
+import { CONFIG } from "../config.js";
 
 const logger = createLogger("eventHandlers");
 
@@ -403,17 +404,7 @@ class EventHandlers {
   async handleAboutClick() {
     this.closeMenu();
 
-    // Import config to check DEV_MODE
-    let isDevMode = false;
-    try {
-      const config = await import("../config.js");
-      isDevMode = config.CONFIG.DEV_MODE || false;
-    } catch (error) {
-      logger.warn(
-        "Could not load config.js, defaulting to production mode:",
-        error
-      );
-    }
+    const isDevMode = CONFIG?.DEV_MODE || false;
 
     const aboutTitle = "About MIND Diet Tracker";
 
