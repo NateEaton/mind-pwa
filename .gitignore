@@ -23,16 +23,21 @@ client_secret*.json
 # In the future, if you have a server config: /server/config.js Ignore 
 # all .env files containing secrets and environment-specific variables 
 # Only .env.example should ever be committed.
-.env .env.*
+.env 
+.env.*
 !.env.example
 
 # --- IDE / Editor --- Ignore common IDE and editor-specific directories
-.idea/ .vscode/ *.swp
+.idea/ 
+.vscode/ 
+*.swp
 .history/
 .prettierrc
 
 # --- Logs --- Ignore log files
-logs/ *.log npm-debug.log* 
+logs/ 
+*.log 
+npm-debug.log* 
 yarn-debug.log* yarn-error.log*
 
 # --- Sub-Repositories --- Ignore the separately-cloned wiki Git 
