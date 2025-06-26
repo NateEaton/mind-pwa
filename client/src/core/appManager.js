@@ -25,7 +25,10 @@ import logger from "./logger.js";
  * between different modules (UI, data, sync, etc.).
  */
 export default class AppManager {
-  constructor() {
+  constructor(dependencies = {}) {
+    // Store dependencies
+    this.stateManager = dependencies.stateManager;
+
     this.cloudSync = null;
     this.syncEnabled = false;
     this.syncReady = false;
@@ -245,16 +248,13 @@ export default class AppManager {
     // It should update the state manager with the new selected date
     logger.debug("AppManager: Day selection requested:", newSelectedDateStr);
 
-    // Import stateManager here to avoid circular dependencies
-    import("./stateManager.js")
-      .then(({ default: stateManager }) => {
-        stateManager.dispatch({
-          type: stateManager.ACTION_TYPES.SET_SELECTED_TRACKER_DATE,
-          payload: { date: newSelectedDateStr },
-        });
-      })
-      .catch((error) => {
-        logger.error("Error importing stateManager for day selection:", error);
+    if (this.stateManager) {
+      this.stateManager.dispatch({
+        type: this.stateManager.ACTION_TYPES.SET_SELECTED_TRACKER_DATE,
+        payload: { date: newSelectedDateStr },
       });
+    } else {
+      logger.error("StateManager not available for day selection");
+    }
   }
 }

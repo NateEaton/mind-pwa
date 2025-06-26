@@ -256,15 +256,15 @@ const foodGroups = [
   },
 ];
 
-// Create single app manager instance
-const appManager = new AppManager();
-
 // Create event handlers instance (will be initialized later with dependencies)
 let eventHandlers = null;
+let appManager = null; // Will be initialized after stateManager
 
 // Expose only necessary functions to window (for cloud providers)
 window.setSyncReady = function (ready) {
-  appManager.setSyncReady(ready);
+  if (appManager) {
+    appManager.setSyncReady(ready);
+  }
 };
 
 // In app.js - Improve network status monitoring
@@ -433,6 +433,9 @@ async function completeAppInitialization(fromWizard = false) {
 
     // Initialize state manager with food groups configuration
     await stateManager.initialize(foodGroups);
+
+    // Initialize app manager with stateManager dependency
+    appManager = new AppManager({ stateManager });
 
     // Initialize UI renderer
     uiRenderer.initialize(appManager);
