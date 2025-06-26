@@ -1,5 +1,7 @@
 # MIND Diet Tracker PWA
 
+> ⚠️ **Note:** This branch (`feature/server-side-auth`) represents a major architectural refactor. The project has been restructured into a monorepo (`client/` and `server/`) and is being prepared for an optional server-side backend to provide persistent cloud sync authentication. This branch is a work-in-progress. For the latest stable version, please see the `main` branch.
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Node.js: >=18.0.0](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
