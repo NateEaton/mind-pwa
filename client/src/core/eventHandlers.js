@@ -424,11 +424,11 @@ class EventHandlers {
         this.appManager.getCloudSync() &&
         this.appManager.getCloudSync().provider
       ) {
-        currentProvider = this.appManager
-          .getCloudSync()
-          .provider.constructor.name.includes("Dropbox")
-          ? "Dropbox"
-          : "Google Drive";
+        currentProvider =
+          this.appManager.getCloudSync().provider.providerName ===
+          "DropboxProvider"
+            ? "Dropbox"
+            : "Google Drive";
       }
 
       aboutContent += this.getDevControlsHtml();
@@ -503,11 +503,11 @@ class EventHandlers {
       this.appManager.getCloudSync() &&
       this.appManager.getCloudSync().provider
     ) {
-      currentProvider = this.appManager
-        .getCloudSync()
-        .provider.constructor.name.includes("Dropbox")
-        ? "Dropbox"
-        : "Google Drive";
+      currentProvider =
+        this.appManager.getCloudSync().provider.providerName ===
+        "DropboxProvider"
+          ? "Dropbox"
+          : "Google Drive";
     }
 
     return `

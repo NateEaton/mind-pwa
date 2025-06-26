@@ -23,6 +23,7 @@ import { CONFIG } from "../config.js";
 
 class GoogleDriveProvider {
   constructor() {
+    this.providerName = "GoogleDriveProvider";
     this.GOOGLE_CLIENT_ID = null;
     this.GOOGLE_API_KEY = null;
     this.SCOPES =

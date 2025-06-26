@@ -54,11 +54,10 @@ class DevTools {
       return;
     }
 
-    const providerName = this.appManager
-      .getCloudSync()
-      .provider.constructor.name.includes("Dropbox")
-      ? "Dropbox"
-      : "Google Drive";
+    const providerName =
+      this.appManager.getCloudSync().provider.providerName === "DropboxProvider"
+        ? "Dropbox"
+        : "Google Drive";
 
     try {
       // Get file list

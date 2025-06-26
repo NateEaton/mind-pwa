@@ -23,6 +23,7 @@ import { CONFIG } from "../config.js";
 
 class DropboxProvider {
   constructor() {
+    this.providerName = "DropboxProvider";
     this.DROPBOX_APP_KEY = null;
     this.ACCESS_TOKEN = null;
     this.REDIRECT_URI = window.location.origin;

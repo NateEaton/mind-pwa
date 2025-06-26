@@ -148,10 +148,10 @@ export default class AppManager {
 
     if (hasSyncManager && this.cloudSync.provider) {
       // Get provider name for more detailed logging
-      providerName = this.cloudSync.provider.constructor.name;
+      providerName = this.cloudSync.provider.providerName;
 
       // Check if the current provider is authenticated
-      if (providerName.includes("Dropbox")) {
+      if (providerName === "DropboxProvider") {
         // For Dropbox, check if we have an access token
         isAuthenticated = !!this.cloudSync.provider.ACCESS_TOKEN;
       } else {

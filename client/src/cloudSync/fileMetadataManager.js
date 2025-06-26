@@ -118,11 +118,8 @@ export class FileMetadataManager {
         return true;
       }
 
-      const providerType = provider.constructor.name
-        .toLowerCase()
-        .includes("dropbox")
-        ? "dropbox"
-        : "gdrive";
+      const providerType =
+        provider.providerName === "DropboxProvider" ? "dropbox" : "gdrive";
 
       const comparison = compareRevisionInfo(
         storedMetadata,
@@ -148,11 +145,8 @@ export class FileMetadataManager {
    * @returns {boolean} True if metadata is valid
    */
   validateFileMetadata(fileMetadata, provider) {
-    const providerType = provider.constructor.name
-      .toLowerCase()
-      .includes("dropbox")
-      ? "dropbox"
-      : "gdrive";
+    const providerType =
+      provider.providerName === "DropboxProvider" ? "dropbox" : "gdrive";
     return hasValidFileMetadata(fileMetadata, providerType);
   }
 }

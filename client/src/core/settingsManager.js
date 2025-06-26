@@ -105,11 +105,10 @@ async function showSettings() {
     const cloudSync = getCloudSyncState ? getCloudSyncState() : null;
     if (cloudSync && cloudSync.provider) {
       // If we have an active cloud sync, check what type it is
-      currentSyncProvider = cloudSync.provider.constructor.name.includes(
-        "Dropbox"
-      )
-        ? "dropbox"
-        : "gdrive";
+      currentSyncProvider =
+        cloudSync.provider.providerName === "DropboxProvider"
+          ? "dropbox"
+          : "gdrive";
       logger.debug("Active provider detected:", currentSyncProvider);
     } else {
       // Fall back to saved preference
@@ -397,7 +396,7 @@ function setupProviderChangeListener() {
       const newProvider = e.target.value;
       let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
       const currentProvider = cloudSync
-        ? cloudSync.provider.constructor.name.includes("Dropbox")
+        ? cloudSync.provider.providerName === "DropboxProvider"
           ? "dropbox"
           : "gdrive"
         : "none";
@@ -522,7 +521,8 @@ function setupActionButtonListeners() {
 
       if (
         !cloudSync ||
-        cloudSync.provider?.constructor.name !== getProviderClassName(provider)
+        cloudSync.provider?.providerName !==
+          (provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider")
       ) {
         // Initialize with new provider
         cloudSync = new CloudSyncManager(
@@ -557,7 +557,7 @@ function setupActionButtonListeners() {
 
           // For Google Drive, we need to manually set sync ready since the provider
           // delays it when authenticating from settings dialog
-          if (cloudSync.provider?.constructor.name === "GoogleDriveProvider") {
+          if (cloudSync.provider?.providerName === "GoogleDriveProvider") {
             if (setSyncReadyCallback) setSyncReadyCallback(true);
           }
 
@@ -607,7 +607,7 @@ function closeSettingsModal() {
 
     // For Google Drive, ensure sync ready is set since auth flow delays it
     if (
-      cloudSync.provider?.constructor.name === "GoogleDriveProvider" &&
+      cloudSync.provider?.providerName === "GoogleDriveProvider" &&
       setSyncReadyCallback
     ) {
       setSyncReadyCallback(true);
@@ -620,15 +620,6 @@ function closeSettingsModal() {
 
   // Close the modal
   uiRenderer.closeModal();
-}
-
-/**
- * Get provider class name for comparison
- * @param {string} provider - Provider identifier
- * @returns {string} Provider class name
- */
-function getProviderClassName(provider) {
-  return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
 }
 
 // =============================================================================

@@ -971,10 +971,6 @@ async function syncData(isInitialSync = false, isManualSync = false) {
   }
 }
 
-function getProviderClassName(provider) {
-  return provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider";
-}
-
 /**
  * Handle dynamic viewport height for mobile browsers
  * This addresses issues with browsers like Edge mobile that include browser chrome in viewport calculations
