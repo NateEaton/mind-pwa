@@ -42,7 +42,9 @@ class DropboxProvider {
           logger.info("Dropbox SDK loaded successfully.");
           resolve(true);
         } else {
-          logger.error("Dropbox SDK script loaded but window.Dropbox is undefined.");
+          logger.error(
+            "Dropbox SDK script loaded but window.Dropbox is undefined."
+          );
           reject(new Error("Dropbox SDK failed to initialize."));
         }
       };
@@ -68,6 +70,11 @@ class DropboxProvider {
     this.ACCESS_TOKEN = localStorage.getItem("dropbox_access_token");
     if (!this.ACCESS_TOKEN) return false;
 
+    // IMPORTANT: Ensure Dropbox SDK is loaded before trying to use it.
+    if (!window.Dropbox) {
+      await this.initialize();
+    }
+
     this._initializeDbxClient();
 
     // Test the token
@@ -77,7 +84,9 @@ class DropboxProvider {
       return true;
     } catch (error) {
       if (error?.status === 401) {
-        logger.warn("Dropbox token is expired. Will attempt refresh on first API call.");
+        logger.warn(
+          "Dropbox token is expired. Will attempt refresh on first API call."
+        );
         // We can return true here and let handleAuthError deal with the refresh.
         // Or, to be more proactive:
         // return await this.refreshToken().catch(() => false);
@@ -89,8 +98,8 @@ class DropboxProvider {
 
   async authenticate() {
     logger.info("Redirecting to server for Dropbox authentication.");
-    window.location.href = '/api/dropbox/auth';
-    return new Promise(() => { }); // This will never resolve
+    window.location.href = "/api/dropbox/auth";
+    return new Promise(() => {}); // This will never resolve
   }
 
   async refreshToken() {
@@ -102,14 +111,14 @@ class DropboxProvider {
 
     try {
       logger.info("Refreshing Dropbox access token via server...");
-      const response = await fetch('/api/dropbox/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/dropbox/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
 
       if (!response.ok) {
-        throw new Error('Token refresh failed on server.');
+        throw new Error("Token refresh failed on server.");
       }
 
       const { access_token } = await response.json();
@@ -149,9 +158,13 @@ class DropboxProvider {
         return await operation();
       } else {
         // This 'else' is important for clarity, though the catch block would also handle it.
-        logger.error("Dropbox token refresh failed, user must re-authenticate.");
+        logger.error(
+          "Dropbox token refresh failed, user must re-authenticate."
+        );
         this.clearStoredAuth();
-        throw new Error("Authentication failed. Please reconnect your Dropbox account.");
+        throw new Error(
+          "Authentication failed. Please reconnect your Dropbox account."
+        );
       }
     } catch (error) {
       // This will catch errors from both refreshToken() and the retried operation().
@@ -169,7 +182,9 @@ class DropboxProvider {
   async findOrCreateFile(filename) {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {
@@ -266,7 +281,9 @@ class DropboxProvider {
   async downloadFile(fileId) {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {
@@ -299,7 +316,9 @@ class DropboxProvider {
                   );
                   resolve(data);
                 } catch (parseError) {
-                  logger.warn(`Content is not valid JSON: ${parseError.message}`);
+                  logger.warn(
+                    `Content is not valid JSON: ${parseError.message}`
+                  );
                   // Return empty object for invalid JSON
                   resolve({});
                 }
@@ -349,7 +368,9 @@ class DropboxProvider {
   async uploadFile(fileId, content) {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {
@@ -451,7 +472,9 @@ class DropboxProvider {
   async getFileMetadata(fileId) {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {
@@ -493,7 +516,9 @@ class DropboxProvider {
   async clearAllAppDataFiles() {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {
@@ -556,7 +581,9 @@ class DropboxProvider {
   async searchFile(filename) {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {
@@ -604,7 +631,9 @@ class DropboxProvider {
   async getUserInfo() {
     if (!this.dbx) this._initializeDbxClient();
     if (!this.dbx) {
-      return Promise.reject(new Error("Dropbox client not initialized. Cannot perform operation."));
+      return Promise.reject(
+        new Error("Dropbox client not initialized. Cannot perform operation.")
+      );
     }
 
     const operation = async () => {

@@ -89,8 +89,59 @@ export class CloudSyncManager {
       this.provider
     );
 
+    // First, check if we have a valid access token.
     this.isAuthenticated = await this.provider.checkAuth();
-    return this.isAuthenticated;
+
+    if (this.isAuthenticated) {
+      logger.info(
+        `Auth check successful with stored access token for ${providerName}.`
+      );
+      return true;
+    }
+
+    // If not authenticated, check if we have a refresh token to try.
+    logger.info(
+      `Stored access token is invalid or missing. Checking for a refresh token...`
+    );
+    const refreshToken = localStorage.getItem(`${providerName}_refresh_token`);
+
+    if (refreshToken) {
+      logger.info(
+        `Found refresh token for ${providerName}. Attempting to refresh session proactively.`
+      );
+
+      // Try refresh with retry logic
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const refreshSuccess = await this.provider.refreshToken();
+          if (refreshSuccess) {
+            logger.info(
+              `Proactive token refresh successful for ${providerName} on attempt ${attempt}.`
+            );
+            this.isAuthenticated = true;
+            return true;
+          }
+        } catch (error) {
+          logger.warn(`Refresh attempt ${attempt} failed:`, error);
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+          }
+        }
+      }
+
+      // All attempts failed
+      logger.warn(
+        `All refresh attempts failed for ${providerName}. User must re-authenticate.`
+      );
+      this.provider.clearStoredAuth();
+      return false;
+    }
+
+    // If we reach here, there's no valid access token and no refresh token.
+    logger.info(
+      `No valid session found for ${providerName}. User is not authenticated.`
+    );
+    return false;
   }
 
   /**

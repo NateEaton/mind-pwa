@@ -36,7 +36,9 @@ class GoogleDriveProvider {
           try {
             // We initialize without API Key or Client ID as the token will provide all credentials.
             await window.gapi.client.init({
-              discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+              discoveryDocs: [
+                "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+              ],
             });
             this.gapi = window.gapi;
             resolve(true);
@@ -53,17 +55,22 @@ class GoogleDriveProvider {
       document.body.appendChild(script);
     });
   }
-  
+
   async checkAuth() {
     const accessToken = localStorage.getItem("google_drive_access_token");
     if (!accessToken) return false;
-    
+
+    // IMPORTANT: Ensure gapi is loaded before trying to use it.
+    if (!this.gapi) {
+      await this.initialize();
+    }
+
     // Set the token for subsequent API calls
     this.gapi.client.setToken({ access_token: accessToken });
-    
+
     // Test the token to see if it's still valid
     try {
-      await this.gapi.client.drive.about.get({ fields: 'user' });
+      await this.gapi.client.drive.about.get({ fields: "user" });
       return true;
     } catch {
       return false; // If it fails for any reason, assume not authenticated. Refresh will be tried on first API call.
@@ -72,7 +79,7 @@ class GoogleDriveProvider {
 
   async authenticate() {
     logger.info("Redirecting to server for Google authentication.");
-    window.location.href = '/api/gdrive/auth';
+    window.location.href = "/api/gdrive/auth";
     return new Promise(() => {}); // This will never resolve
   }
 
@@ -85,13 +92,13 @@ class GoogleDriveProvider {
 
     try {
       logger.info("Refreshing Google Drive access token via server...");
-      const response = await fetch('/api/gdrive/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/gdrive/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
 
-      if (!response.ok) throw new Error('Token refresh failed on server');
+      if (!response.ok) throw new Error("Token refresh failed on server");
 
       const { access_token } = await response.json();
       localStorage.setItem("google_drive_access_token", access_token);
@@ -104,12 +111,12 @@ class GoogleDriveProvider {
       throw new Error("authentication_required");
     }
   }
-  
+
   clearStoredAuth() {
     localStorage.removeItem("google_drive_access_token");
     localStorage.removeItem("google_drive_refresh_token");
     if (this.gapi && this.gapi.client) {
-        this.gapi.client.setToken(null);
+      this.gapi.client.setToken(null);
     }
   }
 
@@ -643,45 +650,45 @@ class GoogleDriveProvider {
    */
   async getUserInfo() {
     const operation = async () => {
-        try {
+      try {
         if (!this.gapi?.client) {
-            logger.warn("Google API client not available, cannot get user info");
-            return null;
+          logger.warn("Google API client not available, cannot get user info");
+          return null;
         }
 
         // Check if we have a valid token
         const token = this.gapi.client.getToken();
         if (!token) {
-            logger.warn("No Google token available, cannot get user info");
-            return null;
+          logger.warn("No Google token available, cannot get user info");
+          return null;
         }
 
         // Use the People API to get user information
         const response = await fetch(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            {
+          "https://www.googleapis.com/oauth2/v2/userinfo",
+          {
             headers: {
-                Authorization: `Bearer ${token.access_token}`,
+              Authorization: `Bearer ${token.access_token}`,
             },
-            }
+          }
         );
 
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
         const userInfo = await response.json();
 
         return {
-            email: userInfo.email,
-            name: userInfo.name || userInfo.email,
-            id: userInfo.id,
-            provider: "Google Drive",
+          email: userInfo.email,
+          name: userInfo.name || userInfo.email,
+          id: userInfo.id,
+          provider: "Google Drive",
         };
-        } catch (error) {
+      } catch (error) {
         logger.error("Error getting Google user info:", error);
         return null;
-        }
+      }
     };
 
     try {
