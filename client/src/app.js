@@ -19,39 +19,78 @@
 // Detect if we're running on the Vercel demo site
 const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
-// Detect and handle OAuth redirects before any other initialization
+// Detect and handle OAuth redirects from our server before any other initialization
 (function detectOAuthRedirect() {
-  if (window.location.hash.includes("access_token=")) {
+  // A redirect from our server will always contain a 'provider' and 'access_token' in the hash.
+  if (
+    window.location.hash.includes("access_token=") &&
+    window.location.hash.includes("provider=")
+  ) {
     try {
-      const accessToken = window.location.hash.match(/access_token=([^&]*)/)[1];
-      let state = null;
+      // Use URLSearchParams for robust parsing of the hash
+      const params = new URLSearchParams(window.location.hash.substring(1)); // remove the leading '#'
 
-      // Try to parse state parameter
-      const stateMatch = window.location.hash.match(/state=([^&]*)/);
-      if (stateMatch) {
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token"); // This is the new, crucial token
+      const provider = params.get("provider");
+
+      let state = null;
+      if (params.has("state")) {
         try {
-          state = JSON.parse(atob(decodeURIComponent(stateMatch[1])));
+          state = JSON.parse(atob(decodeURIComponent(params.get("state"))));
         } catch (e) {
           console.error("Error parsing OAuth state parameter:", e);
         }
       }
 
-      // Store the token
-      localStorage.setItem("dropbox_access_token", accessToken);
+      if (!accessToken || !provider) {
+        throw new Error("Incomplete token information in redirect URL.");
+      }
 
-      // Check if this was a wizard OAuth flow
-      if (state?.wizardContext === "cloudProviderConnect") {
-        localStorage.setItem("pendingWizardContinuation", "true");
-      } else {
-        if (state) {
-          localStorage.setItem("dropbox_auth_state", JSON.stringify(state));
+      // Store tokens based on the provider sent back from our server
+      if (provider === "gdrive") {
+        localStorage.setItem("google_drive_access_token", accessToken);
+        // Only store the refresh token if the server provided one.
+        // Google often only sends it on the very first consent.
+        if (refreshToken) {
+          localStorage.setItem("google_drive_refresh_token", refreshToken);
+        }
+      } else if (provider === "dropbox") {
+        localStorage.setItem("dropbox_access_token", accessToken);
+        if (refreshToken) {
+          localStorage.setItem("dropbox_refresh_token", refreshToken);
         }
       }
 
-      // Clear the hash
+      // Check if this was a wizard OAuth flow to signal continuation
+      if (state?.wizardContext === "cloudProviderConnect") {
+        localStorage.setItem("pendingWizardContinuation", "true");
+        console.log("OAuth redirect detected for wizard flow");
+      } else if (state?.wizardContext === "settingsAuth") {
+        // This was a settings dialog OAuth flow
+        localStorage.setItem("pendingSettingsAuth", "true");
+        console.log("OAuth redirect detected for settings flow");
+      } else {
+        // Legacy or unknown context - store state for backward compatibility
+        if (state) {
+          localStorage.setItem(
+            `${provider}_auth_state`,
+            JSON.stringify({
+              ...state,
+              timestamp: Date.now(),
+            })
+          );
+        }
+        console.log("OAuth redirect detected for unknown context");
+      }
+
+      // Clear the hash from the URL so it doesn't get processed again on reload
       window.history.replaceState(null, "", window.location.pathname);
+      console.log(`Successfully processed OAuth redirect for ${provider}.`);
     } catch (error) {
       console.error("OAuth redirect handling error:", error);
+      // It's often better to clear the hash even on error to prevent loops.
+      window.history.replaceState(null, "", window.location.pathname);
     }
   }
 })();
@@ -590,6 +629,24 @@ async function completeAppInitialization(fromWizard = false) {
       syncInitialized = await initializeCloudSync();
     }
 
+    // Check for settings OAuth return when app is already initialized
+    const pendingSettingsAuth = localStorage.getItem("pendingSettingsAuth");
+    if (pendingSettingsAuth && !fromWizard) {
+      logger.info("Detected settings OAuth return, showing settings dialog");
+      localStorage.removeItem("pendingSettingsAuth");
+
+      // Show settings dialog after a short delay to ensure app is fully initialized
+      setTimeout(() => {
+        settingsManager.showSettings();
+        uiRenderer.showToast("Authentication successful", "success");
+
+        // Set pending initial sync flag so sync will be triggered when dialog closes
+        if (settingsManager.setPendingInitialSync) {
+          settingsManager.setPendingInitialSync(true);
+        }
+      }, 1000);
+    }
+
     // 7. Perform initial sync if enabled and initialized
     // Only for normal startup, not after wizard completion
     if (
@@ -637,44 +694,8 @@ async function initializeCloudSync() {
       dataService.getPreference("syncWifiOnly", false),
     ]);
 
-    // Determine effective provider based on configuration and auth state
-    let effectiveProvider = syncProvider;
-    let hasDropboxAuthRedirect = false;
-
-    // Only process Dropbox-specific elements if Dropbox is the configured provider
-    // or we explicitly detect a Dropbox redirect in URL
-    const hasDropboxTokenInUrl = window.location.hash.includes("access_token=");
-
-    if (syncProvider === "dropbox" || hasDropboxTokenInUrl) {
-      // Check for stored auth state
-      const storedAuthState = localStorage.getItem("dropbox_auth_state");
-      if (storedAuthState) {
-        try {
-          const authState = JSON.parse(storedAuthState);
-
-          // Clear stored state immediately
-          localStorage.removeItem("dropbox_auth_state");
-
-          // Check if state is recent (within 10 minutes)
-          const stateAge = Date.now() - authState.timestamp;
-          if (stateAge <= 10 * 60 * 1000) {
-            logger.info("Found recent Dropbox auth state");
-            effectiveProvider = "dropbox";
-            hasDropboxAuthRedirect = true;
-          } else {
-            logger.info("Stored auth state expired, ignoring");
-          }
-        } catch (e) {
-          logger.error("Error processing stored auth state:", e);
-        }
-      }
-
-      // Force provider to dropbox if token is in URL
-      if (hasDropboxTokenInUrl) {
-        logger.info("Detected Dropbox token in URL hash");
-        effectiveProvider = "dropbox";
-      }
-    }
+    // Use the configured provider
+    const effectiveProvider = syncProvider;
 
     logger.info(`Initializing cloud sync with provider: ${effectiveProvider}`);
 
@@ -727,30 +748,44 @@ async function initializeCloudSync() {
       logger.info(`Auto-sync configured for every ${autoSyncInterval} minutes`);
     }
 
-    // Handle Dropbox auth redirect case - only relevant for Dropbox
-    if (effectiveProvider === "dropbox" && hasDropboxAuthRedirect) {
+    // Handle OAuth redirect cases for both providers
+    const hasOAuthRedirect = window.location.hash.includes("access_token=");
+    const pendingWizardContinuation = localStorage.getItem(
+      "pendingWizardContinuation"
+    );
+    const pendingSettingsAuth = localStorage.getItem("pendingSettingsAuth");
+
+    if (hasOAuthRedirect || pendingWizardContinuation || pendingSettingsAuth) {
       // Update preferences since we now have a token
       await dataService.savePreference("cloudSyncEnabled", true);
-      await dataService.savePreference("cloudSyncProvider", "dropbox");
+      await dataService.savePreference("cloudSyncProvider", effectiveProvider);
 
-      // Check if this redirect came from the wizard
-      const pendingWizardContinuation = localStorage.getItem(
-        "pendingWizardContinuation"
-      );
+      // Clear the flags
+      localStorage.removeItem("pendingWizardContinuation");
+      localStorage.removeItem("pendingSettingsAuth");
 
       if (pendingWizardContinuation) {
         // This was a wizard OAuth flow - set sync ready and let the wizard handle continuation
         appManager.setSyncReady(true);
         return true;
-      } else {
+      } else if (pendingSettingsAuth) {
         // This was a settings dialog OAuth flow
         setTimeout(() => {
           settingsManager.showSettings();
           // Show success toast
-          uiRenderer.showToast("Dropbox connected successfully", "success");
+          uiRenderer.showToast(
+            `${
+              effectiveProvider === "gdrive" ? "Google Drive" : "Dropbox"
+            } connected successfully`,
+            "success"
+          );
+
+          // Set pending initial sync flag so sync will be triggered when dialog closes
+          if (settingsManager.setPendingInitialSync) {
+            settingsManager.setPendingInitialSync(true);
+          }
 
           // Set sync ready AFTER the settings dialog is shown
-
           setTimeout(() => {
             appManager.setSyncReady(true);
           }, 1000);

@@ -1,0 +1,17 @@
+{
+  "name": "mind-pwa-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "OAuth backend for MIND PWA",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}

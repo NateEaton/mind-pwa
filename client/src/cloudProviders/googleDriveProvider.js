@@ -19,349 +19,98 @@
 // cloudProviders/googleDriveProvider.js
 
 import logger from "../core/logger.js";
-import { CONFIG } from "../config.js";
 
 class GoogleDriveProvider {
   constructor() {
     this.providerName = "GoogleDriveProvider";
-    this.GOOGLE_CLIENT_ID = null;
-    this.GOOGLE_API_KEY = null;
-    this.SCOPES =
-      "https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email";
-    this.DISCOVERY_DOCS = [
-      "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
-    ];
     this.gapi = null;
-    this.tokenClient = null;
-    this.currentUser = null;
-    this.configLoaded = false;
   }
 
   async initialize() {
-    try {
-      this.GOOGLE_CLIENT_ID = CONFIG.GOOGLE_CLIENT_ID;
-      this.GOOGLE_API_KEY = CONFIG.GOOGLE_API_KEY;
-
-      // If config didn't load properly, don't proceed
-      if (!this.GOOGLE_CLIENT_ID || !this.GOOGLE_API_KEY) {
-        logger.warn("Google Drive API keys not available");
-        return false;
-      } else {
-        this.configLoaded = true;
-      }
-
-      // Load the Google API client library
-      return new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "https://apis.google.com/js/api.js";
-
-        script.onload = () => {
-          window.gapi.load(
-            "client",
-            async () => {
-              try {
-                await window.gapi.client.init({
-                  apiKey: this.GOOGLE_API_KEY,
-                  discoveryDocs: this.DISCOVERY_DOCS,
-                  scope: this.SCOPES,
-                });
-                this.gapi = window.gapi;
-
-                // Also load Google Identity Services
-                const gisScript = document.createElement("script");
-                gisScript.src = "https://accounts.google.com/gsi/client";
-                gisScript.onload = () => {
-                  this.tokenClient =
-                    window.google.accounts.oauth2.initTokenClient({
-                      client_id: this.GOOGLE_CLIENT_ID,
-                      scope: this.SCOPES,
-                      callback: "", // Will be set later
-                    });
-                  resolve(true);
-                };
-                gisScript.onerror = (err) => {
-                  logger.error("Failed to load Google Identity Services:", err);
-                  reject(new Error("Failed to load Google Identity Services"));
-                };
-                document.body.appendChild(gisScript);
-              } catch (error) {
-                logger.error("Failed to initialize GAPI client:", error);
-                reject(error);
-              }
-            },
-            (error) => {
-              logger.error("Failed to load GAPI client:", error);
-              reject(new Error("Failed to load GAPI client"));
-            }
-          );
-        };
-
-        script.onerror = (err) => {
-          logger.error("Failed to load Google API:", err);
-          reject(new Error("Failed to load Google API"));
-        };
-        document.body.appendChild(script);
-      });
-    } catch (error) {
-      logger.error("Error in initialization sequence:", error);
-      throw error; // Re-throw to allow calling code to handle
-    }
-  }
-
-  async checkAuth() {
-    try {
-      logger.info("Checking Google authentication");
-      const cachedTokenStr = localStorage.getItem("google_drive_token");
-      const loginHint = localStorage.getItem("google_drive_login_hint");
-
-      if (cachedTokenStr) {
-        try {
-          const cachedToken = JSON.parse(cachedTokenStr);
-          logger.info("Found cached token, setting in gapi");
-          logger.debug("[auth] Login hint available for refresh:", !!loginHint);
-
-          // Set the token in gapi
-          this.gapi.client.setToken(cachedToken);
-
-          // Test if token works with a lightweight call
+    // We only need the GAPI client for making API calls, not auth.
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://apis.google.com/js/api.js";
+      script.onload = () => {
+        window.gapi.load("client", async () => {
           try {
-            // Using about.get is more efficient than listing files for a simple auth check.
-            await this.gapi.client.drive.about.get({ fields: "user" });
-            logger.info("Token from localStorage is valid!");
-            return true;
-          } catch (e) {
-            // Only try to refresh on a 401 Unauthorized error.
-            if (e.status === 401) {
-              logger.warn(
-                "Cached token not valid (401), attempting to refresh",
-                e
-              );
-              // Try to silently refresh the token.
-              return await this.refreshToken();
-            }
-            // For other errors (network, etc.), don't proceed.
-            logger.error("Error validating token (not a 401 error):", e);
-            return false;
+            // We initialize without API Key or Client ID as the token will provide all credentials.
+            await window.gapi.client.init({
+              discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+            });
+            this.gapi = window.gapi;
+            resolve(true);
+          } catch (error) {
+            logger.error("Failed to initialize GAPI client:", error);
+            reject(error);
           }
-        } catch (e) {
-          logger.error("Error parsing or validating cached token:", e);
-          localStorage.removeItem("google_drive_token");
-        }
-      }
-
-      // No token in storage.
-      return false;
-    } catch (error) {
-      logger.warn("Not authenticated with Google Drive:", error);
-      return false;
+        });
+      };
+      script.onerror = (err) => {
+        logger.error("Failed to load Google API:", err);
+        reject(new Error("Failed to load Google API"));
+      };
+      document.body.appendChild(script);
+    });
+  }
+  
+  async checkAuth() {
+    const accessToken = localStorage.getItem("google_drive_access_token");
+    if (!accessToken) return false;
+    
+    // Set the token for subsequent API calls
+    this.gapi.client.setToken({ access_token: accessToken });
+    
+    // Test the token to see if it's still valid
+    try {
+      await this.gapi.client.drive.about.get({ fields: 'user' });
+      return true;
+    } catch {
+      return false; // If it fails for any reason, assume not authenticated. Refresh will be tried on first API call.
     }
   }
 
   async authenticate() {
-    logger.info("Starting Google authentication");
-    return new Promise((resolve) => {
-      this.tokenClient.callback = async (resp) => {
-        logger.debug("Auth callback received", resp);
-        if (resp.error) {
-          logger.error("Error authenticating with Google:", resp);
-          // Signal that sync is not ready
-          if (window.setSyncReady) window.setSyncReady(false);
-          resolve(false);
-          return;
-        }
-
-        // Get the actual token from gapi
-        try {
-          const token = this.gapi.client.getToken();
-          if (token) {
-            logger.debug("Got valid token, saving to localStorage");
-            localStorage.setItem("google_drive_token", JSON.stringify(token));
-
-            // Store login hint for future silent refresh
-            try {
-              const userInfo = await this.getUserInfo();
-              if (userInfo?.email) {
-                localStorage.setItem("google_drive_login_hint", userInfo.email);
-                logger.info(
-                  "[auth] Stored login hint for future silent refresh:",
-                  userInfo.email
-                );
-              }
-            } catch (hintError) {
-              logger.warn("[auth] Failed to store login hint:", hintError);
-              // Continue anyway - this is not critical for authentication
-            }
-          }
-        } catch (e) {
-          logger.error("Error saving token:", e);
-        }
-
-        // Signal that sync is ready
-        if (window.setSyncReady) window.setSyncReady(true);
-
-        logger.info("Authentication successful");
-        resolve(true);
-      };
-      this.tokenClient.requestAccessToken({ prompt: "consent" });
-    });
+    logger.info("Redirecting to server for Google authentication.");
+    window.location.href = '/api/gdrive/auth';
+    return new Promise(() => {}); // This will never resolve
   }
 
-  /**
-   * Enhanced token refresh with login hint and fallback strategy
-   * @returns {Promise<boolean>} True if refresh successful, false otherwise
-   */
-  async performTokenRefreshWithHintFallback() {
-    try {
-      logger.info(
-        "[refreshToken] Starting enhanced token refresh with hint fallback"
-      );
-
-      // Get stored login hint
-      const loginHint = localStorage.getItem("google_drive_login_hint");
-      logger.debug("[refreshToken] Login hint available:", !!loginHint);
-
-      // Attempt silent refresh with login hint
-      const silentSuccess = await this.attemptSilentRefresh(loginHint);
-      if (silentSuccess) {
-        logger.info("[refreshToken] Silent refresh successful");
-        return true;
-      }
-
-      // Fallback to account picker if silent refresh failed
-      logger.info(
-        "[refreshToken] Silent refresh failed, attempting fallback with account picker"
-      );
-      const fallbackSuccess = await this.attemptFallbackRefresh();
-
-      if (fallbackSuccess) {
-        logger.info("[refreshToken] Fallback refresh successful");
-        return true;
-      }
-
-      logger.error("[refreshToken] Both silent and fallback refresh failed");
-      return false;
-    } catch (error) {
-      logger.error("[refreshToken] Error in enhanced token refresh:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Attempt silent token refresh using login hint
-   * @param {string} loginHint - The user's email for login hint
-   * @returns {Promise<boolean>} True if successful, false otherwise
-   */
-  async attemptSilentRefresh(loginHint) {
-    return new Promise((resolve) => {
-      this.tokenClient.callback = async (resp) => {
-        if (resp.error) {
-          logger.debug("[refreshToken] Silent refresh failed:", resp.error);
-          // Clear login hint if silent refresh fails - it may be invalid
-          if (loginHint) {
-            localStorage.removeItem("google_drive_login_hint");
-            logger.debug("[refreshToken] Cleared invalid login hint");
-          }
-          resolve(false);
-          return;
-        }
-
-        logger.info(
-          "[refreshToken] Silent refresh successful, applying and saving new token"
-        );
-
-        // Update the gapi client with the new token
-        this.gapi.client.setToken(resp);
-
-        // Save the new token
-        localStorage.setItem("google_drive_token", JSON.stringify(resp));
-
-        resolve(true);
-      };
-
-      // Request silent refresh with login hint
-      const requestParams = { prompt: "none" };
-      if (loginHint) {
-        requestParams.hint = loginHint;
-      }
-
-      logger.debug(
-        "[refreshToken] Attempting silent refresh with params:",
-        requestParams
-      );
-      this.tokenClient.requestAccessToken(requestParams);
-    });
-  }
-
-  /**
-   * Attempt fallback refresh with account picker
-   * @returns {Promise<boolean>} True if successful, false otherwise
-   */
-  async attemptFallbackRefresh() {
-    return new Promise((resolve) => {
-      this.tokenClient.callback = async (resp) => {
-        if (resp.error) {
-          logger.error("[refreshToken] Fallback refresh failed:", resp.error);
-          // On failure, remove all stored auth data to prevent retries
-          this.clearStoredAuth();
-          resolve(false);
-          return;
-        }
-
-        logger.info(
-          "[refreshToken] Fallback refresh successful, applying and saving new token"
-        );
-
-        // Update the gapi client with the new token
-        this.gapi.client.setToken(resp);
-
-        // Save the new token
-        localStorage.setItem("google_drive_token", JSON.stringify(resp));
-
-        // Update login hint if we got user info
-        try {
-          const userInfo = await this.getUserInfo();
-          if (userInfo?.email) {
-            localStorage.setItem("google_drive_login_hint", userInfo.email);
-            logger.info(
-              "[refreshToken] Updated login hint from fallback:",
-              userInfo.email
-            );
-          }
-        } catch (hintError) {
-          logger.warn(
-            "[refreshToken] Failed to update login hint from fallback:",
-            hintError
-          );
-        }
-
-        resolve(true);
-      };
-
-      logger.debug(
-        "[refreshToken] Attempting fallback refresh with account picker"
-      );
-      this.tokenClient.requestAccessToken({ prompt: "select_account" });
-    });
-  }
-
-  // Add a new method to GoogleDriveProvider for token refresh
   async refreshToken() {
+    const refreshToken = localStorage.getItem("google_drive_refresh_token");
+    if (!refreshToken) {
+      logger.error("No Google Drive refresh token available.");
+      throw new Error("authentication_required");
+    }
+
     try {
-      logger.info("Attempting enhanced token refresh with hint fallback");
-      return await this.performTokenRefreshWithHintFallback();
+      logger.info("Refreshing Google Drive access token via server...");
+      const response = await fetch('/api/gdrive/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (!response.ok) throw new Error('Token refresh failed on server');
+
+      const { access_token } = await response.json();
+      localStorage.setItem("google_drive_access_token", access_token);
+      this.gapi.client.setToken({ access_token });
+      logger.info("Google Drive token refreshed successfully.");
+      return true;
     } catch (error) {
-      logger.error("Error initiating enhanced token refresh flow:", error);
-      return false;
+      logger.error("Google Drive token refresh failed:", error);
+      this.clearStoredAuth(); // Important: clear tokens if refresh fails
+      throw new Error("authentication_required");
     }
   }
-
-  /**
-   * Clear stored login hint and token
-   */
+  
   clearStoredAuth() {
-    localStorage.removeItem("google_drive_token");
-    localStorage.removeItem("google_drive_login_hint");
-    logger.info("[auth] Cleared stored Google Drive authentication data");
+    localStorage.removeItem("google_drive_access_token");
+    localStorage.removeItem("google_drive_refresh_token");
+    if (this.gapi && this.gapi.client) {
+        this.gapi.client.setToken(null);
+    }
   }
 
   /**
@@ -893,44 +642,55 @@ class GoogleDriveProvider {
    * @returns {Promise<Object|null>} User info object or null if failed
    */
   async getUserInfo() {
-    try {
-      if (!this.gapi?.client) {
-        logger.warn("Google API client not available, cannot get user info");
-        return null;
-      }
-
-      // Check if we have a valid token
-      const token = this.gapi.client.getToken();
-      if (!token) {
-        logger.warn("No Google token available, cannot get user info");
-        return null;
-      }
-
-      // Use the People API to get user information
-      const response = await fetch(
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-        {
-          headers: {
-            Authorization: `Bearer ${token.access_token}`,
-          },
+    const operation = async () => {
+        try {
+        if (!this.gapi?.client) {
+            logger.warn("Google API client not available, cannot get user info");
+            return null;
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+        // Check if we have a valid token
+        const token = this.gapi.client.getToken();
+        if (!token) {
+            logger.warn("No Google token available, cannot get user info");
+            return null;
+        }
 
-      const userInfo = await response.json();
+        // Use the People API to get user information
+        const response = await fetch(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            {
+            headers: {
+                Authorization: `Bearer ${token.access_token}`,
+            },
+            }
+        );
 
-      return {
-        email: userInfo.email,
-        name: userInfo.name || userInfo.email,
-        id: userInfo.id,
-        provider: "Google Drive",
-      };
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const userInfo = await response.json();
+
+        return {
+            email: userInfo.email,
+            name: userInfo.name || userInfo.email,
+            id: userInfo.id,
+            provider: "Google Drive",
+        };
+        } catch (error) {
+        logger.error("Error getting Google user info:", error);
+        return null;
+        }
+    };
+
+    try {
+      return await operation();
     } catch (error) {
-      logger.error("Error getting Google user info:", error);
-      return null;
+      if (error.status === 401) {
+        return await this.handleAuthError(operation);
+      }
+      throw error;
     }
   }
 }

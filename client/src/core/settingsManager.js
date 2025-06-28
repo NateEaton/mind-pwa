@@ -537,52 +537,25 @@ function setupActionButtonListeners() {
       }
 
       try {
-        await cloudSync.authenticate();
-        // Update status after auth
-        const statusElement = document.getElementById("sync-status");
-        statusElement.textContent = cloudSync.isAuthenticated
-          ? "Connected"
-          : "Not connected";
-        statusElement.className =
-          "status-value " +
-          (cloudSync.isAuthenticated ? "connected" : "disconnected");
+        // Create state parameter for settings OAuth flow
+        const state = {
+          wizardContext: "settingsAuth",
+          source: "settingsDialog",
+        };
+        const stateParam = btoa(JSON.stringify(state));
 
-        document.getElementById("sync-now-btn").disabled =
-          !cloudSync.isAuthenticated;
-
-        // Set pending initial sync flag instead of syncing immediately
-        if (cloudSync.isAuthenticated) {
-          pendingInitialSync = true;
-          logger.info("Initial sync pending until settings dialog is closed");
-
-          // For Google Drive, we need to manually set sync ready since the provider
-          // delays it when authenticating from settings dialog
-          if (cloudSync.provider?.providerName === "GoogleDriveProvider") {
-            if (setSyncReadyCallback) setSyncReadyCallback(true);
-          }
-
-          // Try to get and display user info
-          try {
-            if (cloudSync.provider?.getUserInfo) {
-              const userInfo = await cloudSync.provider.getUserInfo();
-              if (userInfo) {
-                // Add account info to the DOM if not already there
-                const providerRow = document.querySelector(".provider-row");
-                if (providerRow && !document.querySelector(".account-info")) {
-                  const accountDiv = document.createElement("div");
-                  accountDiv.className = "connection-status account-info";
-                  accountDiv.innerHTML = `
-                    <span class="status-label">Account:</span>
-                    <span class="status-value connected">${userInfo.email}</span>
-                  `;
-                  providerRow.appendChild(accountDiv);
-                }
-              }
-            }
-          } catch (error) {
-            logger.debug("Failed to update user info display:", error);
-          }
+        // Redirect to server OAuth with state parameter
+        if (provider === "dropbox") {
+          window.location.href = `/api/dropbox/auth?state=${encodeURIComponent(
+            stateParam
+          )}`;
+        } else if (provider === "gdrive") {
+          window.location.href = `/api/gdrive/auth?state=${encodeURIComponent(
+            stateParam
+          )}`;
         }
+
+        // The page will reload after OAuth, so we don't need to handle the return here
       } catch (error) {
         uiRenderer.showToast(
           `Authentication failed: ${error.message}`,
@@ -622,6 +595,15 @@ function closeSettingsModal() {
   uiRenderer.closeModal();
 }
 
+/**
+ * Set the pending initial sync flag
+ * @param {boolean} value - Whether to set pending initial sync
+ */
+function setPendingInitialSync(value) {
+  pendingInitialSync = value;
+  logger.debug(`Set pendingInitialSync to: ${value}`);
+}
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
@@ -631,4 +613,5 @@ export default {
   handleSettings,
   showSettings,
   closeSettingsModal,
+  setPendingInitialSync,
 };

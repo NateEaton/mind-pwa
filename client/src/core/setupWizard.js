@@ -497,41 +497,26 @@ class SetupWizard {
       wizardContext: "cloudProviderConnect",
       originalStep: "cloud_provider",
     };
+    // Store wizard state so we can resume after the redirect
+    localStorage.setItem(
+      "setupWizardState",
+      JSON.stringify({
+        isActive: true,
+        selections: this.selections,
+      })
+    );
+
     const stateParam = btoa(JSON.stringify(state));
+    // Pass state parameter to server for proper OAuth flow identification
 
-    try {
-      if (provider === "dropbox") {
-        // Store minimal wizard state
-        localStorage.setItem(
-          "setupWizardState",
-          JSON.stringify({
-            isActive: true,
-            selections: this.selections,
-          })
-        );
-
-        // Handle Dropbox OAuth redirect using existing provider
-        const dropboxProvider = new DropboxProvider();
-        await dropboxProvider.initialize();
-        await dropboxProvider.authenticate(stateParam);
-      } else if (provider === "gdrive") {
-        // Handle Google Drive OAuth popup
-        const googleProvider = new GoogleDriveProvider();
-        await googleProvider.initialize();
-        const success = await googleProvider.authenticate();
-
-        if (success) {
-          this.currentStep = WIZARD_STEPS.COMPLETE;
-          await this.renderCurrentStep();
-        } else {
-          throw new Error("Google Drive authentication failed");
-        }
-      }
-    } catch (error) {
-      logger.error("OAuth flow failed:", error);
-      // Show error in UI
-      this.currentStep = WIZARD_STEPS.COMPLETE;
-      await this.renderCurrentStep();
+    if (provider === "dropbox") {
+      window.location.href = `/api/dropbox/auth?state=${encodeURIComponent(
+        stateParam
+      )}`;
+    } else if (provider === "gdrive") {
+      window.location.href = `/api/gdrive/auth?state=${encodeURIComponent(
+        stateParam
+      )}`;
     }
   }
 
