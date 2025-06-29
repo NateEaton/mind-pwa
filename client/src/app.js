@@ -49,11 +49,11 @@ const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
       // Store tokens based on the provider sent back from our server
       if (provider === "gdrive") {
-        localStorage.setItem("google_drive_access_token", accessToken);
+        localStorage.setItem("gdrive_access_token", accessToken);
         // Only store the refresh token if the server provided one.
         // Google often only sends it on the very first consent.
         if (refreshToken) {
-          localStorage.setItem("google_drive_refresh_token", refreshToken);
+          localStorage.setItem("gdrive_refresh_token", refreshToken);
         }
       } else if (provider === "dropbox") {
         localStorage.setItem("dropbox_access_token", accessToken);

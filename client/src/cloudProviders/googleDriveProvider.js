@@ -57,7 +57,7 @@ class GoogleDriveProvider {
   }
 
   async checkAuth() {
-    const accessToken = localStorage.getItem("google_drive_access_token");
+    const accessToken = localStorage.getItem("gdrive_access_token");
     if (!accessToken) return false;
 
     // IMPORTANT: Ensure gapi is loaded before trying to use it.
@@ -84,7 +84,7 @@ class GoogleDriveProvider {
   }
 
   async refreshToken() {
-    const refreshToken = localStorage.getItem("google_drive_refresh_token");
+    const refreshToken = localStorage.getItem("gdrive_refresh_token");
     if (!refreshToken) {
       logger.error("No Google Drive refresh token available.");
       throw new Error("authentication_required");
@@ -101,7 +101,7 @@ class GoogleDriveProvider {
       if (!response.ok) throw new Error("Token refresh failed on server");
 
       const { access_token } = await response.json();
-      localStorage.setItem("google_drive_access_token", access_token);
+      localStorage.setItem("gdrive_access_token", access_token);
       this.gapi.client.setToken({ access_token });
       logger.info("Google Drive token refreshed successfully.");
       return true;
@@ -113,8 +113,8 @@ class GoogleDriveProvider {
   }
 
   clearStoredAuth() {
-    localStorage.removeItem("google_drive_access_token");
-    localStorage.removeItem("google_drive_refresh_token");
+    localStorage.removeItem("gdrive_access_token");
+    localStorage.removeItem("gdrive_refresh_token");
     if (this.gapi && this.gapi.client) {
       this.gapi.client.setToken(null);
     }
