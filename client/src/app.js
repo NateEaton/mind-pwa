@@ -422,7 +422,35 @@ async function initializeApp() {
   await finalizeLoggerConfig(); // Ensures DEV_MODE-aware logging early
 
   try {
-    // Check if initial setup is needed
+    // Check for OAuth redirect first - this takes priority over setup completion check
+    const pendingWizardContinuation = localStorage.getItem(
+      "pendingWizardContinuation"
+    );
+
+    if (pendingWizardContinuation) {
+      logger.info("Detected pending wizard continuation from OAuth redirect");
+
+      // Listen for setup completion
+      window.addEventListener(
+        "setupWizardComplete",
+        async (event) => {
+          logger.info(
+            "Setup wizard completed with selections:",
+            event.detail.selections
+          );
+
+          // Continue with app initialization
+          await completeAppInitialization(true);
+        },
+        { once: true }
+      );
+
+      // Launch the setup wizard (it will detect the pendingWizardContinuation flag)
+      await setupWizard.start();
+      return; // Exit early, wait for setup completion
+    }
+
+    // Check if initial setup is needed (only if no pending OAuth continuation)
     const setupCompleted = await dataService.getPreference(
       "initialSetupCompleted",
       false

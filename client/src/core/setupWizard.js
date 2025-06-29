@@ -72,6 +72,9 @@ class SetupWizard {
 
     // Check for OAuth return state
     if (localStorage.getItem("pendingWizardContinuation")) {
+      logger.info(
+        "Setup wizard: Detected pendingWizardContinuation, resuming from OAuth redirect"
+      );
       localStorage.removeItem("pendingWizardContinuation");
       this.currentStep = WIZARD_STEPS.COMPLETE;
 
@@ -81,8 +84,17 @@ class SetupWizard {
         const state = JSON.parse(savedState);
         this.selections = state.selections;
         localStorage.removeItem("setupWizardState");
+        logger.info(
+          "Setup wizard: Restored selections from saved state",
+          this.selections
+        );
+      } else {
+        logger.warn(
+          "Setup wizard: No saved state found for OAuth continuation"
+        );
       }
     } else {
+      logger.info("Setup wizard: Starting fresh wizard flow");
       this.currentStep = WIZARD_STEPS.WELCOME;
     }
 
