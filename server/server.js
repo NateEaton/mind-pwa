@@ -37,12 +37,57 @@ const PORT = process.env.PORT || 3000;
 app.use(cors()); // Allows cross-origin requests from your PWA
 app.use(express.json()); // Allows parsing of JSON in request bodies (for refresh tokens)
 
-// Add request logging middleware
+// Utility function to mask sensitive data for logging
+function maskSensitiveData(
+  data,
+  sensitiveKeys = [
+    "code",
+    "state",
+    "access_token",
+    "refresh_token",
+    "client_secret",
+  ]
+) {
+  if (typeof data === "string") {
+    // For simple strings, mask if they look like tokens/secrets
+    if (data.length > 20 || /^[A-Za-z0-9_-]{20,}$/.test(data)) {
+      return `${data.substring(0, 8)}...${data.substring(data.length - 4)}`;
+    }
+    return data;
+  }
+
+  if (typeof data === "object" && data !== null) {
+    const masked = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (sensitiveKeys.includes(key.toLowerCase())) {
+        if (typeof value === "string" && value.length > 0) {
+          masked[key] = `${value.substring(0, 8)}...${value.substring(
+            value.length - 4
+          )}`;
+        } else {
+          masked[key] = "[MASKED]";
+        }
+      } else {
+        masked[key] = value;
+      }
+    }
+    return masked;
+  }
+
+  return data;
+}
+
+// Request logging middleware with sensitive data protection
 app.use((req, res, next) => {
+  const maskedQuery =
+    req.query && Object.keys(req.query).length > 0
+      ? maskSensitiveData(req.query)
+      : undefined;
+
   logger.debug(`${req.method} ${req.path}`, {
     userAgent: req.get("User-Agent"),
     ip: req.ip,
-    query: Object.keys(req.query).length > 0 ? req.query : undefined,
+    query: maskedQuery,
   });
   next();
 });
@@ -94,110 +139,97 @@ app.get("/api/dropbox/auth", (req, res) => {
 
 // 2. Dropbox redirects here after user grants access
 app.get("/api/dropbox/callback", async (req, res) => {
-  const { code, state } = req.query; // Accept state from Dropbox callback
-  logger.info("Dropbox callback received", {
-    hasCode: !!code,
-    hasState: !!state,
-    state: state ? "present" : "none",
+  const { code, state } = req.query;
+  logger.info("Dropbox OAuth callback received", {
+    code: code ? maskSensitiveData(code) : undefined,
+    state: state ? maskSensitiveData(state) : undefined,
   });
 
   if (!code) {
     logger.error("Dropbox callback missing authorization code");
-    return sendError(
-      res,
-      "dropbox",
-      "Authorization code not received from Dropbox."
-    );
+    return res.redirect("/?error=missing_code");
   }
 
   try {
-    logger.debug("Exchanging Dropbox authorization code for tokens");
-    const response = await axios.post(
+    logger.debug("Exchanging Dropbox authorization code for tokens...");
+    const tokenResponse = await axios.post(
       "https://api.dropboxapi.com/oauth2/token",
-      null,
       {
-        params: {
-          code,
-          grant_type: "authorization_code",
-          redirect_uri: DROPBOX_REDIRECT_URI,
-          client_id: DROPBOX_CLIENT_ID,
-          client_secret: DROPBOX_CLIENT_SECRET,
-        },
+        code,
+        grant_type: "authorization_code",
+        client_id: DROPBOX_CLIENT_ID,
+        client_secret: DROPBOX_CLIENT_SECRET,
+        redirect_uri: DROPBOX_REDIRECT_URI,
       }
     );
 
-    const { access_token, refresh_token, expires_in } = response.data;
+    const { access_token, refresh_token } = tokenResponse.data;
     logger.info("Dropbox token exchange successful", {
-      hasAccessToken: !!access_token,
-      hasRefreshToken: !!refresh_token,
-      expiresIn: expires_in,
+      access_token: maskSensitiveData(access_token),
+      refresh_token: refresh_token
+        ? maskSensitiveData(refresh_token)
+        : undefined,
     });
 
-    // Include state in redirect back to client
-    const redirectUrl = new URL(
-      `${APP_BASE_URL}/#provider=dropbox&access_token=${access_token}&refresh_token=${refresh_token}&expires_in=${expires_in}`
-    );
+    // Redirect back to the PWA with the tokens
+    const redirectUrl = new URL("/", req.protocol + "://" + req.get("host"));
+    redirectUrl.searchParams.set("provider", "dropbox");
+    redirectUrl.searchParams.set("access_token", access_token);
+    if (refresh_token) {
+      redirectUrl.searchParams.set("refresh_token", refresh_token);
+    }
     if (state) {
-      redirectUrl.hash += `&state=${encodeURIComponent(state)}`;
+      redirectUrl.searchParams.set("state", state);
     }
 
-    logger.debug("Redirecting client back with tokens");
+    logger.debug("Redirecting to PWA with Dropbox tokens");
     res.redirect(redirectUrl.toString());
   } catch (error) {
     logger.error(
       "Dropbox token exchange failed:",
       error.response?.data || error.message
     );
-    sendError(
-      res,
-      "dropbox",
-      error.response?.data?.error_description || "Token exchange failed."
-    );
+    res.redirect("/?error=token_exchange_failed");
   }
 });
 
 // 3. PWA calls this endpoint to refresh an expired token
 app.post("/api/dropbox/refresh", async (req, res) => {
   const { refresh_token } = req.body;
-  logger.info("Dropbox token refresh requested");
+  logger.info("Dropbox token refresh requested", {
+    refresh_token: refresh_token ? maskSensitiveData(refresh_token) : undefined,
+  });
 
   if (!refresh_token) {
     logger.error("Dropbox refresh request missing refresh token");
-    return res.status(400).json({ error: "Refresh token is required." });
+    return res.status(400).json({ error: "refresh_token required" });
   }
 
   try {
-    logger.debug("Refreshing Dropbox access token");
+    logger.debug("Refreshing Dropbox access token...");
     const response = await axios.post(
       "https://api.dropboxapi.com/oauth2/token",
-      null,
       {
-        params: {
-          refresh_token,
-          grant_type: "refresh_token",
-          client_id: DROPBOX_CLIENT_ID,
-          client_secret: DROPBOX_CLIENT_SECRET,
-        },
+        grant_type: "refresh_token",
+        refresh_token,
+        client_id: DROPBOX_CLIENT_ID,
+        client_secret: DROPBOX_CLIENT_SECRET,
       }
     );
 
+    const { access_token, expires_in } = response.data;
     logger.info("Dropbox token refresh successful", {
-      expiresIn: response.data.expires_in,
+      access_token: maskSensitiveData(access_token),
+      expires_in,
     });
 
-    res.json({
-      access_token: response.data.access_token,
-      expires_in: response.data.expires_in,
-    });
+    res.json({ access_token, expires_in });
   } catch (error) {
     logger.error(
-      "Dropbox refresh token error:",
+      "Dropbox token refresh failed:",
       error.response?.data || error.message
     );
-    res.status(401).json({
-      error:
-        "Failed to refresh Dropbox token. Re-authentication may be required.",
-    });
+    res.status(401).json({ error: "token_refresh_failed" });
   }
 });
 
@@ -230,106 +262,97 @@ app.get("/api/gdrive/auth", (req, res) => {
 });
 
 app.get("/api/gdrive/callback", async (req, res) => {
-  const { code, state } = req.query; // Accept state from Google callback
-  logger.info("Google Drive callback received", {
-    hasCode: !!code,
-    hasState: !!state,
-    state: state ? "present" : "none",
+  const { code, state } = req.query;
+  logger.info("Google Drive OAuth callback received", {
+    code: code ? maskSensitiveData(code) : undefined,
+    state: state ? maskSensitiveData(state) : undefined,
   });
 
   if (!code) {
     logger.error("Google Drive callback missing authorization code");
-    return sendError(
-      res,
-      "gdrive",
-      "Authorization code not received from Google."
-    );
+    return res.redirect("/?error=missing_code");
   }
 
   try {
-    logger.debug("Exchanging Google authorization code for tokens");
-    const { data } = await axios.post(
+    logger.debug("Exchanging Google Drive authorization code for tokens...");
+    const tokenResponse = await axios.post(
       "https://oauth2.googleapis.com/token",
-      null,
       {
-        params: {
-          code,
-          grant_type: "authorization_code",
-          redirect_uri: GOOGLE_REDIRECT_URI,
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-        },
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: "authorization_code",
       }
     );
 
-    const { access_token, refresh_token, expires_in } = data;
+    const { access_token, refresh_token, expires_in } = tokenResponse.data;
     logger.info("Google Drive token exchange successful", {
-      hasAccessToken: !!access_token,
-      hasRefreshToken: !!refresh_token,
-      expiresIn: expires_in,
+      access_token: maskSensitiveData(access_token),
+      refresh_token: refresh_token
+        ? maskSensitiveData(refresh_token)
+        : undefined,
+      expires_in,
     });
 
-    // Include state in redirect back to client
-    const redirectUrl = new URL(
-      `${APP_BASE_URL}/#provider=gdrive&access_token=${access_token}&refresh_token=${refresh_token}&expires_in=${expires_in}`
-    );
+    // Redirect back to the PWA with the tokens
+    const redirectUrl = new URL("/", req.protocol + "://" + req.get("host"));
+    redirectUrl.searchParams.set("provider", "gdrive");
+    redirectUrl.searchParams.set("access_token", access_token);
+    if (refresh_token) {
+      redirectUrl.searchParams.set("refresh_token", refresh_token);
+    }
+    if (expires_in) {
+      redirectUrl.searchParams.set("expires_in", expires_in);
+    }
     if (state) {
-      redirectUrl.hash += `&state=${encodeURIComponent(state)}`;
+      redirectUrl.searchParams.set("state", state);
     }
 
-    logger.debug("Redirecting client back with tokens");
+    logger.debug("Redirecting to PWA with Google Drive tokens");
     res.redirect(redirectUrl.toString());
   } catch (error) {
     logger.error(
       "Google Drive token exchange failed:",
       error.response?.data || error.message
     );
-    sendError(
-      res,
-      "gdrive",
-      error.response?.data?.error_description || "Token exchange failed."
-    );
+    res.redirect("/?error=token_exchange_failed");
   }
 });
 
 app.post("/api/gdrive/refresh", async (req, res) => {
   const { refresh_token } = req.body;
-  logger.info("Google Drive token refresh requested");
+  logger.info("Google Drive token refresh requested", {
+    refresh_token: refresh_token ? maskSensitiveData(refresh_token) : undefined,
+  });
 
   if (!refresh_token) {
     logger.error("Google Drive refresh request missing refresh token");
-    return res.status(400).json({ error: "Refresh token is required." });
+    return res.status(400).json({ error: "refresh_token required" });
   }
 
   try {
-    logger.debug("Refreshing Google Drive access token");
-    const { data } = await axios.post(
-      "https://oauth2.googleapis.com/token",
-      null,
-      {
-        params: {
-          refresh_token,
-          grant_type: "refresh_token",
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-        },
-      }
-    );
-
-    logger.info("Google Drive token refresh successful", {
-      expiresIn: data.expires_in,
+    logger.debug("Refreshing Google Drive access token...");
+    const response = await axios.post("https://oauth2.googleapis.com/token", {
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      refresh_token,
+      grant_type: "refresh_token",
     });
 
-    res.json({ access_token: data.access_token, expires_in: data.expires_in });
+    const { access_token, expires_in } = response.data;
+    logger.info("Google Drive token refresh successful", {
+      access_token: maskSensitiveData(access_token),
+      expires_in,
+    });
+
+    res.json({ access_token, expires_in });
   } catch (error) {
     logger.error(
-      "Google refresh token error:",
+      "Google Drive token refresh failed:",
       error.response?.data || error.message
     );
-    res.status(401).json({
-      error:
-        "Failed to refresh Google token. Re-authentication may be required.",
-    });
+    res.status(401).json({ error: "token_refresh_failed" });
   }
 });
 
