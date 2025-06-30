@@ -21,14 +21,14 @@ const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
 // Detect and handle OAuth redirects from our server before any other initialization
 (function detectOAuthRedirect() {
-  // A redirect from our server will always contain a 'provider' and 'access_token' in the hash.
+  // A redirect from our server will contain 'provider' and 'access_token' in the query parameters
   if (
-    window.location.hash.includes("access_token=") &&
-    window.location.hash.includes("provider=")
+    window.location.search.includes("access_token=") &&
+    window.location.search.includes("provider=")
   ) {
     try {
-      // Use URLSearchParams for robust parsing of the hash
-      const params = new URLSearchParams(window.location.hash.substring(1)); // remove the leading '#'
+      // Use URLSearchParams for robust parsing of the query string
+      const params = new URLSearchParams(window.location.search.substring(1)); // remove the leading '?'
 
       const accessToken = params.get("access_token");
       const refreshToken = params.get("refresh_token"); // This is the new, crucial token
@@ -84,12 +84,12 @@ const isDemoHost = window?.location?.hostname?.includes("vercel.app");
         console.log("OAuth redirect detected for unknown context");
       }
 
-      // Clear the hash from the URL so it doesn't get processed again on reload
+      // Clear the query parameters from the URL so it doesn't get processed again on reload
       window.history.replaceState(null, "", window.location.pathname);
       console.log(`Successfully processed OAuth redirect for ${provider}.`);
     } catch (error) {
       console.error("OAuth redirect handling error:", error);
-      // It's often better to clear the hash even on error to prevent loops.
+      // It's often better to clear the query even on error to prevent loops.
       window.history.replaceState(null, "", window.location.pathname);
     }
   }
@@ -777,7 +777,7 @@ async function initializeCloudSync() {
     }
 
     // Handle OAuth redirect cases for both providers
-    const hasOAuthRedirect = window.location.hash.includes("access_token=");
+    const hasOAuthRedirect = window.location.search.includes("access_token=");
     const pendingWizardContinuation = localStorage.getItem(
       "pendingWizardContinuation"
     );

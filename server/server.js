@@ -154,12 +154,17 @@ app.get("/api/dropbox/callback", async (req, res) => {
     logger.debug("Exchanging Dropbox authorization code for tokens...");
     const tokenResponse = await axios.post(
       "https://api.dropboxapi.com/oauth2/token",
-      {
+      new URLSearchParams({
         code,
         grant_type: "authorization_code",
         client_id: DROPBOX_CLIENT_ID,
         client_secret: DROPBOX_CLIENT_SECRET,
         redirect_uri: DROPBOX_REDIRECT_URI,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       }
     );
 
@@ -209,11 +214,16 @@ app.post("/api/dropbox/refresh", async (req, res) => {
     logger.debug("Refreshing Dropbox access token...");
     const response = await axios.post(
       "https://api.dropboxapi.com/oauth2/token",
-      {
+      new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token,
         client_id: DROPBOX_CLIENT_ID,
         client_secret: DROPBOX_CLIENT_SECRET,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       }
     );
 
