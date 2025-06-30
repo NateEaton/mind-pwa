@@ -149,4 +149,62 @@ export class FileMetadataManager {
       provider.providerName === "DropboxProvider" ? "dropbox" : "gdrive";
     return hasValidFileMetadata(fileMetadata, providerType);
   }
+
+  /**
+   * Store multiple file metadata entries in bulk
+   * @param {Array} metadataEntries - Array of {fileName, fileInfo} objects
+   * @returns {Promise<void>}
+   */
+  async bulkStoreFileMetadata(metadataEntries) {
+    if (!metadataEntries || metadataEntries.length === 0) {
+      return;
+    }
+
+    try {
+      const preferences = metadataEntries
+        .map(({ fileName, fileInfo }) => {
+          if (!fileInfo) return null;
+
+          const metadata = {
+            fileName,
+            lastChecked: Date.now(),
+          };
+
+          // Store provider-specific revision info
+          if (fileInfo.rev) {
+            // Dropbox uses rev
+            metadata.rev = fileInfo.rev;
+          } else {
+            // For Google Drive - store all available revision indicators
+            metadata.headRevisionId = fileInfo.headRevisionId;
+            metadata.version = fileInfo.version;
+            metadata.md5Checksum = fileInfo.md5Checksum;
+          }
+
+          return {
+            key: `file_metadata_${fileName}`,
+            value: metadata,
+          };
+        })
+        .filter(Boolean); // Remove null entries
+
+      if (preferences.length > 0) {
+        await this.dataService.bulkSavePreferences(preferences);
+        logger.info(`Bulk stored metadata for ${preferences.length} files`);
+      }
+    } catch (error) {
+      logger.warn(`Error bulk storing file metadata:`, error);
+      // Fallback to individual storage
+      for (const entry of metadataEntries) {
+        try {
+          await this.storeFileMetadata(entry.fileName, entry.fileInfo);
+        } catch (individualError) {
+          logger.warn(
+            `Error storing individual metadata for ${entry.fileName}:`,
+            individualError
+          );
+        }
+      }
+    }
+  }
 }

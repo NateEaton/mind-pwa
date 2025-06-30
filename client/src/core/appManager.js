@@ -38,6 +38,22 @@ export default class AppManager {
     this.initialSyncInProgress = false;
     this.MIN_SYNC_INTERVAL = 1 * 60 * 1000; // 1 minute between auto-syncs
 
+    // Centralized sync coordination
+    this.syncState = {
+      lastSyncTime: 0,
+      lastSyncCompletionTime: 0,
+      syncInProgress: false,
+      pendingSyncRequests: [],
+      syncCooldownUntil: 0,
+      syncDebounceTimeout: null,
+      syncThrottleTimeout: null,
+    };
+
+    // Sync timing constants
+    this.SYNC_COOLDOWN_PERIOD = 30000; // 30 seconds after sync completion
+    this.SYNC_DEBOUNCE_WINDOW = 5000; // 5 seconds for rapid requests
+    this.SYNC_THROTTLE_PERIOD = 60000; // 1 minute minimum between auto-syncs
+
     // DOM Elements cache
     this.domElements = {
       // Menu elements
@@ -256,5 +272,264 @@ export default class AppManager {
     } else {
       logger.error("StateManager not available for day selection");
     }
+  }
+
+  /**
+   * Centralized sync coordination - prevents overlapping syncs from different triggers
+   * @param {string} trigger - The trigger source ('initial', 'timer', 'visibility', 'manual', 'reload')
+   * @param {Object} options - Sync options
+   * @returns {Promise<boolean>} Whether sync was executed
+   */
+  async requestSync(trigger, options = {}) {
+    const now = Date.now();
+    const {
+      skipCooldown = false,
+      skipDebounce = false,
+      skipThrottle = false,
+      priority = "normal",
+    } = options;
+
+    logger.debug(`Sync request from ${trigger}`, {
+      skipCooldown,
+      skipDebounce,
+      skipThrottle,
+      priority,
+      currentTime: now,
+      cooldownUntil: this.syncState.syncCooldownUntil,
+      lastSyncTime: this.syncState.lastSyncTime,
+      syncInProgress: this.syncState.syncInProgress,
+    });
+
+    // Check if sync is enabled and ready
+    if (
+      !this.getSyncEnabled() ||
+      !this.getCloudSync() ||
+      !this.getSyncReady()
+    ) {
+      logger.debug(`Sync request blocked: not ready`, {
+        syncEnabled: this.getSyncEnabled(),
+        hasCloudSync: !!this.getCloudSync(),
+        syncReady: this.getSyncReady(),
+      });
+      return false;
+    }
+
+    // Check cooldown period (unless skipped for high priority operations)
+    if (!skipCooldown && now < this.syncState.syncCooldownUntil) {
+      logger.debug(
+        `Sync request blocked by cooldown until ${new Date(
+          this.syncState.syncCooldownUntil
+        )}`
+      );
+      return false;
+    }
+
+    // Check if already in progress
+    if (this.syncState.syncInProgress) {
+      logger.debug("Sync already in progress, queuing request");
+      this.syncState.pendingSyncRequests.push({
+        trigger,
+        priority,
+        timestamp: now,
+        options,
+      });
+      return false;
+    }
+
+    // Apply debouncing for rapid successive requests (unless skipped)
+    if (!skipDebounce && this.syncState.syncDebounceTimeout) {
+      logger.debug("Sync request debounced");
+      clearTimeout(this.syncState.syncDebounceTimeout);
+      this.syncState.syncDebounceTimeout = setTimeout(() => {
+        this.executeSync(trigger, options);
+      }, this.SYNC_DEBOUNCE_WINDOW);
+      return false;
+    }
+
+    // Apply throttling for auto-sync operations (unless skipped)
+    if (!skipThrottle && trigger !== "manual" && trigger !== "initial") {
+      const timeSinceLastSync = now - this.syncState.lastSyncTime;
+      if (timeSinceLastSync < this.SYNC_THROTTLE_PERIOD) {
+        logger.debug(
+          `Sync request throttled: ${timeSinceLastSync}ms since last sync`
+        );
+        return false;
+      }
+    }
+
+    // Execute the sync
+    return this.executeSync(trigger, options);
+  }
+
+  /**
+   * Execute sync with trigger-specific logic
+   * @param {string} trigger - The trigger source
+   * @param {Object} options - Sync options
+   * @returns {Promise<boolean>} Whether sync was successful
+   */
+  async executeSync(trigger, options = {}) {
+    const now = Date.now();
+
+    // Mark sync as in progress
+    this.syncState.syncInProgress = true;
+    this.syncState.lastSyncTime = now;
+
+    logger.info(`Executing sync triggered by ${trigger}`, options);
+
+    try {
+      // Trigger-specific sync logic
+      let syncResult;
+
+      switch (trigger) {
+        case "initial":
+          // Initial sync: Full sync with no cooldown
+          syncResult = await this.performInitialSync();
+          break;
+
+        case "timer":
+          // Timer sync: Check for changes first, then sync if needed
+          syncResult = await this.performTimerSync();
+          break;
+
+        case "visibility":
+          // Visibility sync: Quick check for remote changes
+          syncResult = await this.performVisibilitySync();
+          break;
+
+        case "manual":
+          // Manual sync: Full sync with user feedback
+          syncResult = await this.performManualSync();
+          break;
+
+        case "reload":
+          // Reload sync: Check for cross-device changes
+          syncResult = await this.performReloadSync();
+          break;
+
+        default:
+          // Default: Standard sync
+          syncResult = await this.performStandardSync();
+      }
+
+      // Mark sync as completed
+      this.syncState.lastSyncCompletionTime = now;
+      this.syncState.syncCooldownUntil = now + this.SYNC_COOLDOWN_PERIOD;
+
+      logger.info(
+        `Sync completed successfully for trigger ${trigger}`,
+        syncResult
+      );
+
+      // Process any pending requests
+      this.processPendingSyncRequests();
+
+      return true;
+    } catch (error) {
+      logger.error(`Sync failed for trigger ${trigger}:`, error);
+
+      // Mark sync as completed (even on error) to allow retries
+      this.syncState.lastSyncCompletionTime = now;
+      this.syncState.syncCooldownUntil = now + this.SYNC_COOLDOWN_PERIOD;
+
+      // Process any pending requests
+      this.processPendingSyncRequests();
+
+      return false;
+    } finally {
+      this.syncState.syncInProgress = false;
+    }
+  }
+
+  /**
+   * Process any pending sync requests after current sync completes
+   */
+  processPendingSyncRequests() {
+    if (this.syncState.pendingSyncRequests.length === 0) {
+      return;
+    }
+
+    // Sort by priority and timestamp
+    this.syncState.pendingSyncRequests.sort((a, b) => {
+      const priorityOrder = { high: 3, normal: 2, low: 1 };
+      const aPriority = priorityOrder[a.priority] || 2;
+      const bPriority = priorityOrder[b.priority] || 2;
+
+      if (aPriority !== bPriority) {
+        return bPriority - aPriority; // Higher priority first
+      }
+
+      return a.timestamp - b.timestamp; // Earlier timestamp first
+    });
+
+    // Take the highest priority request
+    const nextRequest = this.syncState.pendingSyncRequests.shift();
+    logger.debug(`Processing pending sync request: ${nextRequest.trigger}`);
+
+    // Clear the queue (we only process one at a time)
+    this.syncState.pendingSyncRequests = [];
+
+    // Execute the request after a short delay
+    setTimeout(() => {
+      this.requestSync(nextRequest.trigger, nextRequest.options);
+    }, 1000);
+  }
+
+  /**
+   * Trigger-specific sync implementations
+   */
+  async performInitialSync() {
+    logger.info("Performing initial sync");
+    // Initial sync should be full sync with no restrictions
+    return this.cloudSync.sync(true); // silent = true
+  }
+
+  async performTimerSync() {
+    logger.info("Performing timer-based sync");
+    // Timer sync should check if sync is needed first
+    const needsSync = await this.cloudSync.checkIfSyncNeeded();
+    if (needsSync) {
+      return this.cloudSync.sync(true); // silent = true
+    }
+    logger.debug("Timer sync: no changes detected, skipping");
+    return false;
+  }
+
+  async performVisibilitySync() {
+    logger.info("Performing visibility-based sync");
+    // Visibility sync should be a quick check for remote changes
+    return this.cloudSync.sync(true); // silent = true
+  }
+
+  async performManualSync() {
+    logger.info("Performing manual sync");
+    // Manual sync should be full sync with user feedback
+    return this.cloudSync.sync(false); // silent = false
+  }
+
+  async performReloadSync() {
+    logger.info("Performing reload sync");
+    // Reload sync should check for cross-device changes
+    return this.cloudSync.sync(true); // silent = true
+  }
+
+  async performStandardSync() {
+    logger.info("Performing standard sync");
+    // Default sync behavior
+    return this.cloudSync.sync(true); // silent = true
+  }
+
+  /**
+   * Clear any pending sync operations (useful for cleanup)
+   */
+  clearPendingSyncs() {
+    if (this.syncState.syncDebounceTimeout) {
+      clearTimeout(this.syncState.syncDebounceTimeout);
+      this.syncState.syncDebounceTimeout = null;
+    }
+    if (this.syncState.syncThrottleTimeout) {
+      clearTimeout(this.syncState.syncThrottleTimeout);
+      this.syncState.syncThrottleTimeout = null;
+    }
+    this.syncState.pendingSyncRequests = [];
   }
 }

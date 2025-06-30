@@ -323,13 +323,16 @@ function setupNetworkListeners() {
     // Optionally notify the user
     uiRenderer.showToast("Network connection restored", "info");
 
-    // Try to sync when device comes online
+    // Try to sync when device comes online using centralized coordination
     if (
       appManager.getSyncEnabled() &&
       appManager.getCloudSync() &&
       appManager.getSyncReady()
     ) {
-      syncData();
+      appManager.requestSync("reload", {
+        priority: "high",
+        skipCooldown: true, // Force sync when coming back online
+      });
     }
   });
 
@@ -978,21 +981,33 @@ async function syncData(isInitialSync = false, isManualSync = false) {
     return;
   }
 
-  // If any sync is already in progress, skip
-  if (appManager.getCloudSync().syncInProgress) {
-    logger.info("Sync already in progress, skipping");
-    return;
-  }
+  // Use centralized sync coordination instead of direct sync
+  const trigger = isInitialSync
+    ? "initial"
+    : isManualSync
+    ? "manual"
+    : "reload";
+  const options = {
+    skipCooldown: isInitialSync || isManualSync, // Skip cooldown for high priority operations
+    skipDebounce: isManualSync, // Skip debounce for manual syncs
+    skipThrottle: isInitialSync || isManualSync, // Skip throttle for high priority operations
+    priority: isManualSync ? "high" : "normal",
+  };
 
   try {
     logger.info("Starting sync operation");
     // Update UI to show sync in progress
     appManager.updateSyncUIElements();
 
-    // Start the sync process - cloudSyncManager handles all toast messages
-    const result = await appManager.getCloudSync().sync(!isManualSync); // Pass silent=true for auto syncs, silent=false for manual syncs
+    // Use centralized sync coordination
+    const syncExecuted = await appManager.requestSync(trigger, options);
 
-    logger.info("Sync completed:", result);
+    if (!syncExecuted) {
+      logger.debug("Sync request was blocked by coordination system");
+      return;
+    }
+
+    logger.info("Sync completed successfully");
 
     // Update last sync time
     appManager.lastSyncTime = Date.now();
@@ -1023,16 +1038,33 @@ async function syncData(isInitialSync = false, isManualSync = false) {
       }
     }
 
-    // Now refresh the UI
+    // Now refresh the UI with explicit validation
     logger.info("Refreshing UI after state reload");
+
+    // Ensure we have the latest state before rendering
+    const currentState = stateManager.getState();
+    logger.debug("Current state after reload:", {
+      dayDate: currentState.currentDayDate,
+      weekStartDate: currentState.currentWeekStartDate,
+      dailyCountsKeys: Object.keys(currentState.dailyCounts || {}),
+      weeklyCountsKeys: Object.keys(currentState.weeklyCounts || {}),
+    });
+
+    // Force a complete UI refresh
     uiRenderer.renderEverything();
+
+    // Additional validation: ensure daily counts are properly displayed
+    const selectedDate = currentState.selectedTrackerDate;
+    if (selectedDate && currentState.dailyCounts[selectedDate]) {
+      logger.debug(
+        `Daily counts for ${selectedDate}:`,
+        currentState.dailyCounts[selectedDate]
+      );
+    }
   } catch (error) {
     logger.error("Sync error:", error);
     handleSyncError(error);
   } finally {
-    if (appManager.getCloudSync()) {
-      appManager.getCloudSync().syncInProgress = false;
-    }
     appManager.updateSyncUIElements();
   }
 }

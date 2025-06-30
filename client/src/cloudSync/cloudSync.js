@@ -153,7 +153,15 @@ export class CloudSyncManager {
       clearInterval(this.syncInterval);
     }
     this.syncInterval = setInterval(() => {
-      this.sync(true);
+      // Use centralized sync coordination for timer-based sync
+      if (this.stateManager && this.stateManager.appManager) {
+        this.stateManager.appManager.requestSync("timer", {
+          priority: "normal",
+        });
+      } else {
+        // Fallback to direct sync if appManager not available
+        this.sync(true);
+      }
     }, intervalMinutes * 60 * 1000);
     this.autoSyncEnabled = true;
     logger.info(`Auto-sync enabled every ${intervalMinutes} minutes`);

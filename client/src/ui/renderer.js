@@ -332,6 +332,12 @@ function handleStateChange(state, action) {
       renderEverything();
       break;
 
+    case stateManager.ACTION_TYPES.SET_STATE:
+      // Explicit handling for SET_STATE action (used during sync state reload)
+      logger.debug("SET_STATE action detected - re-rendering everything");
+      renderEverything();
+      break;
+
     case stateManager.ACTION_TYPES.UPDATE_DAILY_COUNT:
       // case stateManager.ACTION_TYPES.UPDATE_WEEKLY_COUNT:
       renderTrackerItems();
@@ -377,6 +383,9 @@ function handleStateChange(state, action) {
 
     default:
       // For unknown actions, re-render everything to be safe
+      logger.debug(
+        `Unknown action type: ${action.type} - re-rendering everything`
+      );
       renderEverything();
       break;
   }
@@ -386,10 +395,46 @@ function handleStateChange(state, action) {
  * Render all UI components
  */
 function renderEverything() {
-  renderDateElements();
-  renderTrackerItems();
-  renderCurrentWeekSummary();
-  renderHistory();
+  try {
+    const state = stateManager.getState();
+    logger.debug("renderEverything called with state:", {
+      dayDate: state.currentDayDate,
+      weekStartDate: state.currentWeekStartDate,
+      selectedTrackerDate: state.selectedTrackerDate,
+      dailyCountsKeys: Object.keys(state.dailyCounts || {}),
+      weeklyCountsKeys: Object.keys(state.weeklyCounts || {}),
+    });
+
+    renderDateElements();
+    renderTrackerItems();
+    renderCurrentWeekSummary();
+    renderHistory();
+
+    logger.debug("renderEverything completed successfully");
+  } catch (error) {
+    logger.error("Error in renderEverything:", error);
+    // Fallback: try to render individual components
+    try {
+      renderDateElements();
+    } catch (e) {
+      logger.error("Error rendering date elements:", e);
+    }
+    try {
+      renderTrackerItems();
+    } catch (e) {
+      logger.error("Error rendering tracker items:", e);
+    }
+    try {
+      renderCurrentWeekSummary();
+    } catch (e) {
+      logger.error("Error rendering current week summary:", e);
+    }
+    try {
+      renderHistory();
+    } catch (e) {
+      logger.error("Error rendering history:", e);
+    }
+  }
 }
 
 /**
@@ -457,6 +502,15 @@ function renderTrackerItems() {
     return;
   }
 
+  // Debug logging for daily counts
+  const dailyCountsForSelectedDate =
+    state.dailyCounts[state.selectedTrackerDate] || {};
+  logger.debug(`renderTrackerItems for ${state.selectedTrackerDate}:`, {
+    dailyCounts: dailyCountsForSelectedDate,
+    weeklyCounts: state.weeklyCounts,
+    foodGroupsCount: state.foodGroups?.length || 0,
+  });
+
   // Render the Day Selector Bar for the Daily Tracker
   renderDaySelectorBar(
     daySelectorBarElement,
@@ -482,13 +536,15 @@ function renderTrackerItems() {
   // Clear the list
   foodItemsList.innerHTML = "";
 
-  // Get daily counts for the selected date
-  const dailyCountsForSelectedDate =
-    state.dailyCounts[state.selectedTrackerDate] || {};
-
   state.foodGroups.forEach((group) => {
     const dailyCount = dailyCountsForSelectedDate[group.id] || 0;
     const weeklyTotal = state.weeklyCounts[group.id] || 0;
+
+    logger.debug(`Rendering food group ${group.id}:`, {
+      dailyCount,
+      weeklyTotal,
+      groupName: group.name,
+    });
 
     const html = renderFoodGroupItem(group, dailyCount, weeklyTotal, state);
     const item = document.createElement("div");

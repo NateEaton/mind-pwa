@@ -141,13 +141,36 @@ export class SyncOperationHandler {
 
       // Merge data if needed
       let dataToUpload = localData;
+      let mergeChangedData = false;
       if (remoteData) {
         try {
+          const originalData = JSON.stringify(localData);
           dataToUpload = await this.mergeCoordinator.mergeCurrentWeekData(
             localData,
             remoteData
           );
+          const mergedData = JSON.stringify(dataToUpload);
+          mergeChangedData = originalData !== mergedData;
           logger.info("Successfully merged data");
+          if (mergeChangedData) {
+            logger.info("Merge detected data changes");
+            // Log specific changes for debugging
+            const originalDailyCounts = localData.dailyCounts || {};
+            const mergedDailyCounts = dataToUpload.dailyCounts || {};
+            Object.keys(mergedDailyCounts).forEach((date) => {
+              const originalDay = originalDailyCounts[date] || {};
+              const mergedDay = mergedDailyCounts[date] || {};
+              Object.keys(mergedDay).forEach((foodGroup) => {
+                const originalCount = originalDay[foodGroup] || 0;
+                const mergedCount = mergedDay[foodGroup] || 0;
+                if (originalCount !== mergedCount) {
+                  logger.info(
+                    `Merge change: ${date} ${foodGroup}: ${originalCount} → ${mergedCount}`
+                  );
+                }
+              });
+            });
+          }
         } catch (mergeError) {
           logger.error("Error merging data:", mergeError);
           return {
@@ -160,7 +183,7 @@ export class SyncOperationHandler {
 
       // Determine if upload is needed
       const uploadDecision = this.changeDetectionService.shouldUpload({
-        hasLocalChanges: syncNeeds.hasLocalChanges,
+        hasLocalChanges: syncNeeds.hasLocalChanges || mergeChangedData,
         isFreshInstall,
         cloudFileExists,
         hasDataToSync: true,
@@ -221,43 +244,29 @@ export class SyncOperationHandler {
     try {
       const historyIndexFileName = "mind-diet-history-index.json";
 
-      // Find or create the index file
+      // Find or create the history index file
       const fileInfo = await this.provider.findOrCreateFile(
         historyIndexFileName
       );
-      logger.info("History index file info:", fileInfo);
 
-      // Get local history data
+      // Get local history state
       const localHistory = await this.dataService.getAllWeekHistory();
-      const historyDirty =
-        (await this.dataService.loadState()).metadata?.historyDirty || false;
+      const currentState = await this.dataService.loadState();
+      const historyDirty = currentState.metadata?.historyDirty || false;
+
       logger.info("Local history state:", {
         weekCount: localHistory.length,
         historyDirty,
       });
 
-      // Check if index file has changed
-      const hasFileChanged = await this.fileMetadataManager.checkIfFileChanged(
+      // Check if file has changed
+      const changeStatus = await this.fileMetadataManager.checkIfFileChanged(
         historyIndexFileName,
         fileInfo.id,
         this.provider
       );
-      logger.info("History index change status:", {
-        hasFileChanged,
-        fileId: fileInfo.id,
-      });
 
-      // If file hasn't changed and no local changes, skip
-      if (!hasFileChanged && !historyDirty && localHistory.length > 0) {
-        logger.info(
-          "History index hasn't changed and no local changes, skipping sync entirely"
-        );
-        await this.fileMetadataManager.storeFileMetadata(
-          historyIndexFileName,
-          fileInfo
-        );
-        return [];
-      }
+      logger.info("History index change status:", changeStatus);
 
       // Create local index
       const localIndex = {
@@ -279,6 +288,9 @@ export class SyncOperationHandler {
         historyIndexFileName,
         fileInfo
       );
+
+      // Initialize weeksToSync array early to avoid temporal dead zone
+      const weeksToSync = [];
 
       // If remote index exists, compare with local history
       if (remoteIndex && Object.keys(remoteIndex).length > 0) {
@@ -307,29 +319,31 @@ export class SyncOperationHandler {
         localIndex.weeks = uniqueWeeks;
       }
 
-      // Upload the updated index
-      logger.info("Uploading to Dropbox file ID:", fileInfo.id);
-      const content = localIndex;
-      logger.debug("Content size:", JSON.stringify(content).length);
-      await this.provider.uploadFile(fileInfo.id, content);
-      logger.info("Upload successful:", historyIndexFileName);
+      // Determine if index upload is needed
+      let shouldUploadIndex = false;
 
-      // Get the updated file info
-      const updatedFileInfo = await this.provider.getFileMetadata(fileInfo.id);
-      logger.info(
-        "Full fileInfo for",
-        historyIndexFileName + ":",
-        updatedFileInfo
-      );
+      // Only upload if:
+      // 1. Local history has dirty flags
+      if (historyDirty) {
+        shouldUploadIndex = true;
+        logger.info(
+          "History index upload needed: local history has dirty flags"
+        );
+      }
 
-      // Store the updated metadata
-      await this.fileMetadataManager.storeFileMetadata(
-        historyIndexFileName,
-        updatedFileInfo
-      );
-
-      // Return weeks that need syncing
-      const weeksToSync = [];
+      // 2. Remote data was downloaded and merged (index changed)
+      if (remoteIndex && Object.keys(remoteIndex).length > 0) {
+        const originalWeekCount = remoteIndex.weeks
+          ? remoteIndex.weeks.length
+          : 0;
+        const newWeekCount = localIndex.weeks.length;
+        if (newWeekCount !== originalWeekCount) {
+          shouldUploadIndex = true;
+          logger.info(
+            `History index upload needed: week count changed from ${originalWeekCount} to ${newWeekCount}`
+          );
+        }
+      }
 
       // Check for weeks that need uploading (local changes)
       const weeksToUpload = localHistory
@@ -368,10 +382,52 @@ export class SyncOperationHandler {
 
       weeksToSync.push(...weeksToUpload);
 
+      // 3. Weeks were actually synced
+      if (weeksToSync.length > 0) {
+        shouldUploadIndex = true;
+        logger.info(
+          `History index upload needed: ${weeksToSync.length} weeks were synced`
+        );
+      }
+
+      // Only upload if needed
+      if (shouldUploadIndex) {
+        logger.info("Uploading updated history index");
+        const content = localIndex;
+        logger.debug("Content size:", JSON.stringify(content).length);
+        await this.provider.uploadFile(fileInfo.id, content);
+        logger.info("Upload successful:", historyIndexFileName);
+
+        // Get the updated file info
+        const updatedFileInfo = await this.provider.getFileMetadata(
+          fileInfo.id
+        );
+        logger.info(
+          "Full fileInfo for",
+          historyIndexFileName + ":",
+          updatedFileInfo
+        );
+
+        // Store the updated metadata
+        await this.fileMetadataManager.storeFileMetadata(
+          historyIndexFileName,
+          updatedFileInfo
+        );
+      } else {
+        logger.info("No history changes detected, skipping index upload");
+        // Still store the current metadata to avoid unnecessary change detection in future
+        await this.fileMetadataManager.storeFileMetadata(
+          historyIndexFileName,
+          fileInfo
+        );
+      }
+
       logger.info("Weeks to sync:", weeksToSync);
 
       // Sync each week that needs syncing
       let syncSuccessCount = 0;
+      const metadataToStore = []; // Collect metadata for bulk storage
+
       for (const weekInfo of weeksToSync) {
         try {
           const success = await this.syncWeek(
@@ -380,10 +436,19 @@ export class SyncOperationHandler {
           );
           if (success) {
             syncSuccessCount++;
+            // Collect metadata for bulk storage
+            const weekFileName = `mind-diet-week-${weekInfo.weekStartDate}.json`;
+            const fileInfo = await this.provider.findOrCreateFile(weekFileName);
+            metadataToStore.push({ fileName: weekFileName, fileInfo });
           }
         } catch (error) {
           logger.error(`Error syncing week ${weekInfo.weekStartDate}:`, error);
         }
+      }
+
+      // Bulk store metadata for all synced weeks
+      if (metadataToStore.length > 0) {
+        await this.fileMetadataManager.bulkStoreFileMetadata(metadataToStore);
       }
 
       logger.info(

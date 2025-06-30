@@ -636,10 +636,17 @@ class EventHandlers {
           logger.info(
             "App being hidden with unsaved changes, syncing immediately"
           );
-          this.syncData();
+          // Use centralized sync coordination with high priority for dirty flags
+          this.appManager.requestSync("visibility", {
+            priority: "high",
+            skipCooldown: true, // Force sync even during cooldown for dirty flags
+          });
         } else if (timeSinceLastSync >= this.appManager.MIN_SYNC_INTERVAL) {
           logger.info("App being hidden, periodic sync triggered");
-          this.syncData();
+          // Use centralized sync coordination for periodic sync
+          this.appManager.requestSync("visibility", {
+            priority: "normal",
+          });
         } else {
           logger.debug("No changes and too soon since last sync, skipping");
         }
@@ -666,7 +673,10 @@ class EventHandlers {
             "App visible after significant time, checking for remote changes"
           );
           this.appManager.visibilityChangeTimeout = setTimeout(() => {
-            this.syncData();
+            // Use centralized sync coordination for visibility sync
+            this.appManager.requestSync("visibility", {
+              priority: "normal",
+            });
           }, 2000);
         } else {
           logger.debug(

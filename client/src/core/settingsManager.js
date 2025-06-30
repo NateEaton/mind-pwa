@@ -486,6 +486,7 @@ function setupActionButtonListeners() {
           syncNowBtn.textContent = "Syncing...";
           syncNowBtn.disabled = true;
 
+          // Use centralized sync coordination for manual sync
           await syncDataCallback(false, true); // Not initial sync, but is manual sync
 
           // Update the last sync time display
@@ -587,7 +588,10 @@ function closeSettingsModal() {
     }
 
     setTimeout(() => {
-      if (syncDataCallback) syncDataCallback();
+      if (syncDataCallback) {
+        // Use centralized sync coordination for pending initial sync
+        syncDataCallback(true, false); // isInitialSync=true, isManualSync=false
+      }
     }, 1000); // Small delay after dialog closes
   }
 

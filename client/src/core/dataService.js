@@ -1382,6 +1382,75 @@ function isTestModeEnabled() {
   return _testModeEnabled;
 }
 
+/**
+ * Save multiple preferences in a single transaction
+ * @param {Array} preferences - Array of {key, value} objects
+ * @returns {Promise<void>} Promise that resolves when all preferences are saved
+ */
+async function bulkSavePreferences(preferences) {
+  if (!preferences || preferences.length === 0) {
+    return;
+  }
+
+  return dbOperation(
+    STORES.PREFERENCES,
+    "readwrite",
+    (store, transaction, resolve, reject) => {
+      let completed = 0;
+      const total = preferences.length;
+      const errors = [];
+      const now = getCurrentTimestamp();
+
+      preferences.forEach(({ key, value }) => {
+        // Create normalized preference structure to match savePreference
+        const normalizedPref = {
+          id: key,
+          value: value,
+          metadata: {
+            createdAt: now,
+            updatedAt: now,
+            deviceId: getDeviceId(),
+          },
+        };
+
+        const request = store.put(normalizedPref);
+
+        request.onsuccess = () => {
+          completed++;
+          if (completed === total) {
+            if (errors.length > 0) {
+              reject(
+                new Error(
+                  `Failed to save ${errors.length} preferences: ${errors.join(
+                    ", "
+                  )}`
+                )
+              );
+            } else {
+              logger.debug(`Bulk saved ${total} preferences successfully`);
+              resolve();
+            }
+          }
+        };
+
+        request.onerror = (event) => {
+          errors.push(`${key}: ${event.target.error}`);
+          completed++;
+          if (completed === total) {
+            reject(
+              new Error(
+                `Failed to save ${errors.length} preferences: ${errors.join(
+                  ", "
+                )}`
+              )
+            );
+          }
+        };
+      });
+    }
+  );
+}
+
 // Export the public API
 export default {
   // Core initialization
@@ -1427,6 +1496,9 @@ export default {
   isTestModeEnabled,
   getCurrentDate,
   getCurrentTimestamp,
+
+  // New bulk save preferences method
+  bulkSavePreferences,
 };
 
 window.appDataService = {
