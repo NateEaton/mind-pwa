@@ -40,19 +40,19 @@ export default class AppManager {
 
     // Centralized sync coordination
     this.syncState = {
+      syncInProgress: false,
       lastSyncTime: 0,
       lastSyncCompletionTime: 0,
-      syncInProgress: false,
-      pendingSyncRequests: [],
       syncCooldownUntil: 0,
       syncDebounceTimeout: null,
       syncThrottleTimeout: null,
+      pendingSyncRequests: [],
     };
 
-    // Sync timing constants
-    this.SYNC_COOLDOWN_PERIOD = 30000; // 30 seconds after sync completion
-    this.SYNC_DEBOUNCE_WINDOW = 5000; // 5 seconds for rapid requests
-    this.SYNC_THROTTLE_PERIOD = 60000; // 1 minute minimum between auto-syncs
+    // Sync coordination constants
+    this.SYNC_DEBOUNCE_WINDOW = 2000; // 2 seconds
+    this.SYNC_COOLDOWN_PERIOD = 5000; // 5 seconds
+    this.SYNC_THROTTLE_PERIOD = 15000; // 15 seconds minimum between auto-syncs (reduced from 60s)
 
     // DOM Elements cache
     this.domElements = {
@@ -275,8 +275,8 @@ export default class AppManager {
   }
 
   /**
-   * Centralized sync coordination - prevents overlapping syncs from different triggers
-   * @param {string} trigger - The trigger source ('initial', 'timer', 'visibility', 'manual', 'reload')
+   * Request a sync operation with coordination and rate limiting
+   * @param {string} trigger - The trigger source (manual, timer, visibility, etc.)
    * @param {Object} options - Sync options
    * @returns {Promise<boolean>} Whether sync was executed
    */
@@ -314,6 +314,12 @@ export default class AppManager {
       return false;
     }
 
+    // Manual syncs should always work (bypass most restrictions)
+    if (trigger === "manual") {
+      logger.debug("Manual sync requested - bypassing most restrictions");
+      return this.executeSync(trigger, options);
+    }
+
     // Check cooldown period (unless skipped for high priority operations)
     if (!skipCooldown && now < this.syncState.syncCooldownUntil) {
       logger.debug(
@@ -347,11 +353,14 @@ export default class AppManager {
     }
 
     // Apply throttling for auto-sync operations (unless skipped)
+    // But be more lenient - only throttle if very recent
     if (!skipThrottle && trigger !== "manual" && trigger !== "initial") {
       const timeSinceLastSync = now - this.syncState.lastSyncTime;
-      if (timeSinceLastSync < this.SYNC_THROTTLE_PERIOD) {
+      // Reduce throttle period to be less aggressive
+      const throttlePeriod = Math.min(this.SYNC_THROTTLE_PERIOD, 30 * 1000); // Max 30 seconds
+      if (timeSinceLastSync < throttlePeriod) {
         logger.debug(
-          `Sync request throttled: ${timeSinceLastSync}ms since last sync`
+          `Sync request throttled: ${timeSinceLastSync}ms since last sync (throttle: ${throttlePeriod}ms)`
         );
         return false;
       }
@@ -374,7 +383,12 @@ export default class AppManager {
     this.syncState.syncInProgress = true;
     this.syncState.lastSyncTime = now;
 
-    logger.info(`Executing sync triggered by ${trigger}`, options);
+    logger.info(`Executing sync triggered by ${trigger}`, {
+      trigger,
+      options,
+      timestamp: now,
+      timeSinceLastSync: now - this.syncState.lastSyncTime,
+    });
 
     try {
       // Trigger-specific sync logic
@@ -383,31 +397,37 @@ export default class AppManager {
       switch (trigger) {
         case "initial":
           // Initial sync: Full sync with no cooldown
+          logger.debug("Performing initial sync");
           syncResult = await this.performInitialSync();
           break;
 
         case "timer":
           // Timer sync: Check for changes first, then sync if needed
+          logger.debug("Performing timer-based sync");
           syncResult = await this.performTimerSync();
           break;
 
         case "visibility":
           // Visibility sync: Quick check for remote changes
+          logger.debug("Performing visibility-based sync");
           syncResult = await this.performVisibilitySync();
           break;
 
         case "manual":
           // Manual sync: Full sync with user feedback
+          logger.debug("Performing manual sync");
           syncResult = await this.performManualSync();
           break;
 
         case "reload":
           // Reload sync: Check for cross-device changes
+          logger.debug("Performing reload sync");
           syncResult = await this.performReloadSync();
           break;
 
         default:
           // Default: Standard sync
+          logger.debug("Performing standard sync");
           syncResult = await this.performStandardSync();
       }
 
@@ -415,17 +435,23 @@ export default class AppManager {
       this.syncState.lastSyncCompletionTime = now;
       this.syncState.syncCooldownUntil = now + this.SYNC_COOLDOWN_PERIOD;
 
-      logger.info(
-        `Sync completed successfully for trigger ${trigger}`,
-        syncResult
-      );
+      logger.info(`Sync completed successfully for trigger ${trigger}`, {
+        trigger,
+        result: syncResult,
+        duration: now - this.syncState.lastSyncTime,
+      });
 
       // Process any pending requests
       this.processPendingSyncRequests();
 
       return true;
     } catch (error) {
-      logger.error(`Sync failed for trigger ${trigger}:`, error);
+      logger.error(`Sync failed for trigger ${trigger}:`, {
+        trigger,
+        error: error.message,
+        stack: error.stack,
+        duration: now - this.syncState.lastSyncTime,
+      });
 
       // Mark sync as completed (even on error) to allow retries
       this.syncState.lastSyncCompletionTime = now;
@@ -485,19 +511,30 @@ export default class AppManager {
 
   async performTimerSync() {
     logger.info("Performing timer-based sync");
-    // Timer sync should check if sync is needed first
-    const needsSync = await this.cloudSync.checkIfSyncNeeded();
-    if (needsSync) {
+    // Timer sync should always check for remote changes, not just local changes
+    // This ensures we pick up changes from other devices even if local data is clean
+    try {
+      // Always perform a sync to check for remote changes
+      // The sync operation handler will determine if upload is needed
       return this.cloudSync.sync(true); // silent = true
+    } catch (error) {
+      logger.error("Timer sync failed:", error);
+      return false;
     }
-    logger.debug("Timer sync: no changes detected, skipping");
-    return false;
   }
 
   async performVisibilitySync() {
     logger.info("Performing visibility-based sync");
-    // Visibility sync should be a quick check for remote changes
-    return this.cloudSync.sync(true); // silent = true
+    // Visibility sync should always check for remote changes when app becomes visible
+    // This ensures users see changes from other devices immediately
+    try {
+      // Always perform a sync to check for remote changes
+      // The sync operation handler will determine if upload is needed
+      return this.cloudSync.sync(true); // silent = true
+    } catch (error) {
+      logger.error("Visibility sync failed:", error);
+      return false;
+    }
   }
 
   async performManualSync() {

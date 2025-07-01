@@ -333,8 +333,7 @@ function handleStateChange(state, action) {
       break;
 
     case stateManager.ACTION_TYPES.SET_STATE:
-      // Explicit handling for SET_STATE action (used during sync state reload)
-      logger.debug("SET_STATE action detected - re-rendering everything");
+      logger.trace("SET_STATE action detected - re-rendering everything");
       renderEverything();
       break;
 
@@ -540,7 +539,7 @@ function renderTrackerItems() {
     const dailyCount = dailyCountsForSelectedDate[group.id] || 0;
     const weeklyTotal = state.weeklyCounts[group.id] || 0;
 
-    logger.debug(`Rendering food group ${group.id}:`, {
+    logger.trace(`Rendering food group ${group.id}:`, {
       dailyCount,
       weeklyTotal,
       groupName: group.name,
@@ -1136,7 +1135,7 @@ function renderModalDayDetailsList(
 
   // Calculate weekly totals from tempEditedDailyBreakdown
   const weeklyTotals = {};
-  logger.debug(
+  logger.trace(
     "Calculating weekly totals from tempEditedDailyBreakdown:",
     tempEditedDailyBreakdown
   );
@@ -1149,7 +1148,7 @@ function renderModalDayDetailsList(
     });
   }
 
-  logger.debug("Calculated weekly totals:", weeklyTotals);
+  logger.trace("Calculated weekly totals:", weeklyTotals);
 
   foodGroups.forEach((group) => {
     const count = counts[group.id] || 0;
