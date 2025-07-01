@@ -16,9 +16,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* ================================== */
-/* === Base Variables and Setup === */
-/* ================================== */
+/* ========================================= */
+/* === 1. CSS VARIABLES & BASE SETUP     === */
+/* ========================================= */
 
 :root {
     --primary-color: #4CAF50;
@@ -64,9 +64,9 @@
     --main-app-header-height: 88px;
 }
 
-/* ================================== */
-/* === Base Element Styles === */
-/* ================================== */
+/* ========================================= */
+/* === 2. BASE ELEMENT STYLES            === */
+/* ========================================= */
 
 body {
     font-family: sans-serif;
@@ -77,6 +77,10 @@ body {
     overflow: hidden;
     /* Prevent body scroll */
 }
+
+/* ========================================= */
+/* === 3. LAYOUT & STRUCTURE             === */
+/* ========================================= */
 
 header {
     background-color: var(--primary-color);
@@ -259,11 +263,9 @@ main {
     /* overlap without taking extra space */
 }
 
-
-
-/* ================================== */
-/* === Typography & Headings === */
-/* ================================== */
+/* ========================================= */
+/* === 4. TYPOGRAPHY & HEADINGS           === */
+/* ========================================= */
 
 h2,
 h3 {
@@ -286,7 +288,6 @@ h2:first-child,
 h3:first-child {
     margin-top: 0;
 }
-
 
 .heading-date {
     font-size: 0.9rem;
@@ -311,9 +312,9 @@ h3:first-child {
     margin-left: 0.3em;
 }
 
-/* ================================== */
-/* === Food Group Item Styling === */
-/* ================================== */
+/* ========================================= */
+/* === 5. FOOD GROUP ITEM STYLING         === */
+/* ========================================= */
 
 #food-tracker {
     margin-bottom: var(--spacing-lg);
@@ -485,9 +486,9 @@ h3:first-child {
     font-style: italic;
 }
 
-/* ================================== */
-/* === History & Summary Styling === */
-/* ================================== */
+/* ========================================= */
+/* === 6. HISTORY & SUMMARY STYLING        === */
+/* ========================================= */
 
 .history-nav {
     display: flex;
@@ -803,9 +804,9 @@ h3:first-child {
     color: #aaa;
 }
 
-/* ================================== */
-/* === Menu & Toast Styles === */
-/* ================================== */
+/* ========================================= */
+/* === 7. MENU & TOAST STYLES             === */
+/* ========================================= */
 
 .main-menu {
     display: none;
@@ -948,9 +949,9 @@ h3:first-child {
     }
 }
 
-/* ================================== */
-/* === Modal Styles === */
-/* ================================== */
+/* ========================================= */
+/* === 8. MODAL STYLES                    === */
+/* ========================================= */
 
 .modal {
     display: none;
@@ -1320,6 +1321,10 @@ h3:first-child {
     border-color: var(--primary-dark);
 }
 
+/* ========================================= */
+/* === 9. SETTINGS & UTILITIES             === */
+/* ========================================= */
+
 .settings-container {
     display: flex;
     flex-direction: column;
@@ -1364,9 +1369,6 @@ h3:first-child {
     background-color: white;
     border-top: 1px solid var(--border-color);
 }
-
-/* .settings-section.collapsible>.section-header+.section-content {} - This empty rule can be removed */
-
 
 .settings-row {
     display: flex;
@@ -1545,7 +1547,10 @@ h3:first-child {
     margin-right: var(--spacing-sm);
 }
 
-/* === Day Selector Bar === */
+/* ========================================= */
+/* === 10. DAY SELECTOR & NAVIGATION      === */
+/* ========================================= */
+
 .day-selector-bar {
     /* Applies to both tracker and modal day selectors */
     display: flex;
@@ -1607,9 +1612,9 @@ h3:first-child {
     padding: var(--spacing-xs);
 }
 
-/* ================================== */
-/* === Material Design Icons === */
-/* ================================== */
+/* ========================================= */
+/* === 11. MATERIAL DESIGN ICONS          === */
+/* ========================================= */
 
 .mdi {
     /* General MDI styling */
@@ -1632,364 +1637,9 @@ h3:first-child {
     /* Override default if needed */
 }
 
-
-/* ================================== */
-/* === Responsive Styles === */
-/* ================================== */
-
-@media (max-width: 600px) {
-    header h1 {
-        font-size: 1.3rem;
-        /* MODIFIED from 1.5rem (original 1.4rem in your last paste) */
-    }
-
-    /* .tab-bar .tab-item padding already adjusted to var(--spacing-xs) var(--spacing-xs) */
-    /* .tab-bar .tab-item {
-        padding: var(--spacing-xs) var(--spacing-xs);
-    } */
-
-    /* This selector for .tab-icon was in your previous paste,
-       but .tab-bar .mdi is more specific for the current HTML.
-       If .tab-icon exists elsewhere, keep it. Otherwise, rely on .tab-bar .mdi below.
-    */
-    /* .tab-bar .tab-icon {
-        margin-right: 0;
-        margin-bottom: 4px;
-        font-size: 1.2em;
-    } */
-
-    /* This targets the .mdi icon specifically inside .tab-item */
-    .tab-bar .tab-item .mdi {
-        margin-right: 0;
-        /* Since flex-direction is column */
-        margin-bottom: 2px;
-        font-size: 1.4em;
-    }
-
-    .tab-bar .tab-label {
-        font-size: calc(var(--font-md));
-        line-height: 1.1;
-    }
-
-    .main-menu {
-        /* top: 100px; JS handles positioning, this can be a fallback or removed */
-    }
-
-    .modal-content {
-        width: 95%;
-        max-width: none;
-        /* Allow full width on very small screens */
-        margin-top: var(--spacing-sm);
-        /* Reduce modal margins */
-        margin-bottom: var(--spacing-sm);
-        max-height: 95vh;
-        /* Ensure modal doesn't exceed viewport height - increased from 90vh */
-    }
-
-    .mdi {
-        /* General MDI adjustment for smaller screens */
-        font-size: 1em;
-        /* margin-right: 0.3em; /* Optionally reduce margin */
-    }
-
-    /* Adjust padding for view sticky headers and scrollable content on smaller screens */
-    .view-header-sticky,
-    .view-content-scrollable {
-        padding: var(--spacing-md);
-    }
-
-    .view-header-sticky {
-        padding-bottom: var(--spacing-sm);
-    }
-}
-
-
-@media (max-width: 480px) {
-
-    /* General Mobile Adjustments */
-    main {
-        padding-left: var(--spacing-md);
-        padding-right: var(--spacing-md);
-    }
-
-    /* .view {
-        padding: var(--spacing-lg); REMOVED - padding is on children
-    } */
-    .view-header-sticky,
-    .view-content-scrollable {
-        padding: var(--spacing-md);
-        /* Consistent with 600px or further reduced if needed */
-    }
-
-    .view-header-sticky {
-        /* Specific adjustment for tighter spacing */
-        padding-top: var(--spacing-sm);
-        padding-bottom: var(--spacing-xs);
-    }
-
-    .view-content-scrollable {
-        padding-top: var(--spacing-sm);
-    }
-
-
-    /* Food Group Item Compactness */
-    .food-group-item {
-        align-items: flex-start;
-        /* This is fine */
-    }
-
-    .food-group-item .info {
-        margin-right: var(--spacing-sm);
-    }
-
-    .food-group-item .controls {
-        flex-shrink: 0;
-    }
-
-    .food-group-item .controls input[type="number"] {
-        width: 28px;
-        padding: var(--spacing-xs);
-    }
-
-    .food-group-item .controls button {
-        width: 28px;
-        height: 28px;
-        font-size: 1rem;
-    }
-
-    .weekly-badge {
-        padding: 1px 6px;
-        font-size: 0.7rem;
-        min-width: 14px;
-        height: 16px;
-        margin-right: var(--spacing-xs);
-    }
-
-    .modal-content {
-        width: 95%;
-        max-width: none;
-        /* Allow full width on very small screens */
-        margin-top: var(--spacing-sm);
-        /* Reduce modal margins */
-        margin-bottom: var(--spacing-sm);
-        max-height: 95vh;
-        /* Ensure modal doesn't exceed viewport height - increased from 90vh */
-    }
-
-    .modal-header {
-        padding: 12px 15px;
-    }
-
-    .modal-body {
-        padding: 15px;
-    }
-
-    .modal-actions {
-        padding: 12px 15px;
-    }
-
-    .modal-actions button {
-        font-size: var(--font-xs);
-        padding: var(--spacing-sm) var(--spacing-md);
-    }
-
-    #edit-totals-modal .modal-content {
-        /* Specific modal if needed */
-        width: 95vw;
-        /* Use viewport width */
-    }
-
-    .summary-table {
-        grid-template-columns: minmax(100px, 1fr) minmax(50px, 0.4fr) minmax(70px, 0.8fr);
-        font-size: var(--font-sm);
-    }
-
-    .summary-row>div {
-        padding: var(--spacing-sm);
-    }
-
-    .food-name {
-        padding-left: var(--spacing-md);
-    }
-
-    .target-servings {
-        padding-right: var(--spacing-md);
-    }
-
-    .header-row>div {
-        font-size: var(--font-xs);
-    }
-
-    .card-content {
-        padding: 6px var(--spacing-sm);
-    }
-
-    .card-food-name {
-        font-size: var(--font-sm);
-    }
-
-    .metric-label {
-        font-size: calc(var(--font-xs) - 1px);
-    }
-
-
-    .settings-row {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .settings-row label {
-        margin-bottom: var(--spacing-xs);
-        min-width: auto;
-        /* Allow label to take natural width */
-    }
-
-    .settings-row select,
-    .settings-row input[type="text"],
-    .settings-row .action-btn {
-        width: 100%;
-        max-width: none;
-        /* Allow full width */
-        margin-left: 0;
-        /* Reset margin if any */
-    }
-
-    .settings-row .action-btn {
-        margin-top: var(--spacing-sm);
-    }
-
-    .connection-status {
-        margin: var(--spacing-sm) 0;
-        /* Adjust margins */
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .provider-row .small-btn {
-        margin-top: var(--spacing-sm);
-        width: 100%;
-        /* Full width buttons */
-    }
-
-    #toast-message.toast {
-        padding: 10px 20px;
-        font-size: 0.9em;
-        max-width: 90%;
-        /* Toast can be wider */
-    }
-
-    /* Sync actions row adjustments for mobile */
-    .sync-actions-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--spacing-sm);
-    }
-
-    .sync-actions-row .small-btn {
-        width: 100%;
-        min-width: auto;
-        text-align: center;
-    }
-}
-
-@media (max-width: 360px) {
-    .day-selector-btn {
-        width: 28px;
-        height: 28px;
-        font-size: var(--font-xs);
-    }
-
-    .modal-day-selector .day-selector-btn {
-        width: 24px;
-        height: 24px;
-        font-size: calc(var(--font-xs) - 1px);
-    }
-
-    .history-nav {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: var(--spacing-xs);
-        /* Maybe reduce gap when wrapped */
-    }
-
-    #history-date-picker {
-        order: 1;
-        /* Ensure date picker comes first if wrapped */
-        width: 100%;
-        /* Take full width when wrapped */
-        margin-bottom: var(--spacing-sm);
-        /* flex-grow, flex-shrink already set from base */
-    }
-
-    .history-nav .icon-btn {
-        /* prev, next, edit buttons */
-        order: 2;
-    }
-
-    .history-nav .icon-btn.text-btn {
-        /* Optional: Make edit button full width when wrapped if desired */
-        /* width: 100%; */
-        /* margin-top: var(--spacing-xs); */
-    }
-}
-
-#edit-totals-modal .edit-totals-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-#edit-totals-modal .edit-totals-item:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-}
-
-#edit-totals-modal .name-row {
-    display: flex;
-    align-items: center;
-    flex: 1;
-    margin-right: 12px;
-}
-
-#edit-totals-modal .edit-item-name {
-    flex-grow: 1;
-    margin-right: 8px;
-    font-weight: 500;
-}
-
-#edit-totals-modal .weekly-badge {
-    background-color: var(--secondary-color);
-    color: white;
-    border-radius: 12px;
-    padding: 2px 8px;
-    font-size: 0.75rem;
-    font-weight: bold;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 18px;
-    margin-right: var(--spacing-sm);
-}
-
-#edit-totals-modal .weekly-badge.badge-primary {
-    background-color: var(--primary-color);
-}
-
-#edit-totals-modal .weekly-badge.badge-warning {
-    background-color: var(--limit-color);
-}
-
-#edit-totals-modal .weekly-badge.badge-danger {
-    background-color: var(--error-color);
-}
-
-/* ================================== */
-/* === Setup Wizard Styles === */
-/* ================================== */
+/* ========================================= */
+/* === 12. SETUP WIZARD STYLES            === */
+/* ========================================= */
 
 .setup-wizard-modal {
     position: fixed;
@@ -2117,37 +1767,6 @@ h3:first-child {
     min-width: 120px;
 }
 
-/* Mobile adjustments */
-@media (max-width: 480px) {
-    .setup-wizard-content {
-        max-height: 80vh;
-        /* Use more height on mobile for better usability */
-        min-height: 500px;
-        /* Higher minimum for consistency on mobile */
-    }
-
-    .wizard-step {
-        gap: 1.25rem;
-        /* Slightly reduced gap on mobile */
-    }
-
-    .wizard-buttons button {
-        min-width: 100px;
-    }
-}
-
-/* Smaller screens */
-@media (max-width: 360px) {
-    .setup-wizard-content {
-        width: 80%;
-        padding: 1.25rem;
-    }
-
-    .wizard-buttons button {
-        min-width: 100px;
-    }
-}
-
 /* Warning box styles */
 .wizard-warning {
     background-color: var(--near-limit-color);
@@ -2181,26 +1800,6 @@ h3:first-child {
 
 .radio-group label {
     padding: 0.65rem 1rem;
-}
-
-/* Mobile adjustments */
-@media (max-width: 480px) {
-    .wizard-warning {
-        padding: 1rem;
-        margin: 0.25rem 0;
-    }
-
-    .wizard-warning p {
-        font-size: 0.875rem;
-    }
-
-    .radio-group {
-        gap: 0.65rem;
-    }
-
-    .radio-group label {
-        padding: 0.6rem 0.875rem;
-    }
 }
 
 .wizard-list {
@@ -2281,4 +1880,407 @@ h3:first-child {
 
 .sync-actions-row .small-btn {
     /* Keep any specific overrides for sync actions if needed */
+}
+
+/* ========================================= */
+/* === 13. RESPONSIVE DESIGN              === */
+/* ========================================= */
+
+/* Tablet and smaller desktop */
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 1.3rem;
+        /* MODIFIED from 1.5rem (original 1.4rem in your last paste) */
+    }
+
+    /* .tab-bar .tab-item padding already adjusted to var(--spacing-xs) var(--spacing-xs) */
+    /* .tab-bar .tab-item {
+        padding: var(--spacing-xs) var(--spacing-xs);
+    } */
+
+    /* This selector for .tab-icon was in your previous paste,
+       but .tab-bar .mdi is more specific for the current HTML.
+       If .tab-icon exists elsewhere, keep it. Otherwise, rely on .tab-bar .mdi below.
+    */
+    /* .tab-bar .tab-icon {
+        margin-right: 0;
+        margin-bottom: 4px;
+        font-size: 1.2em;
+    } */
+
+    /* This targets the .mdi icon specifically inside .tab-item */
+    .tab-bar .tab-item .mdi {
+        margin-right: 0;
+        /* Since flex-direction is column */
+        margin-bottom: 2px;
+        font-size: 1.4em;
+    }
+
+    .tab-bar .tab-label {
+        font-size: calc(var(--font-md));
+        line-height: 1.1;
+    }
+
+    .main-menu {
+        /* top: 100px; JS handles positioning, this can be a fallback or removed */
+    }
+
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        /* Allow full width on very small screens */
+        margin-top: var(--spacing-sm);
+        /* Reduce modal margins */
+        margin-bottom: var(--spacing-sm);
+        max-height: 95vh;
+        /* Ensure modal doesn't exceed viewport height - increased from 90vh */
+    }
+
+    .mdi {
+        /* General MDI adjustment for smaller screens */
+        font-size: 1em;
+        /* margin-right: 0.3em; /* Optionally reduce margin */
+    }
+
+    /* Adjust padding for view sticky headers and scrollable content on smaller screens */
+    .view-header-sticky,
+    .view-content-scrollable {
+        padding: var(--spacing-md);
+    }
+
+    .view-header-sticky {
+        padding-bottom: var(--spacing-sm);
+    }
+}
+
+/* Mobile devices */
+@media (max-width: 480px) {
+
+    /* General Mobile Adjustments */
+    main {
+        padding-left: var(--spacing-md);
+        padding-right: var(--spacing-md);
+    }
+
+    /* .view {
+        padding: var(--spacing-lg); REMOVED - padding is on children
+    } */
+    .view-header-sticky,
+    .view-content-scrollable {
+        padding: var(--spacing-md);
+        /* Consistent with 600px or further reduced if needed */
+    }
+
+    .view-header-sticky {
+        /* Specific adjustment for tighter spacing */
+        padding-top: var(--spacing-sm);
+        padding-bottom: var(--spacing-xs);
+    }
+
+    .view-content-scrollable {
+        padding-top: var(--spacing-sm);
+    }
+
+    /* Food Group Item Compactness */
+    .food-group-item {
+        align-items: flex-start;
+        /* This is fine */
+    }
+
+    .food-group-item .info {
+        margin-right: var(--spacing-sm);
+    }
+
+    .food-group-item .controls {
+        flex-shrink: 0;
+    }
+
+    .food-group-item .controls input[type="number"] {
+        width: 28px;
+        padding: var(--spacing-xs);
+    }
+
+    .food-group-item .controls button {
+        width: 28px;
+        height: 28px;
+        font-size: 1rem;
+    }
+
+    .weekly-badge {
+        padding: 1px 6px;
+        font-size: 0.7rem;
+        min-width: 14px;
+        height: 16px;
+        margin-right: var(--spacing-xs);
+    }
+
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        /* Allow full width on very small screens */
+        margin-top: var(--spacing-sm);
+        /* Reduce modal margins */
+        margin-bottom: var(--spacing-sm);
+        max-height: 95vh;
+        /* Ensure modal doesn't exceed viewport height - increased from 90vh */
+    }
+
+    .modal-header {
+        padding: 12px 15px;
+    }
+
+    .modal-body {
+        padding: 15px;
+    }
+
+    .modal-actions {
+        padding: 12px 15px;
+    }
+
+    .modal-actions button {
+        font-size: var(--font-xs);
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    #edit-totals-modal .modal-content {
+        /* Specific modal if needed */
+        width: 95vw;
+        /* Use viewport width */
+    }
+
+    .summary-table {
+        grid-template-columns: minmax(100px, 1fr) minmax(50px, 0.4fr) minmax(70px, 0.8fr);
+        font-size: var(--font-sm);
+    }
+
+    .summary-row>div {
+        padding: var(--spacing-sm);
+    }
+
+    .food-name {
+        padding-left: var(--spacing-md);
+    }
+
+    .target-servings {
+        padding-right: var(--spacing-md);
+    }
+
+    .header-row>div {
+        font-size: var(--font-xs);
+    }
+
+    .card-content {
+        padding: 6px var(--spacing-sm);
+    }
+
+    .card-food-name {
+        font-size: var(--font-sm);
+    }
+
+    .metric-label {
+        font-size: calc(var(--font-xs) - 1px);
+    }
+
+    .settings-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .settings-row label {
+        margin-bottom: var(--spacing-xs);
+        min-width: auto;
+        /* Allow label to take natural width */
+    }
+
+    .settings-row select,
+    .settings-row input[type="text"],
+    .settings-row .action-btn {
+        width: 100%;
+        max-width: none;
+        /* Allow full width */
+        margin-left: 0;
+        /* Reset margin if any */
+    }
+
+    .settings-row .action-btn {
+        margin-top: var(--spacing-sm);
+    }
+
+    .connection-status {
+        margin: var(--spacing-sm) 0;
+        /* Adjust margins */
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .provider-row .small-btn {
+        margin-top: var(--spacing-sm);
+        width: 100%;
+        /* Full width buttons */
+    }
+
+    #toast-message.toast {
+        padding: 10px 20px;
+        font-size: 0.9em;
+        max-width: 90%;
+        /* Toast can be wider */
+    }
+
+    /* Sync actions row adjustments for mobile */
+    .sync-actions-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+    }
+
+    .sync-actions-row .small-btn {
+        width: 100%;
+        min-width: auto;
+        text-align: center;
+    }
+
+    /* Setup Wizard Mobile Adjustments */
+    .setup-wizard-content {
+        max-height: 80vh;
+        /* Use more height on mobile for better usability */
+        min-height: 500px;
+        /* Higher minimum for consistency on mobile */
+    }
+
+    .wizard-step {
+        gap: 1.25rem;
+        /* Slightly reduced gap on mobile */
+    }
+
+    .wizard-buttons button {
+        min-width: 100px;
+    }
+
+    .wizard-warning {
+        padding: 1rem;
+        margin: 0.25rem 0;
+    }
+
+    .wizard-warning p {
+        font-size: 0.875rem;
+    }
+
+    .radio-group {
+        gap: 0.65rem;
+    }
+
+    .radio-group label {
+        padding: 0.6rem 0.875rem;
+    }
+}
+
+/* Small mobile devices */
+@media (max-width: 360px) {
+    .day-selector-btn {
+        width: 28px;
+        height: 28px;
+        font-size: var(--font-xs);
+    }
+
+    .modal-day-selector .day-selector-btn {
+        width: 24px;
+        height: 24px;
+        font-size: calc(var(--font-xs) - 1px);
+    }
+
+    .history-nav {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--spacing-xs);
+        /* Maybe reduce gap when wrapped */
+    }
+
+    #history-date-picker {
+        order: 1;
+        /* Ensure date picker comes first if wrapped */
+        width: 100%;
+        /* Take full width when wrapped */
+        margin-bottom: var(--spacing-sm);
+        /* flex-grow, flex-shrink already set from base */
+    }
+
+    .history-nav .icon-btn {
+        /* prev, next, edit buttons */
+        order: 2;
+    }
+
+    .history-nav .icon-btn.text-btn {
+        /* Optional: Make edit button full width when wrapped if desired */
+        /* width: 100%; */
+        /* margin-top: var(--spacing-xs); */
+    }
+
+    /* Setup Wizard Small Screen Adjustments */
+    .setup-wizard-content {
+        width: 80%;
+        padding: 1.25rem;
+    }
+
+    .wizard-buttons button {
+        min-width: 100px;
+    }
+}
+
+/* ========================================= */
+/* === 14. COMPONENT-SPECIFIC OVERRIDES   === */
+/* ========================================= */
+
+/* Edit Totals Modal Specific Styles */
+#edit-totals-modal .edit-totals-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#edit-totals-modal .edit-totals-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+#edit-totals-modal .name-row {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    margin-right: 12px;
+}
+
+#edit-totals-modal .edit-item-name {
+    flex-grow: 1;
+    margin-right: 8px;
+    font-weight: 500;
+}
+
+#edit-totals-modal .weekly-badge {
+    background-color: var(--secondary-color);
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 18px;
+    margin-right: var(--spacing-sm);
+}
+
+#edit-totals-modal .weekly-badge.badge-primary {
+    background-color: var(--primary-color);
+}
+
+#edit-totals-modal .weekly-badge.badge-warning {
+    background-color: var(--limit-color);
+}
+
+#edit-totals-modal .weekly-badge.badge-danger {
+    background-color: var(--error-color);
 }
