@@ -23,6 +23,7 @@
 import dataService from "./dataService.js";
 import uiRenderer from "../ui/renderer.js";
 import logger from "./logger.js";
+import themeManager from "./themeManager.js";
 
 // Module state
 let sectionCollapseState = {}; // Track which sections are expanded/collapsed
@@ -132,6 +133,9 @@ async function showSettings() {
       }
     }
 
+    // Get current theme
+    const currentTheme = themeManager.getCurrentTheme();
+
     const settingsTitle = "Settings";
 
     let settingsContent = `
@@ -220,6 +224,30 @@ async function showSettings() {
             </div>
           </div>
         </div>
+
+        <!-- Appearance Section -->
+        <div class="settings-section">
+          <div class="section-header collapsible">
+            <h4>Appearance</h4>
+            <span class="section-toggle">▼</span>
+          </div>
+          <div class="section-content">
+            <div class="settings-row">
+              <label for="theme-select">Theme:</label>
+              <select id="theme-select">
+                <option value="light" ${
+                  currentTheme === "light" ? "selected" : ""
+                }>Light</option>
+                <option value="dark" ${
+                  currentTheme === "dark" ? "selected" : ""
+                }>Dark</option>
+                <option value="auto" ${
+                  currentTheme === "auto" ? "selected" : ""
+                }>Auto (System)</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -278,6 +306,9 @@ function setupSettingsEventListeners(syncEnabled) {
     });
   });
 
+  // Add event listeners for appearance settings
+  setupAppearanceListeners();
+
   // Add event listener for Enable sync checkbox
   setupSyncEnabledListener();
 
@@ -289,6 +320,21 @@ function setupSettingsEventListeners(syncEnabled) {
 
   // Event listeners for action buttons
   setupActionButtonListeners();
+}
+
+/**
+ * Setup appearance settings listeners
+ */
+function setupAppearanceListeners() {
+  // Theme selector
+  const themeSelect = document.getElementById("theme-select");
+  if (themeSelect) {
+    themeSelect.addEventListener("change", async (e) => {
+      const newTheme = e.target.value;
+      await themeManager.applyTheme(newTheme);
+      uiRenderer.showToast(`Theme changed to ${newTheme}`, "success");
+    });
+  }
 }
 
 /**

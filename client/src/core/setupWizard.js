@@ -29,6 +29,7 @@ const logger = createLogger("setupWizard");
 const WIZARD_STEPS = {
   WELCOME: "welcome",
   FIRST_DAY: "first_day",
+  APPEARANCE: "appearance",
   CLOUD_SYNC: "cloud_sync",
   CLOUD_PROVIDER: "cloud_provider",
   COMPLETE: "complete",
@@ -39,6 +40,7 @@ class SetupWizard {
     this.currentStep = WIZARD_STEPS.WELCOME;
     this.selections = {
       firstDayOfWeek: "Sunday", // Default value
+      theme: "auto", // Default to auto theme
       enableCloudSync: false, // Default to false
       cloudSyncProvider: null, // New field for provider selection
     };
@@ -125,6 +127,9 @@ class SetupWizard {
       case WIZARD_STEPS.FIRST_DAY:
         content = this.renderFirstDayStep();
         break;
+      case WIZARD_STEPS.APPEARANCE:
+        content = this.renderAppearanceStep();
+        break;
       case WIZARD_STEPS.CLOUD_SYNC:
         content = this.renderCloudSyncStep();
         break;
@@ -195,10 +200,54 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 2 of 3</div>
+        <div class="wizard-progress">Step 2 of 4</div>
         <div class="wizard-buttons">
           <button id="first-day-back-btn" class="secondary-btn">Back</button>
           <button id="first-day-next-btn" class="primary-btn">Continue</button>
+        </div>
+      </div>
+    `;
+  }
+
+  renderAppearanceStep() {
+    return `
+      <div class="wizard-header">
+        <h2>Appearance</h2>
+      </div>
+      <div class="wizard-content">
+        <div class="wizard-step">
+          <p>Choose your preferred theme for the app.</p>
+          
+          <div class="wizard-form">
+            <div class="radio-group">
+              <label>
+                <input type="radio" name="theme" value="light" 
+                  ${this.selections.theme === "light" ? "checked" : ""}>
+                <span>Light Theme</span>
+              </label>
+              <label>
+                <input type="radio" name="theme" value="dark" 
+                  ${this.selections.theme === "dark" ? "checked" : ""}>
+                <span>Dark Theme</span>
+              </label>
+              <label>
+                <input type="radio" name="theme" value="auto" 
+                  ${this.selections.theme === "auto" ? "checked" : ""}>
+                <span>Auto (Follow System)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="wizard-note">
+            <p>You can change this setting anytime from the settings menu.</p>
+          </div>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <div class="wizard-progress">Step 3 of 4</div>
+        <div class="wizard-buttons">
+          <button id="appearance-back-btn" class="secondary-btn">Back</button>
+          <button id="appearance-next-btn" class="primary-btn">Continue</button>
         </div>
       </div>
     `;
@@ -236,7 +285,7 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 3 of ${
+        <div class="wizard-progress">Step 4 of ${
           this.selections.enableCloudSync ? "4" : "3"
         }</div>
         <div class="wizard-buttons">
@@ -407,7 +456,7 @@ class SetupWizard {
             if (selectedDay) {
               this.selections.firstDayOfWeek = selectedDay;
               await dataService.savePreference("weekStartDay", selectedDay);
-              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+              this.currentStep = WIZARD_STEPS.APPEARANCE;
               this.renderCurrentStep();
             }
           });
@@ -420,11 +469,44 @@ class SetupWizard {
         });
         break;
 
+      case WIZARD_STEPS.APPEARANCE:
+        document
+          .getElementById("appearance-back-btn")
+          ?.addEventListener("click", () => {
+            this.currentStep = WIZARD_STEPS.FIRST_DAY;
+            this.renderCurrentStep();
+          });
+
+        document
+          .getElementById("appearance-next-btn")
+          ?.addEventListener("click", async () => {
+            // Save theme preference
+            const selectedTheme = document.querySelector(
+              'input[name="theme"]:checked'
+            )?.value;
+            if (selectedTheme) {
+              this.selections.theme = selectedTheme;
+              await dataService.savePreference("theme", selectedTheme);
+            }
+
+            this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            this.renderCurrentStep();
+          });
+
+        // Radio button changes for theme
+        document.querySelectorAll('input[name="theme"]').forEach((radio) => {
+          radio.addEventListener("change", (e) => {
+            this.selections.theme = e.target.value;
+          });
+        });
+
+        break;
+
       case WIZARD_STEPS.CLOUD_SYNC:
         document
           .getElementById("cloud-sync-back-btn")
           ?.addEventListener("click", () => {
-            this.currentStep = WIZARD_STEPS.FIRST_DAY;
+            this.currentStep = WIZARD_STEPS.APPEARANCE;
             this.renderCurrentStep();
           });
 

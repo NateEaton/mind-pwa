@@ -21,6 +21,7 @@
 /* ========================================= */
 
 :root {
+    /* Light theme (default) */
     --primary-color: #4CAF50;
     --primary-dark: #388E3C;
     --secondary-color: #8BC34A;
@@ -62,6 +63,29 @@
 
     /* THIS IS THE NEW VARIABLE - INSPECT YOUR HEADER AND UPDATE THIS VALUE! */
     --main-app-header-height: 88px;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+    --primary-color: #66BB6A;
+    --primary-dark: #4CAF50;
+    --secondary-color: #9CCC65;
+    --secondary-dark: #7CB342;
+    --limit-color: #FFB74D;
+    --limit-dark: #FF9800;
+    --error-color: #ef5350;
+    --bg-color: #1a1a1a;
+    --text-color: #e0e0e0;
+    --text-muted: #b0b0b0;
+    --card-bg: #2d2d2d;
+    --border-color: #444;
+    --met-goal-color: #1b5e20;
+    /* Dark green */
+    --missed-goal-color: #b71c1c;
+    /* Dark red */
+    --near-limit-color: #e65100;
+    /* Dark orange */
+    --background-alt: #333;
 }
 
 /* ========================================= */
@@ -1324,6 +1348,29 @@ h3:first-child {
 /* ========================================= */
 /* === 9. SETTINGS & UTILITIES             === */
 /* ========================================= */
+
+/* Theme-specific adjustments */
+[data-theme="dark"] .settings-section .section-header {
+    background-color: #333;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .settings-section .section-content {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .settings-row select,
+[data-theme="dark"] .settings-row input[type="text"] {
+    background-color: #444;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .settings-row select option {
+    background-color: #444;
+    color: #e0e0e0;
+}
 
 .settings-container {
     display: flex;

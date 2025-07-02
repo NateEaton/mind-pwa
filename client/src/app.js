@@ -413,6 +413,7 @@ async function finalizeLoggerConfig() {
 
 // ... existing imports ...
 import setupWizard from "./core/setupWizard.js";
+import themeManager from "./core/themeManager.js";
 
 // ... existing code ...
 
@@ -500,6 +501,9 @@ async function completeAppInitialization(fromWizard = false) {
   try {
     // Initialize data service first
     await dataService.initialize();
+
+    // Initialize theme manager
+    await themeManager.initialize();
 
     // Initialize state manager with food groups configuration
     await stateManager.initialize(foodGroups);
