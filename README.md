@@ -1,21 +1,15 @@
 # MIND Diet Tracker PWA
 
-> ⚠️ **Note:** This branch (`feature/server-side-auth`) represents a major architectural refactor. The project has been restructured into a monorepo (`client/` and `server/`) and is being prepared for an optional server-side backend to provide persistent cloud sync authentication. This branch is a work-in-progress. For the latest stable version, please see the `main` branch.
-
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Node.js: >=18.0.0](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet.  Record servings of key food groups each day, view weekly summaries, and browse your historical data. The app includes a guided setup wizard to help new users configure their preferences and optional cloud synchronization. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
+A Progressive Web App (PWA) designed to help users track their daily and weekly adherence to the principles of the MIND Diet. Record servings of MIND Diet food groups each day, view weekly summaries, and browse your historical data. The app includes a guided setup wizard to help new users configure their preferences and optional cloud synchronization. All data is stored locally on your device and can be optionally synchronized across multiple devices using cloud storage.
 
 [**Live Demo**](https://mind-pwa-fawn.vercel.app/) | [**View Wiki for Complete Documentation**](../../wiki)
 
 ### ⚠️ Cloud Sync Limitations in Demo
 
-The hosted demo app (on Vercel) **does not currently support cloud sync** via Google Drive or Dropbox for general users. This is due to testing restrictions imposed by the API providers.
-* **Google Drive sync**: Only available to registered test users added to the app's OAuth client.
-* **Dropbox sync**: Only available to the developer and any manually added testers.
-
-If you'd like to test these features, open an issue or contact me with the email address associated with your Google or Dropbox account so I can add you as a test user.
+The hosted demo app (on Vercel) only supports the client-side functionality so doesn't include cloud sync. However, it is otherwise fully functional with local storage of your data and the ability to backup/restore and exchange data between devices with the export/import features. 
 
 ## App Screenshots
 
@@ -41,112 +35,234 @@ If you'd like to test these features, open an issue or contact me with the email
   </table>
 </div>
 
+## Core Features
+
+- **MIND Diet Tracking**: Date-specific tracking of MIND Diet food groups with daily and weekly targets
+- **Guided Setup**: First-time user wizard for preferences and cloud sync configuration
+- **Historical Data**: Complete data archiving with the ability to edit past entries
+- **Visual Feedback**: Color coding to highlight when targets are met or limits exceeded
+- **Food Information**: Detailed tooltips with serving size examples and guidelines
+- **Data Management**: Import/export capabilities for data backup and migration
+- **Cloud Sync**: Optional synchronization with Google Drive or Dropbox (server-enabled mode)
+- **PWA Features**: Offline functionality, home screen installation, responsive design
+- **Privacy-Focused**: Local-first data storage with optional cloud features
+
 ## Quick Start
 
 1. **Open the app** in any modern web browser or install it to your home screen as a PWA.
 2. **Complete the setup wizard** on first use to configure your week start day and optional cloud sync.
-3. Use the **Daily** view to record servings for each food group for a given day.  Use the date navigation to select a different date, as needed.
+3. Use the **Daily** view to record servings for each food group for a given day. Use the date navigation to select a different date, as needed.
 4. Check the **Weekly** view to monitor your progress toward targets.
 5. Browse past weeks in the **History** view, and use the *Edit* button to modify daily entries for a past week.
 
-## Core Features
+## Architecture Overview
 
-- Guided setup wizard for first-time users to configure preferences and cloud sync.
-- Date-specific tracking of MIND Diet food groups with daily and weekly totals.
-- Weekly summary by food group.
-- Historical data archiving and review.
-- Edit function to directly change the daily entries in historical weeks.
-- Food information tooltips with serving size details.
-- Color coding to highlight when targets met or limits exceeded.
-- Cloud synchronization with Google Drive or Dropbox.
-- Import/export data capabilities.
-- PWA features (offline use, installable).
-- Responsive design optimized for mobile and desktop use.
+The MIND Diet Tracker is built with a flexible architecture to support different deployment scenarios and user needs:
+
+- **Monorepo Structure**: Organized with separate `client/` and `server/` directories for clear separation of concerns
+- **Dual Deployment Modes**: Choose between a client-only deployment or server-enabled deployment
+- **Server-Side OAuth**: Secure token management resolves PWA limitations with cloud provider authentication
+- **Local-First Design**: All data is stored locally by default, with optional cloud synchronization
+
+### Deployment Modes
+
+**Client-Only Mode** - Perfect for simple hosting:
+- Local data storage with import/export capabilities
+- Static file hosting (Vercel, Netlify, home servers)
+- No server-side components
+- Lightweight and fast deployment
+
+**Server-Enabled Mode** - Full feature set:
+- Cloud synchronization with Google Drive and Dropbox
+- Secure OAuth token management
+- Cross-device data synchronization
+- Automatic conflict resolution
 
 ## Technology Stack
 
-- HTML5, CSS3 (including CSS Variables)
-- Modern JavaScript (ES6+ Modules, Async/Await)
-- IndexedDB (for storing weekly history)
-- localStorage (for storing current daily/weekly state)
-- Service Workers (for PWA offline caching)
-- Manifest.json (for PWA installability)
-- Centralized logging system (for troubleshooting and debugging)
-- Material Design Icons
-- Google Drive & Dropbox APIs (for cloud synchronization)
-- Node.js (for Git hook version generation during development)
-- Modular architecture with separated concerns (core, UI, utilities, cloud providers)
+### Client Application
+- **Frontend**: HTML5, CSS3, Modern JavaScript (ES6+ Modules)
+- **Build System**: Vite for fast development and optimized production builds
+- **Data Storage**: IndexedDB for historical data, localStorage for current state
+- **PWA Features**: Service Workers for offline caching, Web App Manifest for installation
+- **UI Framework**: Vanilla JavaScript with modular component architecture
+- **Icons**: Material Design Icons
 
-## Installation / Deployment (Self-Hosting)
+### Server Component (Optional)
+- **Runtime**: Node.js Express server
+- **Authentication**: OAuth 2.0 integration for Google Drive and Dropbox
+- **APIs**: Google Drive API v3, Dropbox API v2
+- **Containerization**: Docker support for easy deployment
 
-1. **Prerequisites:**
+### Architecture Pattern
+- **Modular Design**: Clear separation between core logic, UI components, cloud providers, and utilities
+- **State Management**: Centralized state management with subscription-based UI updates
+- **Error Handling**: Comprehensive logging system for debugging and troubleshooting
+- **Security**: Server-side token management, no sensitive data in client code
 
-   - A web server capable of serving static files
-   - Node.js (if using Git hooks)
-   - (Optional) Google Drive & Dropbox API keys for cloud sync functionality
+## Installation & Deployment
 
-2. **Get the Code:** Clone this repository or download the source code files
+### Which Deployment Should I Choose?
 
-3. **Set Up:**
+**Choose Client-Only if:**
+- You don't need cloud synchronization between devices
+- You prefer not to work with cloud API configuration and OAuth setup
+- You want simple static hosting (Vercel, Netlify, NAS devices)
 
-   - If cloning, copy `pre-commit.example` to `.git/hooks/pre-commit`
-   - For cloud sync, create a `config.js` file with your API keys (use `scripts/generateConfig.js` as a template)
+**Choose Server-Enabled if:**
+- You want cross-device synchronization (Google Drive or Dropbox)
+- You're comfortable with cloud API setup
+- You can provide HTTPS hosting (required for OAuth)
 
-4. **Generate Version:** Run `npm run generate-version` to create version.json
+### Option 1: Client-Only Deployment
 
-5. **Deploy:** Place all files in a web-accessible directory on your server
+Perfect for static hosting platforms and home servers:
 
-6. **Access:** Use an HTTPS connection to enable PWA features and cloud APIs
+```bash
+# Clone and build
+git clone https://github.com/NateEaton/mind-pwa.git
+cd mind-pwa
 
-For detailed installation instructions, see the [Installation Guide](../../wiki/Installation-Guide) in the wiki.
+# Build client-only version
+./deploy-client.sh
+```
+
+**Included Features:**
+- ✅ Complete MIND Diet tracking
+- ✅ Theme selection (light/dark/auto)
+- ✅ Local data storage and history
+- ✅ Import/export functionality
+- ✅ PWA installation and offline use
+- ❌ Cloud synchronization (disabled)
+
+**Deployment Methods:**
+
+**Static Hosting Platforms:**
+- **Vercel/Netlify**: Build Command: `npm run build`, Output Directory: `client/dist`, Root Directory: `client`
+- Files are automatically served from the built `client/dist` directory
+
+**Container Deployment (NAS/Home Server):**
+```bash
+# Start nginx container serving the built files
+./start-client-only.sh
+# Access at http://your-server-ip:8080
+```
+
+**Traditional Web Server:**
+```bash
+# The deployment script has already built and copied files to /volume1/web/mind-pwa-deploy/
+# Configure your web server to serve files from this directory
+# Note: Domain name and HTTPS support required for PWA installation features
+```
+
+### Option 2: Server-Enabled Deployment
+
+For full-featured deployment with cloud synchronization:
+
+#### Prerequisites
+- Domain name with HTTPS support (required for OAuth callbacks)
+- Google and/or Dropbox developer accounts for API credentials
+- For container deployment: Docker and Docker Compose
+- For traditional deployment: Node.js ≥18.0.0 and web server
+
+#### Environment Configuration
+Create a `.env` file in the project root with your domain and OAuth credentials. See the [Installation Guide](../../wiki/Installation-Guide) for detailed setup instructions.
+
+#### Container Deployment (Recommended)
+
+```bash
+# Build the application with server features
+./deploy-server.sh
+
+# Start containers (nginx + Node.js server)
+./start-server.sh
+# Access at https://yourdomain.com
+```
+
+This sets up:
+- Nginx serving client files and proxying OAuth requests
+- Node.js server handling OAuth authentication
+- Automatic container orchestration
+
+#### Traditional Server Deployment
+
+```bash
+# Build the application
+./deploy-server.sh
+
+# Install and start the OAuth server
+cd server
+npm install
+npm start &
+
+# Serve client files with your web server
+# (The deployment script has already built and copied files to /volume1/web/mind-pwa-deploy/)
+```
+
+**Web Server Configuration:** Configure your web server to serve files from `/volume1/web/mind-pwa-deploy/` and proxy OAuth requests to `localhost:3000`. See the [Installation Guide](../../wiki/Installation-Guide) for detailed configuration examples.
+
+For detailed setup instructions including OAuth configuration, see the [Installation Guide](../../wiki/Installation-Guide) in the wiki.
 
 ## Cloud Synchronization
 
-This app supports optional cloud synchronization with two providers:
+Cloud sync allows you to access your MIND Diet data across multiple devices with automatic synchronization and conflict resolution.
 
-- **Google Drive**: Data is stored in the app's private space, not visible in your Drive file listing.
-- **Dropbox**: Similar to Google Drive, data is stored in the app's folder.
+### Supported Providers
+- **Google Drive**: Data stored in app's private folder (not visible in your Drive)
+- **Dropbox**: Data stored in dedicated app folder
 
-To enable cloud sync:
+### Setting Up Cloud Sync
 
-**During First Use:**
-1. Complete the setup wizard when you first open the app.
-2. Choose "Yes, enable cloud sync" when prompted.
-3. Select your preferred provider (Google Drive or Dropbox).
-4. Complete the authentication process.
+**During Initial Setup:**
+1. Complete the setup wizard when first opening the app
+2. Choose "Yes, enable cloud sync" when prompted
+3. Select your preferred provider (Google Drive or Dropbox)
+4. Complete the OAuth authentication process
 
 **For Existing Users:**
-1. Open the **Settings** from the app menu.
-2. Check "Enable cloud sync".
-3. Select your preferred provider.
-4. Click "Connect" to authenticate.
-5. Your data will now automatically sync between devices.
+1. Open **Settings** from the app menu
+2. Enable "Cloud sync"
+3. Select your preferred provider
+4. Click "Connect" and complete authentication
+5. Your data will automatically sync across devices
 
-For detailed cloud sync documentation, see the [Cloud Sync Guide](../../wiki/Cloud-Sync-Guide) in the wiki.
+### How It Works
+- Data is automatically synchronized when the app loads and when changes are made
+- Conflicts are resolved using a "last write wins" strategy with user notification
+- All synchronization happens in the background with visual status indicators
+- You can disconnect cloud sync at any time while keeping your local data
 
-## Data Privacy
+For complete cloud sync documentation, see the [Cloud Sync Guide](../../wiki/Cloud-Sync-Guide) in the wiki.
 
-- All data is stored locally on your device by default.
-- If cloud sync is enabled, data is transferred to your personal Google Drive or Dropbox account.
-- The app does not collect or transmit any data to third parties.
-- Export functionality allows you to create backups of your data at any time.
+## Data Privacy & Security
 
-## Development Acknowledgments
+- **Local-First**: All data is stored locally on your device by default
+- **Optional Cloud Sync**: Cloud features are entirely optional and user-controlled
+- **No Third-Party Data Sharing**: The app never sends data to third parties
+- **Secure Authentication**: OAuth tokens are managed server-side, never stored in the client
+- **Open Source**: Complete source code is available for review under GPL v3
+- **Data Export**: Full data export capability ensures you always control your information
 
-This project was developed with assistance from several AI tools following the [vibe coding approach](https://en.wikipedia.org/wiki/vibe_coding):
+## Development
 
-- **Initial Development**: Core application structure and functionality was created largely with assistance from Google's Gemini 2.5 Pro Preview. This model was also used for various debugging and diagnostics. 
-- **Refactoring and Enhancement**: Major refactoring, code organization improvements, UI enhancements, and cloud synchronization features were developed with assistance from Anthropic's Claude Sonnet 3.7 and then with Claude Sonnet 4.0 via Cursor. 
-- **Workflow and Code Review**: OpenAI's ChatGPT (GPT-4o) provided assistance with development workflow optimization and code review.
+This project follows modern web development practices with a focus on maintainability and extensibility:
 
-AI assistance was used primarily for code generation, architecture suggestions, and debugging support. The underlying application concept, design decisions, and final implementation responsibility remained with the human developer.
+- **Modular Architecture**: Clear separation of concerns across core, UI, cloud, and utility modules
+- **Modern JavaScript**: ES6+ features with native module system
+- **Build Optimization**: Vite-based build system for fast development and optimized production
+- **Container Support**: Docker configuration for consistent deployment environments
+- **Comprehensive Documentation**: Detailed wiki covering all aspects of installation and usage
+
+### Contributing
+
+This project is open source and welcomes contributions. See the wiki for development setup instructions and coding guidelines.
+
+### Development Acknowledgments
+
+This project was developed with assistance from AI tools following best practices in modern web development. The underlying concept, architecture decisions, implementation and testing were performed by the developer.
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0.
-
-The core principles of the GPLv3 ensure that users have the freedom to run, study, share, and modify the software. If you distribute modified versions of this software, you must also license your modifications under GPLv3 and provide the source code. This ensures the software remains free for all its users.
-
-See the [LICENSE](LICENSE) file for the full license text.
+This project is licensed under the GNU General Public License v3.0 - ensuring the software remains free and open for all users.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)

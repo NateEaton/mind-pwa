@@ -143,6 +143,16 @@
       margin-top: 3rem;
       margin-bottom: 3rem;
     }
+
+    .sync-note {
+      margin: 1rem 0;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-left: 4px solid #4CAF50;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      color: #555;
+    }
     
     footer {
       font-size: 0.9rem;
@@ -174,7 +184,7 @@
   
   <div class="what-is">
     <h2>What is the MIND Diet Tracker?</h2>
-    <p>The MIND Diet Tracker is a simple, free tool that helps you follow the <a href="https://github.com/NateEaton/mind-pwa/wiki/About-the-MIND-Diet" target="_blank">Diet (Mediterranean-DASH Intervention for Neurodegenerative Delay)</a> - an eating pattern shown to support brain health and reduce cognitive decline risk.</p>
+    <p>The MIND Diet Tracker is a simple, free tool that helps you follow the <a href="https://github.com/NateEaton/mind-pwa/wiki/About-the-MIND-Diet" target="_blank">MIND Diet (Mediterranean-DASH Intervention for Neurodegenerative Delay)</a> - an eating pattern shown to support brain health and reduce cognitive decline risk.</p>
   </div>
   
   <a class="cta-button" href="https://mind-pwa-fawn.vercel.app/" target="_blank">Try It Now</a>
@@ -190,13 +200,16 @@
     <li>✓ Historical data review</li>
     <li>✓ Edit daily history</li>
     <li>✓ Guided setup wizard</li>
-    <li>✓ Sync to cloud</li>
+    <li>✓ Optional cloud sync*</li>
     <li>✓ Export/import your data</li>
     <li>✓ Install as a mobile app</li>
     <li>✓ Color-coded feedback</li>
     <li>✓ Simple, intuitive interface</li>
     <li>✓ Built by fellow user</li>
   </ul>
+  <div class="sync-note">
+    <strong>*About Cloud Sync:</strong> The app works perfectly without cloud sync - all your data is stored locally on your device. Cloud sync to Google Drive or Dropbox is an optional feature that requires deploying with a server-side component. The demo version focuses on local storage with import/export capabilities for backing up your data.
+  </div>  
 </section>
 
 <section class="how-it-works">
