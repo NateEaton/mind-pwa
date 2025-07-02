@@ -47,6 +47,9 @@ let setSyncEnabled = null;
 let getSyncReady = null;
 let getIsDemoHost = null;
 
+// Check if server features are enabled (build-time constant)
+const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+
 /**
  * Initialize the settings manager
  * @param {Object} dependencies - Required dependencies
@@ -98,8 +101,10 @@ async function showSettings() {
       freshSyncEnabled
     );
 
-    // Update the global variable to match what's in storage
-    if (setSyncEnabled) setSyncEnabled(freshSyncEnabled);
+    // Update the global variable to match what's in storage (only if server features enabled)
+    if (SERVER_FEATURES_ENABLED && setSyncEnabled) {
+      setSyncEnabled(freshSyncEnabled);
+    }
 
     // Get current sync provider
     let currentSyncProvider;
@@ -141,6 +146,9 @@ async function showSettings() {
     let settingsContent = `
       <div class="settings-container">
 
+        ${
+          SERVER_FEATURES_ENABLED
+            ? `
         <!-- Cloud Synchronization Section -->
         <div class="settings-section">
           <div class="section-header collapsible">
@@ -178,8 +186,8 @@ async function showSettings() {
                   <span id="sync-status" class="status-value ${
                     cloudSync?.isAuthenticated ? "connected" : "disconnected"
                   }">${
-      cloudSync?.isAuthenticated ? "Connected" : "Not connected"
-    }</span>
+                cloudSync?.isAuthenticated ? "Connected" : "Not connected"
+              }</span>
                 </div>
                 
                 ${
@@ -224,6 +232,25 @@ async function showSettings() {
             </div>
           </div>
         </div>
+        `
+            : `
+        <!-- Local-Only Mode Notice -->
+        <div class="settings-section">
+          <div class="section-header">
+            <h4>Cloud Synchronization</h4>
+          </div>
+          <div class="section-content">
+            <div class="settings-row">
+              <p style="margin: 0; color: var(--text-muted);">
+                Cloud sync is not available in this version. 
+                To enable cloud synchronization, please see the project's 
+                <a href="https://github.com/NateEaton/mind-pwa/wiki/Installation-Guide" target="_blank" style="color: var(--primary-color);">Installation Guide</a>.
+              </p>
+            </div>
+          </div>
+        </div>
+        `
+        }
 
         <!-- Appearance Section -->
         <div class="settings-section">
@@ -309,17 +336,20 @@ function setupSettingsEventListeners(syncEnabled) {
   // Add event listeners for appearance settings
   setupAppearanceListeners();
 
-  // Add event listener for Enable sync checkbox
-  setupSyncEnabledListener();
+  // Add cloud sync event listeners only if server features are enabled
+  if (SERVER_FEATURES_ENABLED) {
+    // Add event listener for Enable sync checkbox
+    setupSyncEnabledListener();
 
-  // Add event listener for provider changes
-  setupProviderChangeListener();
+    // Add event listener for provider changes
+    setupProviderChangeListener();
 
-  // Add event listener for WiFi-only setting
-  setupWifiOnlyListener();
+    // Add event listener for WiFi-only setting
+    setupWifiOnlyListener();
 
-  // Event listeners for action buttons
-  setupActionButtonListeners();
+    // Event listeners for action buttons
+    setupActionButtonListeners();
+  }
 }
 
 /**

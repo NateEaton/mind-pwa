@@ -21,6 +21,9 @@ import appUtils from "../utils/appUtils.js";
 import DevTools from "./devTools.js";
 import { CONFIG } from "../config.js";
 
+// Check if server features are enabled (build-time constant)
+const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+
 const logger = createLogger("eventHandlers");
 
 /**
@@ -561,6 +564,9 @@ class EventHandlers {
         }
       </div>
 
+      ${
+        SERVER_FEATURES_ENABLED
+          ? `
       <!-- Cloud data reset controls -->
       <div style="display: flex; align-items: center; margin-bottom: 10px;">
         <label style="margin-right: 10px;">Cloud Data:</label>
@@ -579,6 +585,9 @@ class EventHandlers {
             : "Cloud sync is not enabled"
         }
       </div>
+      `
+          : ""
+      }
     </div>
     
     <!-- Development information section -->

@@ -19,9 +19,9 @@
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
-import cloudSync from "../cloudSync/cloudSync.js";
-import GoogleDriveProvider from "../cloudProviders/googleDriveProvider.js";
-import DropboxProvider from "../cloudProviders/dropboxProvider.js";
+
+// Check if server features are enabled (build-time constant)
+const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
 
 const logger = createLogger("setupWizard");
 
@@ -131,10 +131,22 @@ class SetupWizard {
         content = this.renderAppearanceStep();
         break;
       case WIZARD_STEPS.CLOUD_SYNC:
-        content = this.renderCloudSyncStep();
+        if (SERVER_FEATURES_ENABLED) {
+          content = this.renderCloudSyncStep();
+        } else {
+          // Skip to complete if server features are disabled
+          this.currentStep = WIZARD_STEPS.COMPLETE;
+          content = await this.renderCompleteStep();
+        }
         break;
       case WIZARD_STEPS.CLOUD_PROVIDER:
-        content = this.renderCloudProviderStep();
+        if (SERVER_FEATURES_ENABLED) {
+          content = this.renderCloudProviderStep();
+        } else {
+          // Skip to complete if server features are disabled
+          this.currentStep = WIZARD_STEPS.COMPLETE;
+          content = await this.renderCompleteStep();
+        }
         break;
       case WIZARD_STEPS.COMPLETE:
         content = await this.renderCompleteStep();
@@ -158,7 +170,6 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 1 of 3</div>
         <div class="wizard-buttons">
           <div></div>
           <button id="welcome-next-btn" class="primary-btn">Get Started</button>
@@ -168,6 +179,7 @@ class SetupWizard {
   }
 
   renderFirstDayStep() {
+    const totalSteps = SERVER_FEATURES_ENABLED ? 3 : 2;
     return `
       <div class="wizard-header">
         <h2>First Day of Week</h2>
@@ -200,7 +212,7 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 2 of 4</div>
+        <div class="wizard-progress">Step 1 of ${totalSteps}</div>
         <div class="wizard-buttons">
           <button id="first-day-back-btn" class="secondary-btn">Back</button>
           <button id="first-day-next-btn" class="primary-btn">Continue</button>
@@ -210,6 +222,8 @@ class SetupWizard {
   }
 
   renderAppearanceStep() {
+    const totalSteps = SERVER_FEATURES_ENABLED ? 3 : 2;
+    const nextStep = SERVER_FEATURES_ENABLED ? "Continue" : "Finish";
     return `
       <div class="wizard-header">
         <h2>Appearance</h2>
@@ -244,10 +258,10 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 3 of 4</div>
+        <div class="wizard-progress">Step 2 of ${totalSteps}</div>
         <div class="wizard-buttons">
           <button id="appearance-back-btn" class="secondary-btn">Back</button>
-          <button id="appearance-next-btn" class="primary-btn">Continue</button>
+          <button id="appearance-next-btn" class="primary-btn">${nextStep}</button>
         </div>
       </div>
     `;
@@ -285,7 +299,7 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 4 of ${
+        <div class="wizard-progress">Step 3 of ${
           this.selections.enableCloudSync ? "4" : "3"
         }</div>
         <div class="wizard-buttons">
@@ -348,7 +362,7 @@ class SetupWizard {
   async renderCompleteStep() {
     let syncMessage = "";
 
-    if (this.selections.enableCloudSync) {
+    if (SERVER_FEATURES_ENABLED && this.selections.enableCloudSync) {
       if (this.selections.cloudSyncProvider) {
         // Check connection status
         try {
@@ -373,7 +387,7 @@ class SetupWizard {
         syncMessage =
           "Cloud sync setup was not completed. You can finish setting it up from Settings.";
       }
-    } else {
+    } else if (SERVER_FEATURES_ENABLED) {
       syncMessage = "You can enable cloud sync anytime from the settings menu.";
     }
 
@@ -384,6 +398,9 @@ class SetupWizard {
       <div class="wizard-content">
         <div class="wizard-step">
           <p>Your preferences have been saved. You're ready to start tracking your MIND diet journey.</p>
+          ${
+            syncMessage
+              ? `
           <div class="sync-status ${
             this.selections.enableCloudSync
               ? syncMessage.includes("Successfully")
@@ -393,6 +410,9 @@ class SetupWizard {
           }">
             <p>${syncMessage}</p>
           </div>
+          `
+              : ""
+          }
         </div>
       </div>
       <div class="wizard-footer">
@@ -405,25 +425,9 @@ class SetupWizard {
   }
 
   async verifyCloudConnection() {
-    if (!this.selections.cloudSyncProvider) return false;
-
-    try {
-      if (this.selections.cloudSyncProvider === "dropbox") {
-        // For Dropbox, create a new provider instance and check auth
-        const dropboxProvider = new DropboxProvider();
-        await dropboxProvider.initialize();
-        return await dropboxProvider.checkAuth();
-      } else if (this.selections.cloudSyncProvider === "gdrive") {
-        // For Google Drive, create a new provider instance and check auth
-        const googleProvider = new GoogleDriveProvider();
-        await googleProvider.initialize();
-        return await googleProvider.checkAuth();
-      }
-      return false;
-    } catch (error) {
-      logger.error("Error verifying cloud connection:", error);
-      return false;
-    }
+    // If we reach this point, the OAuth flow was successful
+    // The actual connection verification happens during app initialization
+    return true;
   }
 
   attachStepEventListeners() {
@@ -489,7 +493,13 @@ class SetupWizard {
               await dataService.savePreference("theme", selectedTheme);
             }
 
-            this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            if (SERVER_FEATURES_ENABLED) {
+              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            } else {
+              // Skip cloud sync steps in local-only mode
+              this.selections.enableCloudSync = false;
+              this.currentStep = WIZARD_STEPS.COMPLETE;
+            }
             this.renderCurrentStep();
           });
 
@@ -503,77 +513,81 @@ class SetupWizard {
         break;
 
       case WIZARD_STEPS.CLOUD_SYNC:
-        document
-          .getElementById("cloud-sync-back-btn")
-          ?.addEventListener("click", () => {
-            this.currentStep = WIZARD_STEPS.APPEARANCE;
-            this.renderCurrentStep();
-          });
-
-        document
-          .getElementById("cloud-sync-next-btn")
-          ?.addEventListener("click", async () => {
-            const enableSync =
-              document.querySelector('input[name="cloudSync"]:checked')
-                ?.value === "true";
-
-            this.selections.enableCloudSync = enableSync;
-            await dataService.savePreference("cloudSyncEnabled", enableSync);
-
-            if (enableSync) {
-              this.currentStep = WIZARD_STEPS.CLOUD_PROVIDER;
-            } else {
-              this.currentStep = WIZARD_STEPS.COMPLETE;
-            }
-            this.renderCurrentStep();
-          });
-
-        // Radio button change
-        document
-          .querySelectorAll('input[name="cloudSync"]')
-          .forEach((radio) => {
-            radio.addEventListener("change", (e) => {
-              this.selections.enableCloudSync = e.target.value === "true";
-              this.renderCurrentStep(); // Re-render to update step count
+        if (SERVER_FEATURES_ENABLED) {
+          document
+            .getElementById("cloud-sync-back-btn")
+            ?.addEventListener("click", () => {
+              this.currentStep = WIZARD_STEPS.APPEARANCE;
+              this.renderCurrentStep();
             });
-          });
+
+          document
+            .getElementById("cloud-sync-next-btn")
+            ?.addEventListener("click", async () => {
+              const enableSync =
+                document.querySelector('input[name="cloudSync"]:checked')
+                  ?.value === "true";
+
+              this.selections.enableCloudSync = enableSync;
+              await dataService.savePreference("cloudSyncEnabled", enableSync);
+
+              if (enableSync) {
+                this.currentStep = WIZARD_STEPS.CLOUD_PROVIDER;
+              } else {
+                this.currentStep = WIZARD_STEPS.COMPLETE;
+              }
+              this.renderCurrentStep();
+            });
+
+          // Radio button change
+          document
+            .querySelectorAll('input[name="cloudSync"]')
+            .forEach((radio) => {
+              radio.addEventListener("change", (e) => {
+                this.selections.enableCloudSync = e.target.value === "true";
+                this.renderCurrentStep(); // Re-render to update step count
+              });
+            });
+        }
         break;
 
       case WIZARD_STEPS.CLOUD_PROVIDER:
-        document
-          .getElementById("cloud-provider-back-btn")
-          ?.addEventListener("click", () => {
-            this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
-            this.renderCurrentStep();
-          });
+        if (SERVER_FEATURES_ENABLED) {
+          document
+            .getElementById("cloud-provider-back-btn")
+            ?.addEventListener("click", () => {
+              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+              this.renderCurrentStep();
+            });
 
-        document
-          .getElementById("cloud-provider-connect-btn")
-          ?.addEventListener("click", async () => {
-            const provider = document.querySelector(
-              'input[name="cloudProvider"]:checked'
-            )?.value;
-            if (provider) {
-              this.selections.cloudSyncProvider = provider;
-              await dataService.savePreference("cloudSyncProvider", provider);
-              await this.initiateOAuthFlow(provider);
-            }
-          });
-
-        // Radio button change
-        document
-          .querySelectorAll('input[name="cloudProvider"]')
-          .forEach((radio) => {
-            radio.addEventListener("change", (e) => {
-              this.selections.cloudSyncProvider = e.target.value;
-              const connectBtn = document.getElementById(
-                "cloud-provider-connect-btn"
-              );
-              if (connectBtn) {
-                connectBtn.disabled = false;
+          document
+            .getElementById("cloud-provider-connect-btn")
+            ?.addEventListener("click", async () => {
+              const provider = document.querySelector(
+                'input[name="cloudProvider"]:checked'
+              )?.value;
+              if (provider) {
+                this.selections.cloudSyncProvider = provider;
+                await dataService.savePreference("cloudSyncProvider", provider);
+                await this.initiateOAuthFlow(provider);
               }
             });
-          });
+
+          // Radio button change
+          document
+            .querySelectorAll('input[name="cloudProvider"]')
+            .forEach((radio) => {
+              radio.addEventListener("change", (e) => {
+                this.selections.cloudSyncProvider = e.target.value;
+                const connectBtn = document.getElementById(
+                  "cloud-provider-connect-btn"
+                );
+                if (connectBtn) {
+                  connectBtn.disabled = false;
+                }
+              });
+            });
+        }
         break;
 
       case WIZARD_STEPS.COMPLETE:

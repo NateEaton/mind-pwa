@@ -19,6 +19,9 @@
 // Detect if we're running on the Vercel demo site
 const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
+// Check if server features are enabled (build-time constant)
+const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+
 // Detect and handle OAuth redirects from our server before any other initialization
 (function detectOAuthRedirect() {
   // A redirect from our server will contain 'provider' and 'access_token' in the query parameters
@@ -523,24 +526,51 @@ async function completeAppInitialization(fromWizard = false) {
     // Initialize import/export manager
     importExportManager.initialize(appManager.getDomElements().importFileInput);
 
-    // Initialize settings manager
-    settingsManager.initialize({
-      CloudSyncManager: CloudSyncManager,
-      closeMenu: closeMenu,
-      updateSyncUIElements: () => appManager.updateSyncUIElements(),
-      setSyncReady: (ready) => appManager.setSyncReady(ready),
-      syncData: syncData,
-      handleSyncComplete: handleSyncComplete,
-      handleSyncError: handleSyncError,
-      stateManager: stateManager,
-      getCloudSyncState: () => appManager.getCloudSync(),
-      setCloudSyncState: (newCloudSync) =>
-        appManager.setCloudSync(newCloudSync),
-      getSyncEnabled: () => appManager.getSyncEnabled(),
-      setSyncEnabled: (enabled) => appManager.setSyncEnabled(enabled),
-      getSyncReady: () => appManager.getSyncReady(),
-      getIsDemoHost: () => isDemoHost,
-    });
+    // Initialize settings manager with conditional cloud sync features
+    if (SERVER_FEATURES_ENABLED) {
+      logger.info(
+        "Server features are enabled. Initializing cloud sync components."
+      );
+      settingsManager.initialize({
+        CloudSyncManager: CloudSyncManager,
+        closeMenu: closeMenu,
+        updateSyncUIElements: () => appManager.updateSyncUIElements(),
+        setSyncReady: (ready) => appManager.setSyncReady(ready),
+        syncData: syncData,
+        handleSyncComplete: handleSyncComplete,
+        handleSyncError: handleSyncError,
+        stateManager: stateManager,
+        getCloudSyncState: () => appManager.getCloudSync(),
+        setCloudSyncState: (newCloudSync) =>
+          appManager.setCloudSync(newCloudSync),
+        getSyncEnabled: () => appManager.getSyncEnabled(),
+        setSyncEnabled: (enabled) => appManager.setSyncEnabled(enabled),
+        getSyncReady: () => appManager.getSyncReady(),
+        getIsDemoHost: () => isDemoHost,
+      });
+    } else {
+      logger.info("Server features are disabled. Running in local-only mode.");
+      settingsManager.initialize({
+        CloudSyncManager: null,
+        closeMenu: closeMenu,
+        updateSyncUIElements: () => appManager.updateSyncUIElements(),
+        setSyncReady: (ready) => appManager.setSyncReady(ready),
+        syncData: () => logger.warn("Sync called in local-only mode."),
+        handleSyncComplete: () =>
+          logger.warn("Sync complete called in local-only mode."),
+        handleSyncError: () =>
+          logger.warn("Sync error called in local-only mode."),
+        stateManager: stateManager,
+        getCloudSyncState: () => null,
+        setCloudSyncState: () =>
+          logger.warn("Set cloud sync state called in local-only mode."),
+        getSyncEnabled: () => false,
+        setSyncEnabled: () =>
+          logger.warn("Set sync enabled called in local-only mode."),
+        getSyncReady: () => false,
+        getIsDemoHost: () => isDemoHost,
+      });
+    }
 
     // Render all UI components after initialization
     uiRenderer.renderEverything();
@@ -572,8 +602,10 @@ async function completeAppInitialization(fromWizard = false) {
     // Setup event listeners
     eventHandlers.setupEventListeners();
 
-    // Setup sync button in menu
-    setupSyncButton();
+    // Setup sync button in menu (only if server features are enabled)
+    if (SERVER_FEATURES_ENABLED) {
+      setupSyncButton();
+    }
 
     // Check if test mode is active and add banner if needed
     if (dataService.isTestModeEnabled()) {
@@ -586,111 +618,119 @@ async function completeAppInitialization(fromWizard = false) {
     // 5. Setup network listeners
     setupNetworkListeners();
 
-    // 6. Initialize cloud sync capabilities
+    // 6. Initialize cloud sync capabilities (only if server features are enabled)
     let syncInitialized = false;
 
-    if (fromWizard) {
-      // If coming from wizard, cloud sync is already set up if the user enabled it
-      appManager.setSyncEnabled(
-        await dataService.getPreference("cloudSyncEnabled", false)
-      );
-
-      if (appManager.getSyncEnabled()) {
-        logger.info(
-          "Cloud sync was enabled during wizard setup, using existing configuration"
+    if (SERVER_FEATURES_ENABLED) {
+      if (fromWizard) {
+        // If coming from wizard, cloud sync is already set up if the user enabled it
+        appManager.setSyncEnabled(
+          await dataService.getPreference("cloudSyncEnabled", false)
         );
 
-        // Get the provider that was set up in the wizard
-        const syncProvider = await dataService.getPreference(
-          "cloudSyncProvider",
-          "gdrive"
-        );
+        if (appManager.getSyncEnabled()) {
+          logger.info(
+            "Cloud sync was enabled during wizard setup, using existing configuration"
+          );
 
-        // Create and initialize cloud sync manager with existing auth
-        appManager.setCloudSync(
-          new CloudSyncManager(
-            dataService,
-            stateManager,
-            uiRenderer,
-            handleSyncComplete,
-            handleSyncError
-          )
-        );
+          // Get the provider that was set up in the wizard
+          const syncProvider = await dataService.getPreference(
+            "cloudSyncProvider",
+            "gdrive"
+          );
 
-        const autoSyncInterval = await dataService.getPreference(
-          "autoSyncInterval",
-          15
-        );
-        const syncWifiOnly = await dataService.getPreference(
-          "syncWifiOnly",
-          false
-        );
-        appManager.getCloudSync().syncWifiOnly = syncWifiOnly;
+          // Create and initialize cloud sync manager with existing auth
+          appManager.setCloudSync(
+            new CloudSyncManager(
+              dataService,
+              stateManager,
+              uiRenderer,
+              handleSyncComplete,
+              handleSyncError
+            )
+          );
 
-        // Initialize provider (should find existing auth from wizard)
-        const initResult = await appManager
-          .getCloudSync()
-          .initialize(syncProvider);
+          const autoSyncInterval = await dataService.getPreference(
+            "autoSyncInterval",
+            15
+          );
+          const syncWifiOnly = await dataService.getPreference(
+            "syncWifiOnly",
+            false
+          );
+          appManager.getCloudSync().syncWifiOnly = syncWifiOnly;
 
-        if (initResult) {
-          appManager.setSyncReady(true);
+          // Initialize provider (should find existing auth from wizard)
+          const initResult = await appManager
+            .getCloudSync()
+            .initialize(syncProvider);
 
-          // Configure auto-sync
-          if (autoSyncInterval > 0) {
-            appManager.getCloudSync().enableAutoSync(autoSyncInterval);
+          if (initResult) {
+            appManager.setSyncReady(true);
+
+            // Configure auto-sync
+            if (autoSyncInterval > 0) {
+              appManager.getCloudSync().enableAutoSync(autoSyncInterval);
+              logger.info(
+                `Auto-sync configured for every ${autoSyncInterval} minutes`
+              );
+            }
+
+            // Trigger immediate sync after setup
+            logger.info("Triggering initial sync after setup completion");
+            await syncData(true, false); // isInitialSync=true, isManualSync=false
+
+            syncInitialized = true;
             logger.info(
-              `Auto-sync configured for every ${autoSyncInterval} minutes`
+              "Cloud sync initialized successfully using wizard configuration"
+            );
+          } else {
+            logger.warn(
+              "Failed to initialize cloud sync with wizard configuration"
             );
           }
-
-          // Trigger immediate sync after setup
-          logger.info("Triggering initial sync after setup completion");
-          await syncData(true, false); // isInitialSync=true, isManualSync=false
-
-          syncInitialized = true;
-          logger.info(
-            "Cloud sync initialized successfully using wizard configuration"
-          );
         } else {
-          logger.warn(
-            "Failed to initialize cloud sync with wizard configuration"
-          );
+          logger.info("Cloud sync was disabled during wizard setup");
         }
       } else {
-        logger.info("Cloud sync was disabled during wizard setup");
+        // Normal app startup - use full initialization
+        syncInitialized = await initializeCloudSync();
       }
     } else {
-      // Normal app startup - use full initialization
-      syncInitialized = await initializeCloudSync();
+      logger.info(
+        "Cloud sync initialization skipped - server features disabled"
+      );
     }
 
-    // Check for settings OAuth return when app is already initialized
-    const pendingSettingsAuth = localStorage.getItem("pendingSettingsAuth");
-    if (pendingSettingsAuth && !fromWizard) {
-      logger.info("Detected settings OAuth return, showing settings dialog");
-      localStorage.removeItem("pendingSettingsAuth");
+    // Check for settings OAuth return when app is already initialized (only if server features enabled)
+    if (SERVER_FEATURES_ENABLED) {
+      const pendingSettingsAuth = localStorage.getItem("pendingSettingsAuth");
+      if (pendingSettingsAuth && !fromWizard) {
+        logger.info("Detected settings OAuth return, showing settings dialog");
+        localStorage.removeItem("pendingSettingsAuth");
 
-      // Show settings dialog after a short delay to ensure app is fully initialized
-      setTimeout(() => {
-        settingsManager.showSettings();
-        uiRenderer.showToast("Authentication successful", "success");
+        // Show settings dialog after a short delay to ensure app is fully initialized
+        setTimeout(() => {
+          settingsManager.showSettings();
+          uiRenderer.showToast("Authentication successful", "success");
 
-        // Set pending initial sync flag so sync will be triggered when dialog closes
-        if (settingsManager.setPendingInitialSync) {
-          settingsManager.setPendingInitialSync(true);
-        }
-      }, 1000);
-    }
+          // Set pending initial sync flag so sync will be triggered when dialog closes
+          if (settingsManager.setPendingInitialSync) {
+            settingsManager.setPendingInitialSync(true);
+          }
+        }, 1000);
+      }
 
-    // 7. Perform initial sync if enabled and initialized
-    // Only for normal startup, not after wizard completion
-    if (
-      !fromWizard &&
-      appManager.getSyncEnabled() &&
-      appManager.getSyncReady()
-    ) {
-      logger.info("Performing initial sync");
-      await syncData();
+      // 7. Perform initial sync if enabled and initialized
+      // Only for normal startup, not after wizard completion
+      if (
+        !fromWizard &&
+        appManager.getSyncEnabled() &&
+        appManager.getSyncReady()
+      ) {
+        logger.info("Performing initial sync");
+        await syncData();
+      }
     }
 
     logger.info("App initialization complete");
