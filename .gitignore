@@ -33,6 +33,7 @@ client_secret*.json
 *.swp
 .history/
 .prettierrc
+mind-pwa.code-workspace
 
 # --- Logs --- Ignore log files
 logs/ 

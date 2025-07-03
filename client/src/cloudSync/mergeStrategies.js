@@ -79,14 +79,18 @@ export class CurrentWeekMergeStrategy {
       (localData.metadata?.dateResetType === "DAILY" ||
         localData.metadata?.dateResetType === "WEEKLY"); // Weekly reset also resets daily
 
+    // Detect weekly reset by checking if dateResetType is WEEKLY and if we have a previous week start date
+    // This is more reliable than checking weeklyResetTimestamp which might not be set correctly
     const weeklyResetPerformed =
-      localWeeklyResetTimestamp > 0 &&
-      localData.metadata?.dateResetType === "WEEKLY";
+      localData.metadata?.dateResetType === "WEEKLY" &&
+      localData.metadata?.previousWeekStartDate;
 
     logger.trace("Reset status:", {
       dailyReset: dailyResetPerformed,
       weeklyReset: weeklyResetPerformed,
       previousWeekStartDate: localData.metadata?.previousWeekStartDate,
+      dateResetType: localData.metadata?.dateResetType,
+      weeklyResetTimestamp: localWeeklyResetTimestamp,
     });
 
     // CRITICAL FIRST CHECK: Special case for fresh installs - prefer remote data
@@ -219,7 +223,8 @@ export class CurrentWeekMergeStrategy {
         localWeeklyResetTimestamp,
         remoteDailyUpdatedAt,
         localWeeklyResetTimestamp,
-        true
+        true,
+        true // weeklyResetPerformed is true in this context
       );
 
       // Merge weekly counts
@@ -267,6 +272,11 @@ export class CurrentWeekMergeStrategy {
       },
     };
 
+    // Determine if a weekly reset has occurred
+    const weeklyResetPerformed =
+      localData.metadata?.dateResetType === "WEEKLY" &&
+      localData.metadata?.previousWeekStartDate;
+
     // Merge daily counts
     this.mergeDailyCounts(
       mergedData,
@@ -275,7 +285,8 @@ export class CurrentWeekMergeStrategy {
       localDailyUpdatedAt,
       remoteDailyUpdatedAt,
       localDailyResetTimestamp,
-      dailyResetPerformed
+      dailyResetPerformed,
+      weeklyResetPerformed
     );
 
     // Merge weekly counts
@@ -297,14 +308,41 @@ export class CurrentWeekMergeStrategy {
     localDailyUpdatedAt,
     remoteDailyUpdatedAt,
     localDailyResetTimestamp,
-    dailyResetPerformed
+    dailyResetPerformed,
+    weeklyResetPerformed = false
   ) {
     // Initialize dailyCounts if needed
     mergedData.dailyCounts = mergedData.dailyCounts || {};
 
+    // If a weekly reset has occurred, we need to filter data to only include the current week
+    const currentWeekStartDate = localData.currentWeekStartDate;
+    const currentWeekEndDate = this.getWeekEndDate(currentWeekStartDate);
+
+    logger.debug("mergeDailyCounts: Weekly reset detection", {
+      weeklyResetPerformed,
+      currentWeekStartDate,
+      currentWeekEndDate,
+      localDailyCountsKeys: Object.keys(localData.dailyCounts || {}),
+      remoteDailyCountsKeys: Object.keys(remoteData.dailyCounts || {}),
+    });
+
+    // Helper function to check if a date is within the current week
+    const isDateInCurrentWeek = (dateStr) => {
+      if (!currentWeekStartDate || !currentWeekEndDate) return true; // Fallback if dates are missing
+      return dateStr >= currentWeekStartDate && dateStr <= currentWeekEndDate;
+    };
+
     // Process each day in remote data
     Object.entries(remoteData.dailyCounts || {}).forEach(
       ([date, remoteDay]) => {
+        // If a weekly reset has occurred, only process dates within the current week
+        if (weeklyResetPerformed && !isDateInCurrentWeek(date)) {
+          logger.debug(
+            `Skipping remote date ${date} - outside current week after weekly reset`
+          );
+          return;
+        }
+
         const localDay = localData.dailyCounts?.[date] || {};
 
         // If we've done a daily reset, only take remote data for the current day
@@ -349,10 +387,46 @@ export class CurrentWeekMergeStrategy {
 
     // Process any days that only exist in local data
     Object.entries(localData.dailyCounts || {}).forEach(([date, localDay]) => {
+      // If a weekly reset has occurred, only preserve local data within the current week
+      if (weeklyResetPerformed && !isDateInCurrentWeek(date)) {
+        logger.debug(
+          `Skipping local date ${date} - outside current week after weekly reset`
+        );
+        return;
+      }
+
       if (!remoteData.dailyCounts?.[date]) {
         mergedData.dailyCounts[date] = { ...localDay };
       }
     });
+
+    // If a weekly reset has occurred, ensure we only have data for the current week
+    if (weeklyResetPerformed) {
+      const filteredDailyCounts = {};
+      Object.entries(mergedData.dailyCounts).forEach(([date, dayData]) => {
+        if (isDateInCurrentWeek(date)) {
+          filteredDailyCounts[date] = dayData;
+        } else {
+          logger.debug(
+            `Removing date ${date} from merged data - outside current week after weekly reset`
+          );
+        }
+      });
+      mergedData.dailyCounts = filteredDailyCounts;
+    }
+  }
+
+  // Helper method to get the end date of a week
+  getWeekEndDate(weekStartDate) {
+    if (!weekStartDate) return null;
+    const startDate = new Date(weekStartDate + "T00:00:00");
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6); // 7 days later (inclusive)
+
+    const year = endDate.getFullYear();
+    const month = String(endDate.getMonth() + 1).padStart(2, "0");
+    const day = String(endDate.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   mergeWeeklyCounts(

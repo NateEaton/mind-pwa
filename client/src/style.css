@@ -1715,7 +1715,7 @@ h3:first-child {
     width: 90%;
     height: 60vh;
     /* Fixed height for consistent dialog size */
-    min-height: 500px;
+    min-height: 550px;
     /* Fallback minimum for very small screens */
     display: flex;
     flex-direction: column;
