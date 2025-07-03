@@ -1713,10 +1713,10 @@ h3:first-child {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     max-width: 480px;
     width: 90%;
-    max-height: 60vh;
-    /* Reasonable height for desktop, responsive for mobile */
-    min-height: 550px;
-    /* Higher minimum to keep consistent size across wizard panels */
+    height: 60vh;
+    /* Fixed height for consistent dialog size */
+    min-height: 500px;
+    /* Fallback minimum for very small screens */
     display: flex;
     flex-direction: column;
     position: relative;
@@ -2188,10 +2188,10 @@ h3:first-child {
 
     /* Setup Wizard Mobile Adjustments */
     .setup-wizard-content {
-        max-height: 80vh;
-        /* Use more height on mobile for better usability */
+        height: 80vh;
+        /* Fixed height for consistent dialog size on mobile */
         min-height: 500px;
-        /* Higher minimum for consistency on mobile */
+        /* Fallback minimum for very small mobile screens */
     }
 
     .wizard-step {
