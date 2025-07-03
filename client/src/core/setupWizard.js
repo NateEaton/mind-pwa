@@ -66,6 +66,9 @@ class SetupWizard {
     // Add modal to document
     document.body.appendChild(this.modalElement);
 
+    // Add keyboard navigation
+    this.setupKeyboardNavigation();
+
     this.initialized = true;
   }
 
@@ -107,6 +110,8 @@ class SetupWizard {
   show() {
     if (this.modalElement) {
       this.modalElement.classList.add("modal-open");
+      // Focus the modal to capture keyboard events
+      this.modalElement.focus();
     }
   }
 
@@ -647,6 +652,146 @@ class SetupWizard {
       logger.info("Setup wizard completed successfully");
     } catch (error) {
       logger.error("Error finishing setup wizard:", error);
+    }
+  }
+
+  setupKeyboardNavigation() {
+    // Add keyboard event listener to the modal
+    this.modalElement.addEventListener("keydown", (event) => {
+      // Only handle keyboard navigation when the modal is open
+      if (!this.modalElement.classList.contains("modal-open")) {
+        return;
+      }
+
+      // Prevent default behavior for navigation keys
+      if (event.key === "Enter" || event.key === "Backspace") {
+        event.preventDefault();
+      }
+
+      // Handle Enter key to advance
+      if (event.key === "Enter") {
+        this.handleNextStep();
+      }
+
+      // Handle Backspace key to go back
+      if (event.key === "Backspace") {
+        this.handlePreviousStep();
+      }
+    });
+
+    // Make the modal focusable for keyboard events
+    this.modalElement.setAttribute("tabindex", "-1");
+  }
+
+  handleNextStep() {
+    switch (this.currentStep) {
+      case WIZARD_STEPS.WELCOME:
+        this.currentStep = WIZARD_STEPS.FIRST_DAY;
+        this.renderCurrentStep();
+        break;
+
+      case WIZARD_STEPS.FIRST_DAY:
+        const selectedDay = document.querySelector(
+          'input[name="firstDay"]:checked'
+        )?.value;
+        if (selectedDay) {
+          this.selections.firstDayOfWeek = selectedDay;
+          dataService.savePreference("weekStartDay", selectedDay).then(() => {
+            this.currentStep = WIZARD_STEPS.APPEARANCE;
+            this.renderCurrentStep();
+          });
+        }
+        break;
+
+      case WIZARD_STEPS.APPEARANCE:
+        const selectedTheme = document.querySelector(
+          'input[name="theme"]:checked'
+        )?.value;
+        if (selectedTheme) {
+          this.selections.theme = selectedTheme;
+          dataService.savePreference("theme", selectedTheme).then(() => {
+            if (SERVER_FEATURES_ENABLED) {
+              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            } else {
+              this.selections.enableCloudSync = false;
+              this.currentStep = WIZARD_STEPS.COMPLETE;
+            }
+            this.renderCurrentStep();
+          });
+        }
+        break;
+
+      case WIZARD_STEPS.CLOUD_SYNC:
+        if (SERVER_FEATURES_ENABLED) {
+          const enableSync =
+            document.querySelector('input[name="cloudSync"]:checked')?.value ===
+            "true";
+          this.selections.enableCloudSync = enableSync;
+          dataService
+            .savePreference("cloudSyncEnabled", enableSync)
+            .then(() => {
+              if (enableSync) {
+                this.currentStep = WIZARD_STEPS.CLOUD_PROVIDER;
+              } else {
+                this.currentStep = WIZARD_STEPS.COMPLETE;
+              }
+              this.renderCurrentStep();
+            });
+        }
+        break;
+
+      case WIZARD_STEPS.CLOUD_PROVIDER:
+        if (SERVER_FEATURES_ENABLED) {
+          const provider = document.querySelector(
+            'input[name="cloudProvider"]:checked'
+          )?.value;
+          if (provider) {
+            this.selections.cloudSyncProvider = provider;
+            dataService
+              .savePreference("cloudSyncProvider", provider)
+              .then(() => {
+                this.initiateOAuthFlow(provider);
+              });
+          }
+        }
+        break;
+
+      case WIZARD_STEPS.COMPLETE:
+        this.finish();
+        break;
+    }
+  }
+
+  handlePreviousStep() {
+    switch (this.currentStep) {
+      case WIZARD_STEPS.FIRST_DAY:
+        this.currentStep = WIZARD_STEPS.WELCOME;
+        this.renderCurrentStep();
+        break;
+
+      case WIZARD_STEPS.APPEARANCE:
+        this.currentStep = WIZARD_STEPS.FIRST_DAY;
+        this.renderCurrentStep();
+        break;
+
+      case WIZARD_STEPS.CLOUD_SYNC:
+        if (SERVER_FEATURES_ENABLED) {
+          this.currentStep = WIZARD_STEPS.APPEARANCE;
+          this.renderCurrentStep();
+        }
+        break;
+
+      case WIZARD_STEPS.CLOUD_PROVIDER:
+        if (SERVER_FEATURES_ENABLED) {
+          this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+          this.renderCurrentStep();
+        }
+        break;
+
+      // No back action for WELCOME and COMPLETE steps
+      case WIZARD_STEPS.WELCOME:
+      case WIZARD_STEPS.COMPLETE:
+        break;
     }
   }
 }
