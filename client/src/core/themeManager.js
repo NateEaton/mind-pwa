@@ -31,30 +31,35 @@ const THEMES = {
 };
 
 // Module state
-let currentTheme = THEMES.LIGHT;
+let currentTheme = THEMES.AUTO; // Default to auto theme
 let systemPrefersDark = false;
 let mediaQuery = null;
+let initialized = false;
 
 /**
  * Initialize the theme manager
  */
 async function initialize() {
+  if (initialized) return;
+  
   try {
+    // Set up system preference detection FIRST
+    setupSystemPreferenceDetection();
+    
     // Load saved theme preference
     const savedTheme = await dataService.getPreference("theme", THEMES.AUTO);
     currentTheme = savedTheme;
 
-    // Set up system preference detection
-    setupSystemPreferenceDetection();
-
     // Apply the theme
     await applyTheme(currentTheme);
 
-    logger.info(`Theme manager initialized with theme: ${currentTheme}`);
+    initialized = true;
+    logger.info(`Theme manager initialized with theme: ${currentTheme}, system prefers dark: ${systemPrefersDark}`);
   } catch (error) {
     logger.error("Error initializing theme manager:", error);
     // Fall back to light theme
     await applyTheme(THEMES.LIGHT);
+    initialized = true;
   }
 }
 
@@ -66,14 +71,21 @@ function setupSystemPreferenceDetection() {
   if (window.matchMedia) {
     mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     systemPrefersDark = mediaQuery.matches;
+    
+    logger.info(`System dark mode preference detected: ${systemPrefersDark}`);
 
     // Listen for changes
     mediaQuery.addEventListener("change", (e) => {
       systemPrefersDark = e.matches;
+      logger.info(`System dark mode preference changed: ${systemPrefersDark}`);
+      
       if (currentTheme === THEMES.AUTO) {
+        logger.info("Auto theme detected, applying theme change");
         applyTheme(THEMES.AUTO);
       }
     });
+  } else {
+    logger.warn("Browser does not support prefers-color-scheme detection");
   }
 }
 
@@ -88,14 +100,19 @@ async function applyTheme(theme) {
     // Handle auto theme
     if (theme === THEMES.AUTO) {
       effectiveTheme = systemPrefersDark ? THEMES.DARK : THEMES.LIGHT;
+      logger.info(`Auto theme resolved: ${effectiveTheme} (system prefers dark: ${systemPrefersDark})`);
     }
 
     // Apply theme to document
-    if (effectiveTheme === THEMES.LIGHT) {
-      document.documentElement.removeAttribute("data-theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", effectiveTheme);
-    }
+    document.documentElement.setAttribute("data-theme", effectiveTheme);
+    
+    // CRITICAL: Set color-scheme property to override system preferences
+    document.documentElement.style.colorScheme = effectiveTheme;
+    
+    // Force CSS recalculation
+    document.documentElement.style.display = 'none';
+    document.documentElement.offsetHeight; // Trigger reflow
+    document.documentElement.style.display = '';
 
     // Update current theme
     currentTheme = theme;
@@ -103,7 +120,12 @@ async function applyTheme(theme) {
     // Save preference
     await dataService.savePreference("theme", theme);
 
-    logger.debug(`Applied theme: ${theme} (effective: ${effectiveTheme})`);
+    logger.info(`Applied theme: ${theme} (effective: ${effectiveTheme})`);
+    
+    // Dispatch theme change event
+    window.dispatchEvent(new CustomEvent('themeApplied', {
+      detail: { theme, effectiveTheme }
+    }));
   } catch (error) {
     logger.error("Error applying theme:", error);
   }
@@ -155,5 +177,6 @@ export default {
   getEffectiveTheme,
   getAvailableThemes,
   getSystemPrefersDark,
+  get initialized() { return initialized; },
   THEMES,
 };

@@ -20,9 +20,13 @@ import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
 import CloudSyncManager from "../cloudSync/cloudSync.js";
+import themeManager from "./themeManager.js";
 
 // Check if PocketBase is enabled at build time
-const POCKETBASE_ENABLED = typeof __POCKETBASE_ENABLED__ !== 'undefined' ? __POCKETBASE_ENABLED__ : false;
+const POCKETBASE_ENABLED =
+  typeof __POCKETBASE_ENABLED__ !== "undefined"
+    ? __POCKETBASE_ENABLED__
+    : false;
 
 const logger = createLogger("setupWizard");
 
@@ -54,6 +58,30 @@ class SetupWizard {
   async initialize() {
     if (this.initialized) return;
 
+    // Apply current theme immediately when wizard starts
+    try {
+      const currentTheme = await dataService.getPreference("theme", "auto");
+
+      // CRITICAL: Initialize theme manager first to ensure system detection works
+      if (!themeManager.initialized) {
+        await themeManager.initialize();
+      }
+
+      await themeManager.applyTheme(currentTheme);
+      this.selections.theme = currentTheme;
+
+      logger.info(
+        `Wizard initialized with theme: ${currentTheme}, system prefers dark: ${themeManager.getSystemPrefersDark()}`
+      );
+
+      // Force immediate theme application for wizard
+      setTimeout(() => {
+        this.forceThemeRefresh();
+      }, 100);
+    } catch (error) {
+      logger.error("Error initializing wizard theme:", error);
+    }
+
     // Create modal container if it doesn't exist
     this.modalElement = document.createElement("div");
     this.modalElement.id = "setup-wizard-modal";
@@ -79,15 +107,15 @@ class SetupWizard {
   async handleWizardAuth(action) {
     const email = document.getElementById("wizard-email")?.value?.trim();
     const password = document.getElementById("wizard-password")?.value;
-    
+
     if (!email || !password) {
       this.showWizardAuthError("Please fill in all fields");
       return;
     }
-    
+
     this.setWizardAuthLoading(true);
     this.clearWizardAuthError();
-    
+
     try {
       // Initialize cloud sync if not already done
       if (!this.cloudSync) {
@@ -100,29 +128,35 @@ class SetupWizard {
         );
         await this.cloudSync.initialize("pocketbase");
       }
-      
+
       let success = false;
       if (action === "signin") {
         success = await this.cloudSync.authenticatePocketbase(email, password);
       } else if (action === "register") {
         // For register, we need a username - use email prefix
-        const username = email.split('@')[0];
-        success = await this.cloudSync.registerPocketbase(username, email, password);
+        const username = email.split("@")[0];
+        success = await this.cloudSync.registerPocketbase(
+          username,
+          email,
+          password
+        );
       }
-      
+
       if (success) {
         this.selections.cloudSyncCredentials = {
           email: email,
-          authenticated: true
+          authenticated: true,
         };
         this.selections.cloudSyncUserInfo = {
           email: email,
           provider: "PocketBase",
-          type: action
+          type: action,
         };
-        
-        this.showWizardAuthSuccess(`Successfully ${action === 'signin' ? 'signed in' : 'registered'}!`);
-        
+
+        this.showWizardAuthSuccess(
+          `Successfully ${action === "signin" ? "signed in" : "registered"}!`
+        );
+
         // Auto-advance to completion step after successful auth
         setTimeout(() => {
           this.currentStep = WIZARD_STEPS.COMPLETE;
@@ -132,50 +166,52 @@ class SetupWizard {
     } catch (error) {
       logger.error(`PocketBase ${action} error:`, error);
       let errorMessage = error.message || `${action} failed. Please try again.`;
-      
+
       // Handle specific error types
       if (error?.data?.data) {
         const fieldErrors = Object.entries(error.data.data);
         if (fieldErrors.length > 0) {
           const [field, details] = fieldErrors[0];
-          errorMessage = `${field.charAt(0).toUpperCase() + field.slice(1)}: ${details.message}`;
+          errorMessage = `${field.charAt(0).toUpperCase() + field.slice(1)}: ${
+            details.message
+          }`;
         }
       }
-      
+
       this.showWizardAuthError(errorMessage);
     } finally {
       this.setWizardAuthLoading(false);
     }
   }
-  
+
   /**
    * Show authentication error in wizard
    */
   showWizardAuthError(message) {
     const statusElement = document.getElementById("wizard-auth-status");
     const messageElement = statusElement?.querySelector(".status-message");
-    
+
     if (statusElement && messageElement) {
       messageElement.textContent = message;
       statusElement.className = "auth-status error";
       statusElement.classList.remove("hidden");
     }
   }
-  
+
   /**
    * Show authentication success in wizard
    */
   showWizardAuthSuccess(message) {
     const statusElement = document.getElementById("wizard-auth-status");
     const messageElement = statusElement?.querySelector(".status-message");
-    
+
     if (statusElement && messageElement) {
       messageElement.textContent = message;
       statusElement.className = "auth-status success";
       statusElement.classList.remove("hidden");
     }
   }
-  
+
   /**
    * Clear authentication error in wizard
    */
@@ -185,18 +221,22 @@ class SetupWizard {
       statusElement.classList.add("hidden");
     }
   }
-  
+
   /**
    * Set loading state for authentication buttons
    */
   setWizardAuthLoading(loading) {
     const signinBtn = document.getElementById("wizard-signin-btn");
     const registerBtn = document.getElementById("wizard-register-btn");
-    
-    [signinBtn, registerBtn].forEach(btn => {
+
+    [signinBtn, registerBtn].forEach((btn) => {
       if (btn) {
         btn.disabled = loading;
-        btn.textContent = loading ? "..." : (btn.id.includes("signin") ? "Sign In" : "Create Account");
+        btn.textContent = loading
+          ? "..."
+          : btn.id.includes("signin")
+          ? "Sign In"
+          : "Create Account";
       }
     });
   }
@@ -428,7 +468,9 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 3 of ${this.selections.enableCloudSync ? '4' : '3'}</div>
+        <div class="wizard-progress">Step 3 of ${
+          this.selections.enableCloudSync ? "4" : "3"
+        }</div>
         <div class="wizard-buttons">
           <button id="cloud-sync-back-btn" class="secondary-btn">Back</button>
           <button id="cloud-sync-next-btn" class="primary-btn">Continue</button>
@@ -439,52 +481,53 @@ class SetupWizard {
 
   renderCloudAuthStep() {
     return `
-      <div class="wizard-header">
-        <h2>Sign In to Cloud Sync</h2>
-      </div>
-      <div class="wizard-content">
-        <div class="wizard-step">
-          <p>Sign in to your account to start syncing your data across devices.</p>
-          
-          <div class="auth-form">
-            <div class="form-group">
-              <label for="wizard-email">Email</label>
-              <input type="email" id="wizard-email" name="email" required autocomplete="username"
-                value="${this.selections.cloudSyncCredentials?.email || ''}">
-            </div>
-            <div class="form-group">
-              <label for="wizard-password">Password</label>
-              <input type="password" id="wizard-password" name="password" required autocomplete="current-password"
-                value="${this.selections.cloudSyncCredentials?.password || ''}">
-            </div>
+    <div class="wizard-header">
+      <h2>Sign In to Cloud Sync</h2>
+    </div>
+    <div class="wizard-content">
+      <div class="wizard-step">
+        <p>Sign in to your account to start syncing your data across devices.</p>
+        
+        <div class="wizard-form">
+          <div class="wizard-auth-form">
+            <label for="wizard-email">Email</label>
+            <input type="email" id="wizard-email" name="email" required autocomplete="username"
+              value="${this.selections.cloudSyncCredentials?.email || ""}">
+            
+            <label for="wizard-password">Password</label>
+            <input type="password" id="wizard-password" name="password" required autocomplete="current-password"
+              value="${this.selections.cloudSyncCredentials?.password || ""}">
+            
             <div class="auth-actions">
-              <button type="button" id="wizard-signin-btn" class="auth-btn primary">Sign In</button>
-            </div>
-            <div class="auth-actions secondary">
+              <button type="button" id="wizard-signin-btn" class="auth-btn">Sign In</button>
               <button type="button" id="wizard-register-btn" class="auth-btn secondary">Create Account</button>
             </div>
-            <div class="auth-status hidden" id="wizard-auth-status">
-              <span class="status-message"></span>
-            </div>
           </div>
           
-          <div class="wizard-note">
-            <p>Don't have an account? Click "Create Account" to register a new account.</p>
+          <div class="auth-status hidden" id="wizard-auth-status">
+            <span class="status-message"></span>
           </div>
         </div>
-      </div>
-      <div class="wizard-footer">
-        <div class="wizard-progress">Step 4 of 4</div>
-        <div class="wizard-buttons">
-          <button id="cloud-auth-back-btn" class="secondary-btn">Back</button>
+        
+        <div class="wizard-note">
+          <p>Don't have an account? Click "Create Account" to register a new account.</p>
         </div>
       </div>
-    `;
+    </div>
+    <div class="wizard-footer">
+      <div class="wizard-progress">Step 4 of 4</div>
+      <div class="wizard-buttons">
+        <button id="cloud-auth-back-btn" class="secondary-btn">Back</button>
+        <div></div>
+      </div>
+    </div>
+  `;
   }
 
   renderCompleteStep() {
     const cloudSyncEnabled = this.selections.enableCloudSync;
-    const cloudSyncAuthenticated = this.selections.cloudSyncCredentials?.authenticated;
+    const cloudSyncAuthenticated =
+      this.selections.cloudSyncCredentials?.authenticated;
     const userInfo = this.selections.cloudSyncUserInfo;
 
     let cloudSyncStatus = "";
@@ -528,49 +571,38 @@ class SetupWizard {
     }
 
     return `
-    <div class="wizard-step" id="complete-step">
-      <div class="step-header">
+      <div class="wizard-header">
         <h2>Setup Complete!</h2>
-        <p>Your MIND Diet Tracker is ready to use.</p>
       </div>
-      
-      <div class="setup-summary">
-        <div class="summary-item">
-          <strong>Week starts on:</strong> ${
-            this.selections.firstDayOfWeek === "Monday" ? "Monday" : "Sunday"
-          }
-        </div>
-        
-        <div class="summary-item">
-          <strong>Theme:</strong> ${this.capitalizeFirst(this.selections.theme)}
-        </div>
-        
-        <div class="summary-item">
-          <strong>Cloud sync:</strong>
-          ${cloudSyncStatus}
+      <div class="wizard-content">
+        <div class="wizard-step">
+          <p>Your MIND Diet Tracker is ready to use.</p>
+          
+          <div class="setup-summary">
+            <div class="summary-item">
+              <strong>Week starts on:</strong> ${
+                this.selections.firstDayOfWeek === "Monday" ? "Monday" : "Sunday"
+              }
+            </div>
+            
+            <div class="summary-item">
+              <strong>Theme:</strong> ${this.capitalizeFirst(this.selections.theme)}
+            </div>
+            
+            <div class="summary-item">
+              <strong>Cloud sync:</strong>
+              ${cloudSyncStatus}
+            </div>
+          </div>
         </div>
       </div>
-
-      ${
-        cloudSyncEnabled && cloudSyncAuthenticated
-          ? `
-        <div class="next-steps">
-          <h3>What happens next?</h3>
-          <ul>
-            <li>Your data will automatically sync across all your devices</li>
-            <li>Changes are saved in real-time</li>
-            <li>You can manage sync settings anytime from the Settings menu</li>
-          </ul>
+      <div class="wizard-footer">
+        <div class="wizard-buttons">
+          <div></div>
+          <button class="primary-btn" id="complete-finish-btn">Start Using App</button>
         </div>
-      `
-          : ""
-      }
-
-      <div class="step-actions">
-        <button class="btn-primary" id="complete-finish-btn">Start Using App</button>
       </div>
-    </div>
-  `;
+    `;
   }
 
   async verifyCloudConnection() {
@@ -620,14 +652,40 @@ class SetupWizard {
             this.renderCurrentStep();
           });
 
+      case WIZARD_STEPS.APPEARANCE:
+        // Add live theme preview when radio buttons change
+        document.querySelectorAll('input[name="theme"]').forEach((radio) => {
+          radio.addEventListener("change", async (e) => {
+            if (e.target.checked) {
+              logger.info("Theme change requested:", e.target.value);
+
+              // Apply theme and wait for completion
+              await themeManager.applyTheme(e.target.value);
+              this.selections.theme = e.target.value;
+
+              // Save immediately for persistence
+              await dataService.savePreference("theme", e.target.value);
+
+              // Force DOM update to ensure theme applies completely
+              setTimeout(() => {
+                this.forceThemeRefresh();
+              }, 100);
+            }
+          });
+        });
+
         document
           .getElementById("appearance-next-btn")
-          ?.addEventListener("click", () => {
+          ?.addEventListener("click", async () => {
             const selectedTheme = document.querySelector(
               'input[name="theme"]:checked'
             )?.value;
             if (selectedTheme) {
               this.selections.theme = selectedTheme;
+              // Apply theme immediately for visual feedback
+              await themeManager.applyTheme(selectedTheme);
+              // Save the preference
+              await dataService.savePreference("theme", selectedTheme);
               if (POCKETBASE_ENABLED) {
                 this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
               } else {
@@ -654,10 +712,13 @@ class SetupWizard {
               document.querySelector('input[name="cloudSync"]:checked')
                 ?.value === "true";
             this.selections.enableCloudSync = enableSync;
-            
+
             if (enableSync) {
               // Save the provider preference
-              await dataService.savePreference("cloudSyncProvider", "pocketbase");
+              await dataService.savePreference(
+                "cloudSyncProvider",
+                "pocketbase"
+              );
               // Move to authentication step
               this.currentStep = WIZARD_STEPS.CLOUD_AUTH;
             } else {
@@ -676,16 +737,19 @@ class SetupWizard {
             this.renderCurrentStep();
           });
 
-        
         // Handle sign in button
-        document.getElementById("wizard-signin-btn")?.addEventListener("click", async () => {
-          await this.handleWizardAuth("signin");
-        });
-        
-        // Handle register button  
-        document.getElementById("wizard-register-btn")?.addEventListener("click", async () => {
-          await this.handleWizardAuth("register");
-        });
+        document
+          .getElementById("wizard-signin-btn")
+          ?.addEventListener("click", async () => {
+            await this.handleWizardAuth("signin");
+          });
+
+        // Handle register button
+        document
+          .getElementById("wizard-register-btn")
+          ?.addEventListener("click", async () => {
+            await this.handleWizardAuth("register");
+          });
         break;
 
       case WIZARD_STEPS.CLOUD_PROVIDER:
@@ -777,12 +841,18 @@ class SetupWizard {
 
   async finish() {
     try {
+      logger.info("Starting wizard finish process", this.selections);
+
       // Save all preferences
       await dataService.savePreference(
         "firstDayOfWeek",
         this.selections.firstDayOfWeek
       );
-      await dataService.savePreference("appearanceTheme", this.selections.theme);
+
+      // Apply final theme before saving to ensure consistency
+      await themeManager.applyTheme(this.selections.theme);
+      await dataService.savePreference("theme", this.selections.theme);
+
       await dataService.savePreference(
         "cloudSyncEnabled",
         this.selections.enableCloudSync
@@ -791,26 +861,40 @@ class SetupWizard {
       if (this.selections.enableCloudSync) {
         await dataService.savePreference(
           "cloudSyncProvider",
-          this.selections.cloudSyncProvider
+          this.selections.cloudSyncProvider || "pocketbase"
         );
       }
 
       // Mark setup as completed
       await dataService.savePreference("initialSetupCompleted", true);
 
-      // Clear wizard state
+      // Clear wizard state completely
       localStorage.removeItem("setupWizardState");
+      localStorage.removeItem("pendingWizardContinuation");
 
-      // Hide wizard
-      this.hide();
+      // Force final theme refresh before hiding
+      this.forceThemeRefresh();
 
-      // Dispatch an event to notify app.js that the wizard is complete.
-      // This will trigger the event listener in app.js to call completeAppInitialization.
-      window.dispatchEvent(
-        new CustomEvent("setupWizardComplete", {
-          detail: { selections: this.selections },
-        })
-      );
+      // Hide wizard with delay to ensure DOM updates complete
+      setTimeout(() => {
+        this.hide();
+
+        // Remove modal element completely to prevent reopening
+        if (this.modalElement && this.modalElement.parentNode) {
+          this.modalElement.parentNode.removeChild(this.modalElement);
+          this.modalElement = null;
+        }
+
+        // Reset wizard state
+        this.initialized = false;
+
+        // Dispatch completion event
+        window.dispatchEvent(
+          new CustomEvent("setupWizardComplete", {
+            detail: { selections: this.selections },
+          })
+        );
+      }, 100);
 
       logger.info("Setup wizard completed successfully", this.selections);
     } catch (error) {
@@ -873,15 +957,32 @@ class SetupWizard {
         )?.value;
         if (selectedTheme) {
           this.selections.theme = selectedTheme;
-          dataService.savePreference("theme", selectedTheme).then(() => {
-            if (POCKETBASE_ENABLED) {
-              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
-            } else {
-              this.selections.enableCloudSync = false;
-              this.currentStep = WIZARD_STEPS.COMPLETE;
-            }
-            this.renderCurrentStep();
-          });
+          // Apply and save theme immediately for visual feedback
+          themeManager
+            .applyTheme(selectedTheme)
+            .then(() => {
+              return dataService.savePreference("theme", selectedTheme);
+            })
+            .then(() => {
+              if (POCKETBASE_ENABLED) {
+                this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+              } else {
+                this.selections.enableCloudSync = false;
+                this.currentStep = WIZARD_STEPS.COMPLETE;
+              }
+              this.renderCurrentStep();
+            })
+            .catch((error) => {
+              logger.error("Error applying theme in wizard:", error);
+              // Continue anyway
+              if (POCKETBASE_ENABLED) {
+                this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+              } else {
+                this.selections.enableCloudSync = false;
+                this.currentStep = WIZARD_STEPS.COMPLETE;
+              }
+              this.renderCurrentStep();
+            });
         }
         break;
 
@@ -894,7 +995,10 @@ class SetupWizard {
           .savePreference("cloudSyncEnabled", enableSync)
           .then(async () => {
             if (enableSync) {
-              await dataService.savePreference("cloudSyncProvider", "pocketbase");
+              await dataService.savePreference(
+                "cloudSyncProvider",
+                "pocketbase"
+              );
               this.currentStep = WIZARD_STEPS.CLOUD_AUTH;
             } else {
               this.currentStep = WIZARD_STEPS.COMPLETE;
@@ -964,6 +1068,44 @@ class SetupWizard {
     `;
       stepContent.insertAdjacentHTML("afterbegin", errorHtml);
     }
+  }
+
+  /**
+   * Force theme refresh by triggering DOM updates
+   */
+  forceThemeRefresh() {
+    // Get the effective theme to ensure proper styling
+    const effectiveTheme = themeManager.getEffectiveTheme();
+
+    // Force document attribute update
+    document.documentElement.setAttribute("data-theme", effectiveTheme);
+    document.documentElement.style.colorScheme = effectiveTheme;
+
+    // Force reflow to ensure CSS changes are applied
+    if (this.modalElement) {
+      this.modalElement.style.display = "none";
+      this.modalElement.offsetHeight; // Trigger reflow
+      this.modalElement.style.display = "flex";
+    }
+
+    // Force body reflow as well
+    document.body.style.display = "none";
+    document.body.offsetHeight; // Trigger reflow
+    document.body.style.display = "";
+
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(
+      new CustomEvent("themeChanged", {
+        detail: {
+          theme: this.selections.theme,
+          effectiveTheme: effectiveTheme,
+        },
+      })
+    );
+
+    logger.info(
+      `Forced theme refresh completed - theme: ${this.selections.theme}, effective: ${effectiveTheme}`
+    );
   }
 
   /**

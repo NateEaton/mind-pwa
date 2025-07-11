@@ -20,7 +20,17 @@
 /* === 1. CSS VARIABLES & BASE SETUP     === */
 /* ========================================= */
 
-:root {
+/* CRITICAL: Override system color scheme to prevent conflicts */
+html {
+    color-scheme: light !important;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark !important;
+}
+
+:root,
+[data-theme="light"] {
     /* Light theme (default) */
     --primary-color: #4CAF50;
     --primary-dark: #388E3C;
@@ -66,12 +76,34 @@
 
     /* Modal z-index layering */
     --z-modal-base: 1000;
-    --z-modal-settings: 1100;  
+    --z-modal-settings: 1100;
     --z-modal-auth: 1200;
+}
+
+/* Light theme - explicit to override system preferences */
+[data-theme="light"] {
+    color-scheme: light !important;
+    --primary-color: #4CAF50 !important;
+    --primary-dark: #388E3C !important;
+    --secondary-color: #8BC34A !important;
+    --secondary-dark: #689F38 !important;
+    --limit-color: #FF9800 !important;
+    --limit-dark: #F57C00 !important;
+    --error-color: #dc3545 !important;
+    --bg-color: #f4f4f4 !important;
+    --text-color: #333 !important;
+    --text-muted: #666 !important;
+    --card-bg: #ffffff !important;
+    --border-color: #ddd !important;
+    --met-goal-color: #d4edda !important;
+    --missed-goal-color: #f8d7da !important;
+    --near-limit-color: #fff3cd !important;
+    --background-alt: #f9f9f9 !important;
 }
 
 /* Dark theme */
 [data-theme="dark"] {
+    color-scheme: dark !important;
     --primary-color: #66BB6A;
     --primary-dark: #4CAF50;
     --secondary-color: #9CCC65;
@@ -1357,28 +1389,28 @@ h3:first-child {
 /* Ensure proper modal stacking order */
 /* Setup Wizard Modal - Base level */
 .setup-wizard-modal {
-  z-index: var(--z-modal-base) !important;
+    z-index: var(--z-modal-base) !important;
 }
 
-/* Settings Modal - Above wizard */  
+/* Settings Modal - Above wizard */
 .settings-modal {
-  z-index: var(--z-modal-settings) !important;
+    z-index: var(--z-modal-settings) !important;
 }
 
 /* PocketBase Auth Modal - Above everything else */
 #pocketbase-auth-modal {
-  z-index: var(--z-modal-auth) !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
+    z-index: var(--z-modal-auth) !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 /* Ensure auth modal content is properly positioned */
 #pocketbase-auth-modal .modal-content {
-  position: relative;
-  z-index: calc(var(--z-modal-auth) + 1);
+    position: relative;
+    z-index: calc(var(--z-modal-auth) + 1);
 }
 
 /* ========================================= */
@@ -1406,6 +1438,596 @@ h3:first-child {
 [data-theme="dark"] .settings-row select option {
     background-color: #444;
     color: #e0e0e0;
+}
+
+/* Dark theme overrides for setup wizard */
+[data-theme="dark"] .radio-group label {
+    background-color: #333;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .radio-group label:hover {
+    background-color: #2d2d2d;
+    border-color: var(--primary-color);
+}
+
+[data-theme="dark"] .wizard-warning {
+    background-color: #2d1810;
+    border-left-color: var(--limit-color);
+}
+
+[data-theme="dark"] .wizard-warning p {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .wizard-warning strong {
+    color: var(--limit-color);
+}
+
+[data-theme="dark"] .sync-status {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .sync-status.success {
+    background-color: #1b2e1b;
+    border-color: #4caf50;
+    color: #a5d6a7;
+}
+
+[data-theme="dark"] .sync-status.warning {
+    background-color: #2e1f0d;
+    border-color: #ff9800;
+    color: #ffcc80;
+}
+
+/* Dark theme overrides for form elements */
+[data-theme="dark"] .form-group label {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .form-group input[type="email"],
+[data-theme="dark"] .form-group input[type="password"],
+[data-theme="dark"] .form-group input[type="text"] {
+    background-color: #444;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+/* Dark theme overrides for menu elements */
+[data-theme="dark"] .main-menu {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .main-menu li button {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .main-menu li button:hover {
+    background-color: var(--background-alt);
+}
+
+[data-theme="dark"] .menu-divider {
+    border-color: var(--border-color);
+}
+
+/* Dark theme overrides for modal elements */
+[data-theme="dark"] .modal-content {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal-header {
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal-body {
+    color: var(--text-color);
+}
+
+/* Dark theme overrides for setup wizard specific elements */
+[data-theme="dark"] .setup-wizard-content {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .wizard-header {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .wizard-header h2 {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .wizard-footer {
+    background-color: var(--card-bg);
+    border-top: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .wizard-progress {
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .wizard-step p {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .wizard-list li {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .wizard-note p {
+    color: var(--text-muted);
+}
+
+/* Dark theme overrides for setup wizard form elements */
+[data-theme="dark"] .wizard-form input[type="email"],
+[data-theme="dark"] .wizard-form input[type="password"] {
+    background-color: #444;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .auth-form input[type="email"],
+[data-theme="dark"] .auth-form input[type="password"] {
+    background-color: #444;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .auth-status {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .auth-status.error {
+    background-color: #4a1a1a;
+    border-color: #ef5350;
+    color: #ffcdd2;
+}
+
+[data-theme="dark"] .auth-status.success {
+    background-color: #1b4332;
+    border-color: #4caf50;
+    color: #a5d6a7;
+}
+
+[data-theme="dark"] .form-group input {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .form-group input:focus {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(102, 187, 106, 0.2);
+}
+
+[data-theme="dark"] .form-group input::placeholder {
+    color: #888;
+}
+
+/* Explicit light theme overrides to ensure complete theme switching */
+[data-theme="light"] .settings-section .section-header {
+    background-color: #f8f8f8;
+    color: #333;
+}
+
+[data-theme="light"] .settings-section .section-content {
+    background-color: white;
+    color: #333;
+}
+
+[data-theme="light"] .settings-row select,
+[data-theme="light"] .settings-row input[type="text"] {
+    background-color: white;
+    color: #333;
+    border-color: #ddd;
+}
+
+[data-theme="light"] .settings-row select option {
+    background-color: white;
+    color: #333;
+}
+
+[data-theme="light"] .radio-group label {
+    background-color: #f9f9f9;
+    border-color: #ddd;
+    color: #333;
+}
+
+[data-theme="light"] .radio-group label:hover {
+    background-color: #f4f4f4;
+    border-color: var(--primary-color);
+}
+
+[data-theme="light"] .wizard-warning {
+    background-color: var(--near-limit-color);
+    border-left-color: var(--limit-color);
+}
+
+[data-theme="light"] .wizard-warning p {
+    color: #333;
+}
+
+[data-theme="light"] .wizard-warning strong {
+    color: var(--limit-dark);
+}
+
+[data-theme="light"] .sync-status {
+    background-color: #f9f9f9;
+    color: #333;
+    border-color: #ddd;
+}
+
+[data-theme="light"] .sync-status.success {
+    background-color: #e6ffe6;
+    border-color: #00cc00;
+    color: #006600;
+}
+
+[data-theme="light"] .sync-status.warning {
+    background-color: #fff3e6;
+    border-color: #ffcc80;
+    color: #804000;
+}
+
+[data-theme="light"] .form-group label {
+    color: #333;
+}
+
+[data-theme="light"] .form-group input {
+    background-color: white;
+    color: #333;
+    border-color: #ddd;
+}
+
+[data-theme="light"] .form-group input:focus {
+    background-color: white;
+    color: #333;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+[data-theme="light"] .form-group input::placeholder {
+    color: #999;
+}
+
+/* Additional dark theme coverage for setup wizard */
+[data-theme="dark"] .wizard-step {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .wizard-form {
+    background-color: transparent;
+}
+
+[data-theme="dark"] .wizard-note {
+    background-color: transparent;
+    border-left: 3px solid var(--border-color);
+    padding-left: var(--spacing-md);
+}
+
+[data-theme="dark"] .wizard-note p {
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .step-header h2 {
+    color: var(--text-color);
+    border-bottom-color: var(--border-color);
+}
+
+[data-theme="dark"] .summary-item {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .summary-item strong {
+    color: var(--primary-color);
+}
+
+[data-theme="dark"] .setup-summary {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .next-steps {
+    background-color: var(--background-alt);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .next-steps h3 {
+    color: var(--text-color);
+    border-bottom: none;
+}
+
+[data-theme="dark"] .next-steps ul {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .step-actions {
+    background-color: transparent;
+}
+
+/* Dark theme overrides for wizard auth and completion */
+[data-theme="dark"] .wizard-step .form-group input[type="email"],
+[data-theme="dark"] .wizard-step .form-group input[type="password"] {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .wizard-step .form-group input[type="email"]:focus,
+[data-theme="dark"] .wizard-step .form-group input[type="password"]:focus {
+    background-color: #2d2d2d;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(102, 187, 106, 0.2);
+}
+
+[data-theme="dark"] .wizard-step .auth-btn.secondary {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .wizard-step .auth-btn.secondary:hover:not(:disabled) {
+    background-color: #2d2d2d;
+    border-color: var(--primary-color);
+}
+
+[data-theme="dark"] .wizard-step .auth-status {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .wizard-step .auth-status.error {
+    background-color: #4a1a1a;
+    border-color: #ef5350;
+    color: #ffcdd2;
+}
+
+[data-theme="dark"] .wizard-step .auth-status.success {
+    background-color: #1b4332;
+    border-color: #4caf50;
+    color: #a5d6a7;
+}
+
+[data-theme="dark"] .wizard-step .setup-success {
+    background-color: #1b4332;
+    border-color: #4caf50;
+    color: #a5d6a7;
+}
+
+[data-theme="dark"] .wizard-step .setup-info {
+    background-color: #333;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .wizard-step .next-steps {
+    background-color: #333;
+    border-color: #555;
+}
+
+[data-theme="dark"] .wizard-step .next-steps h3 {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .wizard-step .next-steps ul {
+    color: #e0e0e0;
+}
+
+[data-theme="dark"] .wizard-step .auth-actions.secondary .auth-btn.secondary {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .wizard-step .auth-actions.secondary .auth-btn.secondary:hover:not(:disabled) {
+    background-color: #2d2d2d;
+    border-color: var(--primary-color);
+}
+
+/* Dark theme for header elements */
+[data-theme="dark"] header {
+    background-color: var(--primary-color);
+}
+
+/* CRITICAL: Fix text visibility in dark mode wizard */
+[data-theme="dark"] .wizard-header h2 {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .wizard-step p {
+    color: #e0e0e0 !important;
+}
+
+[data-theme="dark"] .wizard-step {
+    color: #e0e0e0 !important;
+}
+
+[data-theme="dark"] .wizard-list li {
+    color: #e0e0e0 !important;
+}
+
+[data-theme="dark"] .wizard-note p {
+    color: #b0b0b0 !important;
+}
+
+[data-theme="dark"] .wizard-warning p {
+    color: #e0e0e0 !important;
+}
+
+[data-theme="dark"] .radio-group label {
+    color: #e0e0e0 !important;
+}
+
+/* ADDITIONAL DARK MODE COVERAGE */
+
+/* Main app areas */
+[data-theme="dark"] main {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .view {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* Tab bar and navigation */
+[data-theme="dark"] .tab-bar-container {
+    background-color: var(--secondary-color);
+}
+
+[data-theme="dark"] .tab-bar .tab-item {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .tab-bar .tab-item.active {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Food tracking elements */
+[data-theme="dark"] .food-group-item {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .food-group-item .info {
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .food-group-item .name {
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .food-group-item .target {
+    color: var(--text-muted) !important;
+}
+
+/* Date selector */
+[data-theme="dark"] .day-selector-bar {
+    background-color: var(--card-bg) !important;
+}
+
+[data-theme="dark"] .day-selector-btn {
+    background-color: var(--background-alt) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .day-selector-btn.active {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+}
+
+/* Weekly badge */
+[data-theme="dark"] .weekly-badge {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+}
+
+/* Menu dropdown */
+[data-theme="dark"] .menu-dropdown {
+    background-color: var(--card-bg) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .menu-dropdown .menu-item {
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .menu-dropdown .menu-item:hover {
+    background-color: var(--background-alt) !important;
+}
+
+/* Dark theme for small-btn secondary */
+[data-theme="dark"] .small-btn.secondary {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .small-btn.secondary:hover:not(:disabled) {
+    background-color: #2d2d2d;
+    border-color: var(--primary-color);
+}
+
+/* CRITICAL: Light mode overrides to prevent system dark mode interference */
+[data-theme="light"] .wizard-header h2 {
+    color: #333 !important;
+}
+
+[data-theme="light"] .wizard-step p {
+    color: #333 !important;
+}
+
+[data-theme="light"] .wizard-step {
+    color: #333 !important;
+}
+
+[data-theme="light"] .wizard-list li {
+    color: #333 !important;
+}
+
+[data-theme="light"] .wizard-note p {
+    color: #666 !important;
+}
+
+[data-theme="light"] .wizard-warning p {
+    color: #333 !important;
+}
+
+[data-theme="light"] .radio-group label {
+    color: #333 !important;
+    background-color: #f9f9f9 !important;
+}
+
+[data-theme="light"] main {
+    background-color: #f4f4f4 !important;
+    color: #333 !important;
+}
+
+[data-theme="light"] .view {
+    background-color: #f4f4f4 !important;
+    color: #333 !important;
+}
+
+[data-theme="light"] .food-group-item {
+    background-color: #ffffff !important;
+    color: #333 !important;
+}
+
+[data-theme="light"] .food-group-item .info {
+    color: #333 !important;
+}
+
+[data-theme="light"] .food-group-item .name {
+    color: #333 !important;
+}
+
+[data-theme="light"] .food-group-item .target {
+    color: #666 !important;
+}
+
+[data-theme="dark"] .tab-bar .tab-item:hover {
+    background-color: var(--secondary-dark);
+}
+
+[data-theme="dark"] .tab-bar .tab-item.active {
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 .settings-container {
@@ -1736,6 +2358,8 @@ h3:first-child {
     align-items: center;
     z-index: 9999;
     backdrop-filter: blur(3px);
+    /* Force theme inheritance */
+    color-scheme: inherit !important;
 }
 
 .setup-wizard-modal.modal-open {
@@ -1758,6 +2382,8 @@ h3:first-child {
     position: relative;
     animation: modalSlideIn 0.3s ease-out;
     overflow: hidden;
+    /* Force theme inheritance */
+    color-scheme: inherit !important;
 }
 
 @keyframes modalSlideIn {
@@ -1883,6 +2509,24 @@ h3:first-child {
 
 .radio-group label {
     padding: 0.65rem 1rem;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--text-color);
+    background-color: var(--background-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.radio-group label:hover {
+    background-color: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.radio-group input[type="radio"] {
+    margin-right: 0.75rem;
+    accent-color: var(--primary-color);
 }
 
 .wizard-list {
@@ -1915,7 +2559,9 @@ h3:first-child {
     margin-top: 1rem;
     padding: 1rem;
     border-radius: 0.5rem;
-    background-color: #f5f5f5;
+    background-color: var(--background-alt);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
 }
 
 .sync-status.success {
@@ -1961,11 +2607,338 @@ h3:first-child {
     cursor: not-allowed;
 }
 
-.sync-actions-row .small-btn {
-    /* Keep any specific overrides for sync actions if needed */
+.small-btn.secondary {
+    background-color: var(--background-alt);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
 }
 
+.small-btn.secondary:hover:not(:disabled) {
+    background-color: var(--bg-color);
+    border-color: var(--primary-color);
+}
 
+/* ========================================= */
+/* === WIZARD AUTH FORM STYLES            === */
+/* ========================================= */
+
+/* Allow wizard to use standard form styling like settings */
+.wizard-step .auth-form {
+    margin: 0;
+    padding: 0;
+}
+
+.wizard-step .auth-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.wizard-step .auth-status {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--background-alt);
+    color: var(--text-color);
+}
+
+.wizard-step .auth-status.hidden {
+    display: none;
+}
+
+.wizard-step .auth-status.error {
+    background-color: var(--missed-goal-color);
+    border-color: var(--error-color);
+    color: var(--error-color);
+}
+
+.wizard-step .auth-status.success {
+    background-color: var(--met-goal-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.wizard-step .status-message {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* Wizard note styling for auth step */
+.wizard-step .wizard-note {
+    background-color: transparent;
+    border-left: 3px solid var(--border-color);
+    padding-left: 1rem;
+    margin-top: 1rem;
+}
+
+.wizard-step .wizard-note p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-style: italic;
+    margin: 0;
+}
+
+/* ========================================= */
+/* === WIZARD COMPLETION STYLES           === */
+/* ========================================= */
+
+.wizard-step .step-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.wizard-step .step-header h2 {
+    color: var(--primary-color);
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    border-bottom: none;
+}
+
+.wizard-step .step-header p {
+    color: var(--text-color);
+    margin: 0;
+    font-size: 1rem;
+}
+
+.wizard-step .setup-summary {
+    background-color: var(--background-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.wizard-step .summary-item {
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    color: var(--text-color);
+}
+
+.wizard-step .summary-item:last-child {
+    margin-bottom: 0;
+}
+
+.wizard-step .summary-item strong {
+    color: var(--text-color);
+    margin-right: 0.5rem;
+}
+
+.wizard-step .setup-success,
+.wizard-step .setup-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+}
+
+.wizard-step .setup-success {
+    background-color: var(--met-goal-color);
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.wizard-step .setup-info {
+    background-color: var(--background-alt);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+.wizard-step .success-icon,
+.wizard-step .info-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.wizard-step .success-details,
+.wizard-step .info-details {
+    flex: 1;
+}
+
+.wizard-step .success-details strong,
+.wizard-step .info-details strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+}
+
+.wizard-step .success-details small,
+.wizard-step .info-details small {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.wizard-step .next-steps {
+    background-color: var(--background-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.wizard-step .next-steps h3 {
+    margin: 0 0 0.75rem 0;
+    color: var(--text-color);
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 0.25rem;
+}
+
+.wizard-step .next-steps ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: var(--text-color);
+    line-height: 1.5;
+}
+
+.wizard-step .next-steps li {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.wizard-step .step-actions {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+.wizard-step .step-actions .btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+    border: 1px solid var(--primary-color);
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    min-height: 44px;
+}
+
+.wizard-step .step-actions .btn-primary:hover {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+
+/* ========================================= */
+/* === SETTINGS DIALOG FORM FIELD FIXES   === */
+/* ========================================= */
+
+/* Override auth form styling in settings context */
+.settings-section .section-content input[type="email"],
+.settings-section .section-content input[type="password"] {
+    width: 100%;
+    padding: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    background-color: white;
+    color: var(--text-color);
+    font-size: var(--font-md);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+    margin-bottom: var(--spacing-sm);
+}
+
+.settings-section .section-content input[type="email"]:focus,
+.settings-section .section-content input[type="password"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.settings-section .section-content input[type="email"]:invalid,
+.settings-section .section-content input[type="password"]:invalid {
+    border-color: var(--border-color); /* Don't show red borders by default */
+}
+
+/* Style the auth buttons in settings to match other action buttons */
+.settings-section .section-content .action-btn {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: var(--font-sm);
+    transition: background-color 0.2s ease;
+    margin-right: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    min-width: 100px;
+}
+
+.settings-section .section-content .action-btn:hover:not(:disabled) {
+    background-color: var(--secondary-dark);
+}
+
+.settings-section .section-content .action-btn:disabled {
+    background-color: #ccc;
+    color: #888;
+    cursor: not-allowed;
+}
+
+/* Ensure consistent spacing for settings form elements */
+.settings-section .settings-row {
+    margin-bottom: var(--spacing-md);
+}
+
+.settings-section .settings-row:last-child {
+    margin-bottom: 0;
+}
+
+/* Status text styling */
+.settings-section .status-value {
+    font-weight: bold;
+    font-size: var(--font-sm);
+}
+
+.settings-section .status-value.connected {
+    color: var(--primary-color);
+}
+
+.settings-section .status-value.disconnected {
+    color: var(--error-color);
+}
+
+/* Dark theme overrides for settings form fields */
+[data-theme="dark"] .settings-section .section-content input[type="email"],
+[data-theme="dark"] .settings-section .section-content input[type="password"] {
+    background-color: #444;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+[data-theme="dark"] .settings-section .section-content input[type="email"]:focus,
+[data-theme="dark"] .settings-section .section-content input[type="password"]:focus {
+    background-color: #444;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(102, 187, 106, 0.2);
+}
+
+[data-theme="dark"] .settings-section .status-value.connected {
+    color: var(--primary-color);
+}
+
+[data-theme="dark"] .settings-section .status-value.disconnected {
+    color: var(--error-color);
+}
+
+/* Specific overrides to ensure settings form fields don't inherit auth modal styles */
+.modal-content .settings-section input[type="email"],
+.modal-content .settings-section input[type="password"] {
+    border: 1px solid var(--border-color) !important;
+    background-color: white !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .modal-content .settings-section input[type="email"],
+[data-theme="dark"] .modal-content .settings-section input[type="password"] {
+    background-color: #444 !important;
+    color: #e0e0e0 !important;
+    border-color: #555 !important;
+}
 
 /* ========================================= */
 /* === 13. RESPONSIVE DESIGN              === */
@@ -2004,10 +2977,6 @@ h3:first-child {
     .tab-bar .tab-label {
         font-size: calc(var(--font-md));
         line-height: 1.1;
-    }
-
-    .main-menu {
-        /* top: 100px; JS handles positioning, this can be a fallback or removed */
     }
 
     .modal-content {
@@ -2292,12 +3261,6 @@ h3:first-child {
     .history-nav .icon-btn {
         /* prev, next, edit buttons */
         order: 2;
-    }
-
-    .history-nav .icon-btn.text-btn {
-        /* Optional: Make edit button full width when wrapped if desired */
-        /* width: 100%; */
-        /* margin-top: var(--spacing-xs); */
     }
 
     /* Setup Wizard Small Screen Adjustments */
