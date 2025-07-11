@@ -488,20 +488,21 @@ class SetupWizard {
       <div class="wizard-step">
         <p>Sign in to your account to start syncing your data across devices.</p>
         
-        <div class="wizard-form">
-          <div class="wizard-auth-form">
+        <div class="auth-form">
+          <div class="form-group">
             <label for="wizard-email">Email</label>
             <input type="email" id="wizard-email" name="email" required autocomplete="username"
               value="${this.selections.cloudSyncCredentials?.email || ""}">
-            
+          </div>
+          <div class="form-group">
             <label for="wizard-password">Password</label>
             <input type="password" id="wizard-password" name="password" required autocomplete="current-password"
               value="${this.selections.cloudSyncCredentials?.password || ""}">
-            
-            <div class="auth-actions">
-              <button type="button" id="wizard-signin-btn" class="auth-btn">Sign In</button>
-              <button type="button" id="wizard-register-btn" class="auth-btn secondary">Create Account</button>
-            </div>
+          </div>
+          
+          <!-- Keep Create Account in content area -->
+          <div class="auth-actions secondary">
+            <button type="button" id="wizard-register-btn" class="auth-btn secondary">Create Account</button>
           </div>
           
           <div class="auth-status hidden" id="wizard-auth-status">
@@ -518,7 +519,7 @@ class SetupWizard {
       <div class="wizard-progress">Step 4 of 4</div>
       <div class="wizard-buttons">
         <button id="cloud-auth-back-btn" class="secondary-btn">Back</button>
-        <div></div>
+        <button type="button" id="wizard-signin-btn" class="primary-btn">Sign In</button>
       </div>
     </div>
   `;
@@ -581,12 +582,16 @@ class SetupWizard {
           <div class="setup-summary">
             <div class="summary-item">
               <strong>Week starts on:</strong> ${
-                this.selections.firstDayOfWeek === "Monday" ? "Monday" : "Sunday"
+                this.selections.firstDayOfWeek === "Monday"
+                  ? "Monday"
+                  : "Sunday"
               }
             </div>
             
             <div class="summary-item">
-              <strong>Theme:</strong> ${this.capitalizeFirst(this.selections.theme)}
+              <strong>Theme:</strong> ${this.capitalizeFirst(
+                this.selections.theme
+              )}
             </div>
             
             <div class="summary-item">
