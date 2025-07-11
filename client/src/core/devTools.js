@@ -167,6 +167,19 @@ class DevTools {
       });
     }
 
+    // Admin UI button event listener
+    const adminUIBtn = document.getElementById("admin-ui-btn");
+    if (adminUIBtn) {
+      adminUIBtn.addEventListener("click", () => {
+        // Open PocketBase admin UI in a new tab
+        // Assume admin UI is on same domain with /_/ path
+        const adminURL = `${window.location.origin}/_/`;
+        window.open(adminURL, '_blank');
+        
+        this.uiRenderer.showToast("Opening Admin UI in new tab", "info");
+      });
+    }
+
     const viewFilesBtn = document.getElementById("view-cloud-files-btn");
     if (viewFilesBtn) {
       viewFilesBtn.addEventListener("click", async () => {

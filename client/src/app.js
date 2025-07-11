@@ -506,10 +506,6 @@ async function completeAppInitialization(fromWizard = false) {
     // Setup event listeners
     eventHandlers.setupEventListeners();
 
-    // Setup sync button in menu (only if PocketBase is enabled)
-    if (POCKETBASE_ENABLED) {
-      setupSyncButton();
-    }
 
     // Check if test mode is active and add banner if needed
     if (dataService.isTestModeEnabled()) {
@@ -806,52 +802,6 @@ async function initializeCloudSync() {
   }
 }
 
-function setupSyncButton() {
-  // Create the sync button if it doesn't exist
-  let syncBtn = document.getElementById("sync-btn");
-
-  if (!syncBtn) {
-    syncBtn = document.createElement("button");
-    syncBtn.id = "sync-btn";
-    syncBtn.innerHTML = `<i class="mdi mdi-cloud-sync-outline"></i> Sync Now`;
-
-    syncBtn.addEventListener("click", () => {
-      logger.info("Sync button clicked");
-      closeMenu();
-      syncData(false, true); // Not initial sync, but is manual sync
-    });
-
-    // Add li element to menu
-    const syncLi = document.createElement("li");
-    syncLi.appendChild(syncBtn);
-
-    // Find the Settings button's parent li element
-    const importLi = document
-      .getElementById("import-btn-trigger")
-      .closest("li");
-
-    // Insert sync button after the Settings button
-    if (importLi && importLi.nextSibling) {
-      importLi.parentNode.insertBefore(syncLi, importLi.nextSibling);
-    } else {
-      // Fallback: just append to the list
-      const menuList = document.querySelector("#main-menu ul");
-      if (menuList) {
-        menuList.appendChild(syncLi);
-      }
-    }
-  } else {
-    // If button exists, update its click handler
-    syncBtn.addEventListener("click", () => {
-      logger.info("Sync button clicked");
-      closeMenu();
-      syncData(false, true); // Not initial sync, but is manual sync
-    });
-  }
-
-  // Initial button state
-  appManager.updateSyncUIElements();
-}
 
 /**
  * Close the main menu

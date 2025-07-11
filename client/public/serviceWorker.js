@@ -16,34 +16,12 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-const CACHE_NAME = "mind-diet-tracker-v1";
-const urlsToCache = [
+const CACHE_NAME = "mind-diet-tracker-v2";
+
+// Core files that should be cached - using simplified list for bundled app
+const coreFilesToCache = [
   "/",
   "/index.html",
-  "/style.css",
-  "/app.js",
-  "/core/logger.js",
-  "/utils/appUtils.js",
-  "/utils/dateUtils.js",
-  "/core/dataService.js",
-  "/serviceWorker.js",
-  "/core/stateManager.js",
-  "/ui/renderer.js",
-  "/core/eventHandlers.js",
-  "/core/devTools.js",
-  "/core/historyModalManager.js",
-  "/core/importExportManager.js",
-  "/core/settingsManager.js",
-  "/core/setupWizard.js",
-  "/cloudSync/cloudSync.js",
-  "/cloudProviders/googleDriveProvider.js",
-  "/cloudProviders/dropboxProvider.js",
-  "/cloudSync/changeDetectionService.js",
-  "/cloudSync/fileMetadataManager.js",
-  "/cloudSync/mergeCoordinator.js",
-  "/cloudSync/mergeStrategies.js",
-  "/cloudSync/syncOperationHandler.js",
-  "/cloudSync/syncUtils.js",
   "/manifest.json",
   "/icons/icon-192x192.png",
   "/icons/icon-512x512.png",
@@ -51,13 +29,68 @@ const urlsToCache = [
   "/icons/maskable-icon-512x512.png",
 ];
 
+// Dynamic asset discovery for Vite bundled files
+async function getAssetUrls() {
+  try {
+    // Fetch the main HTML to discover asset URLs
+    const response = await fetch('/index.html');
+    const html = await response.text();
+    
+    const assetUrls = [];
+    
+    // Extract JS bundle URLs
+    const jsMatches = html.matchAll(/<script[^>]*src="([^"]*)"[^>]*>/g);
+    for (const match of jsMatches) {
+      assetUrls.push(match[1]);
+    }
+    
+    // Extract CSS bundle URLs  
+    const cssMatches = html.matchAll(/<link[^>]*href="([^"]*\.css)"[^>]*>/g);
+    for (const match of cssMatches) {
+      assetUrls.push(match[1]);
+    }
+    
+    return [...coreFilesToCache, ...assetUrls];
+  } catch (error) {
+    console.error('Service Worker: Failed to discover assets, using core files only:', error);
+    return coreFilesToCache;
+  }
+}
+
 // Install event: Cache essential assets
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log("Opened cache");
-      return cache.addAll(urlsToCache);
-    })
+    (async () => {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        const urlsToCache = await getAssetUrls();
+        
+        // Cache files individually to handle failures gracefully
+        let failedCount = 0;
+        const cachePromises = urlsToCache.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (response.ok) {
+              await cache.put(url, response);
+            } else {
+              failedCount++;
+              console.warn(`Failed to cache ${url}: ${response.status}`);
+            }
+          } catch (error) {
+            failedCount++;
+            console.warn(`Failed to cache ${url}:`, error);
+          }
+        });
+        
+        await Promise.allSettled(cachePromises);
+        
+        if (failedCount > 0) {
+          console.warn(`Service Worker: ${failedCount} files failed to cache`);
+        }
+      } catch (error) {
+        console.error("Service Worker: Cache installation failed:", error);
+      }
+    })()
   );
   self.skipWaiting(); // Activate worker immediately
 });
@@ -71,9 +104,10 @@ self.addEventListener("activate", (event) => {
         return Promise.all(
           cacheNames
             .filter((cacheName) => {
-              // Delete caches that are not the current one
+              // Delete old caches that are not the current one
               return (
-                cacheName.startsWith("mind-diet-tracker-") &&
+                (cacheName.startsWith("mind-diet-tracker-") || 
+                 cacheName.startsWith("mind-diet-tracker-v")) &&
                 cacheName !== CACHE_NAME
               );
             })
@@ -116,20 +150,21 @@ self.addEventListener("fetch", (event) => {
             return networkResponse;
           }
 
-          // IMPORTANT: Clone the response. A response is a stream
-          // and because we want the browser to consume the response
-          // as well as the cache consuming the response, we need
-          // to clone it so we have two streams.
+          // Clone and cache the response silently
           const responseToCache = networkResponse.clone();
-
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+            cache.put(event.request, responseToCache).catch(() => {
+              // Silently fail cache writes - not critical
+            });
           });
 
           return networkResponse;
         })
         .catch((error) => {
-          console.error("Fetching failed:", error);
+          // Only log fetch errors for essential resources
+          if (event.request.url.includes('.js') || event.request.url.includes('.css') || event.request.url === self.registration.scope) {
+            console.error("Service Worker: Failed to fetch essential resource:", event.request.url, error);
+          }
         });
     })
   );

@@ -19,7 +19,6 @@
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
-import { PocketbaseAuthModal } from "../auth/pocketbaseAuthModal.js";
 import CloudSyncManager from "../cloudSync/cloudSync.js";
 
 // Check if PocketBase is enabled at build time
@@ -33,7 +32,7 @@ const WIZARD_STEPS = {
   FIRST_DAY: "first_day",
   APPEARANCE: "appearance",
   CLOUD_SYNC: "cloud_sync",
-  CLOUD_PROVIDER: "cloud_provider",
+  CLOUD_AUTH: "cloud_auth",
   COMPLETE: "complete",
 };
 
@@ -44,7 +43,7 @@ class SetupWizard {
       firstDayOfWeek: "Sunday", // Default value
       theme: "auto", // Default to auto theme
       enableCloudSync: false, // Default to false
-      cloudSyncProvider: null, // New field for provider selection
+      cloudSyncCredentials: null, // Store email/password for PocketBase
     };
     this.modalElement = null;
     this.contentElement = null;
@@ -74,72 +73,132 @@ class SetupWizard {
     this.initialized = true;
   }
 
-  async initiatePocketbaseAuth() {
-    // Store wizard state so we can resume after authentication
-    localStorage.setItem(
-      "setupWizardState",
-      JSON.stringify({
-        isActive: true,
-        selections: this.selections,
-      })
-    );
-
-    // Initialize cloud sync with PocketBase provider
-    const cloudSync = new CloudSyncManager(
-      dataService,
-      stateManager,
-      null, // uiRenderer not needed for basic auth
-      () => {}, // onSyncComplete
-      (error) => logger.error("Sync error:", error) // onSyncError
-    );
-
+  /**
+   * Handle authentication in the wizard
+   */
+  async handleWizardAuth(action) {
+    const email = document.getElementById("wizard-email")?.value?.trim();
+    const password = document.getElementById("wizard-password")?.value;
+    
+    if (!email || !password) {
+      this.showWizardAuthError("Please fill in all fields");
+      return;
+    }
+    
+    this.setWizardAuthLoading(true);
+    this.clearWizardAuthError();
+    
     try {
-      const initResult = await cloudSync.initialize("pocketbase");
-
-      if (!initResult) {
-        this.showError("Failed to initialize PocketBase connection");
-        return;
+      // Initialize cloud sync if not already done
+      if (!this.cloudSync) {
+        this.cloudSync = new CloudSyncManager(
+          dataService,
+          stateManager,
+          null, // uiRenderer not needed for basic auth
+          () => {}, // onSyncComplete
+          (error) => logger.error("Sync error:", error) // onSyncError
+        );
+        await this.cloudSync.initialize("pocketbase");
       }
-
-      // Show PocketBase authentication modal
-      const authModal = new PocketbaseAuthModal(
-        cloudSync,
-        async (authResult) => {
-          // Success callback
-          logger.info(
-            "PocketBase authentication successful in wizard:",
-            authResult
-          );
-
-          // Save authentication state
-          this.selections.cloudSyncAuthenticated = true;
-          this.selections.cloudSyncUserInfo = {
-            email: authResult.email,
-            provider: "PocketBase",
-            type: authResult.type,
-          };
-
-          // Store cloud sync instance for the rest of the app
-          if (typeof setCloudSyncState === "function") {
-            setCloudSyncState(cloudSync);
-          }
-
-          // Continue to completion step
+      
+      let success = false;
+      if (action === "signin") {
+        success = await this.cloudSync.authenticatePocketbase(email, password);
+      } else if (action === "register") {
+        // For register, we need a username - use email prefix
+        const username = email.split('@')[0];
+        success = await this.cloudSync.registerPocketbase(username, email, password);
+      }
+      
+      if (success) {
+        this.selections.cloudSyncCredentials = {
+          email: email,
+          authenticated: true
+        };
+        this.selections.cloudSyncUserInfo = {
+          email: email,
+          provider: "PocketBase",
+          type: action
+        };
+        
+        this.showWizardAuthSuccess(`Successfully ${action === 'signin' ? 'signed in' : 'registered'}!`);
+        
+        // Auto-advance to completion step after successful auth
+        setTimeout(() => {
           this.currentStep = WIZARD_STEPS.COMPLETE;
           this.renderCurrentStep();
-        },
-        () => {
-          // Cancel callback
-          logger.info("PocketBase authentication cancelled in wizard");
-          // Stay on current step, user can try again
-        }
-      );
-
-      authModal.show("signin");
+        }, 1500);
+      }
     } catch (error) {
-      logger.error("Failed to initialize PocketBase in wizard:", error);
-      this.showError("Failed to connect to PocketBase: " + error.message);
+      logger.error(`PocketBase ${action} error:`, error);
+      let errorMessage = error.message || `${action} failed. Please try again.`;
+      
+      // Handle specific error types
+      if (error?.data?.data) {
+        const fieldErrors = Object.entries(error.data.data);
+        if (fieldErrors.length > 0) {
+          const [field, details] = fieldErrors[0];
+          errorMessage = `${field.charAt(0).toUpperCase() + field.slice(1)}: ${details.message}`;
+        }
+      }
+      
+      this.showWizardAuthError(errorMessage);
+    } finally {
+      this.setWizardAuthLoading(false);
     }
+  }
+  
+  /**
+   * Show authentication error in wizard
+   */
+  showWizardAuthError(message) {
+    const statusElement = document.getElementById("wizard-auth-status");
+    const messageElement = statusElement?.querySelector(".status-message");
+    
+    if (statusElement && messageElement) {
+      messageElement.textContent = message;
+      statusElement.className = "auth-status error";
+      statusElement.classList.remove("hidden");
+    }
+  }
+  
+  /**
+   * Show authentication success in wizard
+   */
+  showWizardAuthSuccess(message) {
+    const statusElement = document.getElementById("wizard-auth-status");
+    const messageElement = statusElement?.querySelector(".status-message");
+    
+    if (statusElement && messageElement) {
+      messageElement.textContent = message;
+      statusElement.className = "auth-status success";
+      statusElement.classList.remove("hidden");
+    }
+  }
+  
+  /**
+   * Clear authentication error in wizard
+   */
+  clearWizardAuthError() {
+    const statusElement = document.getElementById("wizard-auth-status");
+    if (statusElement) {
+      statusElement.classList.add("hidden");
+    }
+  }
+  
+  /**
+   * Set loading state for authentication buttons
+   */
+  setWizardAuthLoading(loading) {
+    const signinBtn = document.getElementById("wizard-signin-btn");
+    const registerBtn = document.getElementById("wizard-register-btn");
+    
+    [signinBtn, registerBtn].forEach(btn => {
+      if (btn) {
+        btn.disabled = loading;
+        btn.textContent = loading ? "..." : (btn.id.includes("signin") ? "Sign In" : "Create Account");
+      }
+    });
   }
 
   async start() {
@@ -214,14 +273,8 @@ class SetupWizard {
           content = await this.renderCompleteStep();
         }
         break;
-      case WIZARD_STEPS.CLOUD_PROVIDER:
-        if (POCKETBASE_ENABLED) {
-          content = this.renderCloudProviderStep();
-        } else {
-          // Skip to complete if PocketBase is disabled
-          this.currentStep = WIZARD_STEPS.COMPLETE;
-          content = await this.renderCompleteStep();
-        }
+      case WIZARD_STEPS.CLOUD_AUTH:
+        content = this.renderCloudAuthStep();
         break;
       case WIZARD_STEPS.COMPLETE:
         content = await this.renderCompleteStep();
@@ -353,6 +406,7 @@ class SetupWizard {
           <ul class="wizard-list">
             <li>Access your data across multiple devices</li>
             <li>Keep your data backed up securely</li>
+            <li>Real-time synchronization</li>
           </ul>
           <div class="wizard-form">
             <div class="radio-group">
@@ -374,9 +428,7 @@ class SetupWizard {
         </div>
       </div>
       <div class="wizard-footer">
-        <div class="wizard-progress">Step 3 of ${
-          this.selections.enableCloudSync ? "4" : "3"
-        }</div>
+        <div class="wizard-progress">Step 3 of ${this.selections.enableCloudSync ? '4' : '3'}</div>
         <div class="wizard-buttons">
           <button id="cloud-sync-back-btn" class="secondary-btn">Back</button>
           <button id="cloud-sync-next-btn" class="primary-btn">Continue</button>
@@ -385,82 +437,54 @@ class SetupWizard {
     `;
   }
 
-  renderCloudProviderStep() {
+  renderCloudAuthStep() {
     return `
-    <div class="wizard-step" id="cloud-provider-step">
-      <div class="step-header">
-        <h2>Choose Cloud Provider</h2>
-        <p>Select your preferred cloud storage provider for syncing your data across devices.</p>
+      <div class="wizard-header">
+        <h2>Sign In to Cloud Sync</h2>
       </div>
-      
-      <div class="provider-options">
-        <div class="provider-option">
-          <input type="radio" id="provider-gdrive" name="cloudProvider" value="gdrive">
-          <label for="provider-gdrive" class="provider-card">
-            <div class="provider-icon">📗</div>
-            <div class="provider-details">
-              <h3>Google Drive</h3>
-              <p>Sync with your Google Drive account. Data is stored in a private app folder.</p>
-              <ul class="provider-features">
-                <li>✓ Automatic OAuth authentication</li>
-                <li>✓ Data stored securely in Google Drive</li>
-                <li>✓ Works across all your devices</li>
-              </ul>
+      <div class="wizard-content">
+        <div class="wizard-step">
+          <p>Sign in to your account to start syncing your data across devices.</p>
+          
+          <div class="auth-form">
+            <div class="form-group">
+              <label for="wizard-email">Email</label>
+              <input type="email" id="wizard-email" name="email" required autocomplete="username"
+                value="${this.selections.cloudSyncCredentials?.email || ''}">
             </div>
-          </label>
-        </div>
-
-        <div class="provider-option">
-          <input type="radio" id="provider-dropbox" name="cloudProvider" value="dropbox">
-          <label for="provider-dropbox" class="provider-card">
-            <div class="provider-icon">📘</div>
-            <div class="provider-details">
-              <h3>Dropbox</h3>
-              <p>Sync with your Dropbox account. Data is stored in a dedicated app folder.</p>
-              <ul class="provider-features">
-                <li>✓ Automatic OAuth authentication</li>
-                <li>✓ Data stored securely in Dropbox</li>
-                <li>✓ Works across all your devices</li>
-              </ul>
+            <div class="form-group">
+              <label for="wizard-password">Password</label>
+              <input type="password" id="wizard-password" name="password" required autocomplete="current-password"
+                value="${this.selections.cloudSyncCredentials?.password || ''}">
             </div>
-          </label>
-        </div>
-
-        ${
-          import.meta.env.VITE_POCKETBASE_ENABLED === "true"
-            ? `
-        <div class="provider-option">
-          <input type="radio" id="provider-pocketbase" name="cloudProvider" value="pocketbase">
-          <label for="provider-pocketbase" class="provider-card">
-            <div class="provider-icon">🗄️</div>
-            <div class="provider-details">
-              <h3>PocketBase</h3>
-              <p>Real-time sync with your own PocketBase server. Fast and private.</p>
-              <ul class="provider-features">
-                <li>✓ Real-time synchronization</li>
-                <li>✓ Offline support with auto-sync</li>
-                <li>✓ Email/password authentication</li>
-                <li>✓ Self-hosted privacy</li>
-              </ul>
+            <div class="auth-actions">
+              <button type="button" id="wizard-signin-btn" class="auth-btn primary">Sign In</button>
             </div>
-          </label>
+            <div class="auth-actions secondary">
+              <button type="button" id="wizard-register-btn" class="auth-btn secondary">Create Account</button>
+            </div>
+            <div class="auth-status hidden" id="wizard-auth-status">
+              <span class="status-message"></span>
+            </div>
+          </div>
+          
+          <div class="wizard-note">
+            <p>Don't have an account? Click "Create Account" to register a new account.</p>
+          </div>
         </div>
-        `
-            : ""
-        }
       </div>
-
-      <div class="step-actions">
-        <button class="btn-secondary" id="cloud-provider-back-btn">Back</button>
-        <button class="btn-primary" id="cloud-provider-connect-btn" disabled>Connect</button>
+      <div class="wizard-footer">
+        <div class="wizard-progress">Step 4 of 4</div>
+        <div class="wizard-buttons">
+          <button id="cloud-auth-back-btn" class="secondary-btn">Back</button>
+        </div>
       </div>
-    </div>
-  `;
+    `;
   }
 
   renderCompleteStep() {
     const cloudSyncEnabled = this.selections.enableCloudSync;
-    const cloudSyncAuthenticated = this.selections.cloudSyncAuthenticated;
+    const cloudSyncAuthenticated = this.selections.cloudSyncCredentials?.authenticated;
     const userInfo = this.selections.cloudSyncUserInfo;
 
     let cloudSyncStatus = "";
@@ -482,11 +506,11 @@ class SetupWizard {
       `;
       } else {
         cloudSyncStatus = `
-        <div class="setup-warning">
-          <span class="warning-icon">⚠️</span>
-          <div class="warning-details">
-            <strong>Cloud sync setup was not completed</strong>
-            <br><small>You can finish setup later from Settings</small>
+        <div class="setup-info">
+          <span class="info-icon">ℹ️</span>
+          <div class="info-details">
+            <strong>Cloud sync enabled</strong>
+            <br><small>Sign in from Settings to start syncing your data</small>
           </div>
         </div>
       `;
@@ -630,16 +654,38 @@ class SetupWizard {
               document.querySelector('input[name="cloudSync"]:checked')
                 ?.value === "true";
             this.selections.enableCloudSync = enableSync;
+            
             if (enableSync) {
-              // Skip provider selection - go directly to PocketBase auth
-              this.selections.cloudSyncProvider = "pocketbase";
+              // Save the provider preference
               await dataService.savePreference("cloudSyncProvider", "pocketbase");
-              await this.initiatePocketbaseAuth();
+              // Move to authentication step
+              this.currentStep = WIZARD_STEPS.CLOUD_AUTH;
             } else {
+              // Skip to complete if cloud sync disabled
               this.currentStep = WIZARD_STEPS.COMPLETE;
-              this.renderCurrentStep();
             }
+            this.renderCurrentStep();
           });
+        break;
+
+      case WIZARD_STEPS.CLOUD_AUTH:
+        document
+          .getElementById("cloud-auth-back-btn")
+          ?.addEventListener("click", () => {
+            this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            this.renderCurrentStep();
+          });
+
+        
+        // Handle sign in button
+        document.getElementById("wizard-signin-btn")?.addEventListener("click", async () => {
+          await this.handleWizardAuth("signin");
+        });
+        
+        // Handle register button  
+        document.getElementById("wizard-register-btn")?.addEventListener("click", async () => {
+          await this.handleWizardAuth("register");
+        });
         break;
 
       case WIZARD_STEPS.CLOUD_PROVIDER:
@@ -848,33 +894,18 @@ class SetupWizard {
           .savePreference("cloudSyncEnabled", enableSync)
           .then(async () => {
             if (enableSync) {
-              // Skip provider selection - go directly to PocketBase auth
-              this.selections.cloudSyncProvider = "pocketbase";
               await dataService.savePreference("cloudSyncProvider", "pocketbase");
-              await this.initiatePocketbaseAuth();
+              this.currentStep = WIZARD_STEPS.CLOUD_AUTH;
             } else {
               this.currentStep = WIZARD_STEPS.COMPLETE;
-              this.renderCurrentStep();
             }
+            this.renderCurrentStep();
           });
         break;
 
-      case WIZARD_STEPS.CLOUD_PROVIDER:
-        const provider = document.querySelector(
-          'input[name="cloudProvider"]:checked'
-        )?.value;
-        if (provider) {
-          this.selections.cloudSyncProvider = provider;
-          dataService
-            .savePreference("cloudSyncProvider", provider)
-            .then(() => {
-              if (provider === "pocketbase") {
-                this.initiatePocketbaseAuth();
-              } else {
-                this.initiateOAuthFlow(provider);
-              }
-            });
-        }
+      case WIZARD_STEPS.CLOUD_AUTH:
+        // Enter key on auth step doesn't do anything special
+        // User needs to click Sign In or Register buttons
         break;
 
       case WIZARD_STEPS.COMPLETE:
@@ -900,7 +931,7 @@ class SetupWizard {
         this.renderCurrentStep();
         break;
 
-      case WIZARD_STEPS.CLOUD_PROVIDER:
+      case WIZARD_STEPS.CLOUD_AUTH:
         this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
         this.renderCurrentStep();
         break;

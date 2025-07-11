@@ -188,34 +188,9 @@ export default class AppManager {
       syncButtonEnabled,
     });
 
-    // Update main menu sync button
-    const menuSyncBtn = document.getElementById("sync-btn");
-    if (menuSyncBtn) {
-      menuSyncBtn.disabled = !syncButtonEnabled;
+    // Main menu sync button removed
 
-      if (syncInProgress) {
-        menuSyncBtn.innerHTML = `<i class="mdi mdi-sync mdi-spin"></i> Syncing...`;
-        menuSyncBtn.classList.add("syncing");
-      } else {
-        menuSyncBtn.innerHTML = `<i class="mdi mdi-cloud-sync-outline"></i> Sync Now`;
-        menuSyncBtn.classList.remove("syncing");
-      }
-    }
-
-    // Update settings dialog sync button
-    const settingsSyncBtn = document.getElementById("sync-now-btn");
-    if (settingsSyncBtn) {
-      settingsSyncBtn.disabled = !syncButtonEnabled;
-
-      // Optionally update button text here too
-      if (syncInProgress) {
-        settingsSyncBtn.textContent = "Syncing...";
-        settingsSyncBtn.classList.add("syncing");
-      } else {
-        settingsSyncBtn.textContent = "Sync Now";
-        settingsSyncBtn.classList.remove("syncing");
-      }
-    }
+    // Settings dialog sync button removed
 
     // Update sync status indicator in settings if it exists
     const syncStatusEl = document.getElementById("sync-status");

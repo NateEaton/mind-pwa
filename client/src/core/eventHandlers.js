@@ -501,18 +501,6 @@ class EventHandlers {
   }
 
   getDevControlsHtml() {
-    // Get current cloud provider
-    let currentProvider = "None";
-    if (
-      this.appManager.getCloudSync() &&
-      this.appManager.getCloudSync().provider
-    ) {
-      currentProvider =
-        this.appManager.getCloudSync().provider.providerName ===
-        "DropboxProvider"
-          ? "Dropbox"
-          : "Google Drive";
-    }
 
     return `
     <!-- Developer Testing Controls -->
@@ -563,18 +551,14 @@ class EventHandlers {
         }
       </div>
 
-      <!-- Cloud sync status -->
+      <!-- Admin UI Access -->
       <div style="display: flex; align-items: center; margin-bottom: 10px;">
-        <label style="margin-right: 10px;">Cloud Sync:</label>
-        <span style="font-weight: bold; margin-right: 10px;">${currentProvider}</span>
+        <label style="margin-right: 10px;">Database Admin:</label>
+        <button id="admin-ui-btn" style="padding: 5px 10px;">Admin UI</button>
       </div>
       
-      <div id="cloud-clear-status" style="font-size: 12px; color: #888;">
-        ${
-          this.appManager.getSyncEnabled() && currentProvider !== "None"
-            ? `Connected to ${currentProvider}`
-            : "Cloud sync is not enabled"
-        }
+      <div style="font-size: 12px; color: #888;">
+        Opens PocketBase admin interface in a new tab
       </div>
     </div>
     

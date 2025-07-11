@@ -24,7 +24,6 @@ import dataService from "./dataService.js";
 import uiRenderer from "../ui/renderer.js";
 import logger from "./logger.js";
 import themeManager from "./themeManager.js";
-import { PocketbaseAuthModal } from "../auth/pocketbaseAuthModal.js";
 
 // Module state
 let sectionCollapseState = {}; // Track which sections are expanded/collapsed
@@ -170,45 +169,52 @@ async function showSettings() {
             <div class="sync-settings ${
               !freshSyncEnabled ? "disabled-section" : ""
             }">
-              <div class="settings-row provider-row">
-                <div class="provider-select-row">
-                  <label>Provider:</label>
-                  <span style="font-weight: bold; color: #4CAF50;">PocketBase</span>
-                  <p style="font-size: 12px; color: #666; margin-top: 5px;">
-                    Real-time sync with PocketBase backend
-                  </p>
+              <!-- Authentication Section -->
+              <div class="settings-row auth-row">
+                <div class="auth-form-section">
+                  <div class="connection-status">
+                    <span class="status-label">Status:</span>
+                    <span id="sync-status" class="status-value ${
+                      cloudSync?.isAuthenticated ? "connected" : "disconnected"
+                    }">${
+                  cloudSync?.isAuthenticated ? "Connected" : "Not connected"
+                }</span>
+                  </div>
+                  
+                  ${
+                    userInfo
+                      ? `
+                  <div class="connection-status account-info">
+                    <span class="status-label">Account:</span>
+                    <span class="status-value connected">${userInfo.email}</span>
+                  </div>
+                  `
+                      : `
+                  <!-- Sign In Form -->
+                  <div class="auth-form" id="settings-auth-form">
+                    <div class="form-group">
+                      <label for="settings-email">Email</label>
+                      <input type="email" id="settings-email" name="email" required 
+                             autocomplete="username" ${!freshSyncEnabled ? "disabled" : ""}>
+                    </div>
+                    <div class="form-group">
+                      <label for="settings-password">Password</label>
+                      <input type="password" id="settings-password" name="password" required 
+                             autocomplete="current-password" ${!freshSyncEnabled ? "disabled" : ""}>
+                    </div>
+                    <div class="auth-actions">
+                      <button type="button" id="settings-signin-btn" class="small-btn" 
+                              ${!freshSyncEnabled ? "disabled" : ""}>Sign In</button>
+                      <button type="button" id="settings-register-btn" class="small-btn secondary" 
+                              ${!freshSyncEnabled ? "disabled" : ""}>Create Account</button>
+                    </div>
+                    <div class="auth-status hidden" id="settings-auth-status">
+                      <span class="status-message"></span>
+                    </div>
+                  </div>
+                  `
+                  }
                 </div>
-                
-                <div class="connection-status">
-                  <span class="status-label">Status:</span>
-                  <span id="sync-status" class="status-value ${
-                    cloudSync?.isAuthenticated ? "connected" : "disconnected"
-                  }">${
-                cloudSync?.isAuthenticated ? "Connected" : "Not connected"
-              }</span>
-                </div>
-                
-                ${
-                  userInfo
-                    ? `
-                <div class="connection-status account-info">
-                  <span class="status-label">Account:</span>
-                  <span class="status-value connected">${userInfo.email}</span>
-                </div>
-                `
-                    : ""
-                }
-              </div>
-              
-              <div class="settings-row sync-actions-row">
-                <button id="sync-reauth-btn" class="small-btn" ${
-                  !freshSyncEnabled ? "disabled" : ""
-                }>Connect</button>
-                <button id="sync-now-btn" class="small-btn" ${
-                  !freshSyncEnabled || !cloudSync?.isAuthenticated
-                    ? "disabled"
-                    : ""
-                }>Sync Now</button>
               </div>
               
               <div class="settings-row sync-options-row">
@@ -219,14 +225,16 @@ async function showSettings() {
                 <span class="setting-note">(Mobile devices only)</span>
               </div>
               
-              <div class="settings-row sync-last-row">
-                <label>Last sync:</label>
-                <span id="sync-last-time">${
-                  cloudSync && cloudSync.lastSyncTimestamp
-                    ? new Date(cloudSync.lastSyncTimestamp).toLocaleString()
-                    : "Never"
-                }</span>
+              ${
+                cloudSync?.isAuthenticated
+                  ? `
+              <div class="settings-row sync-disconnect-row">
+                <button id="sync-disconnect-btn" class="small-btn secondary" 
+                        ${!freshSyncEnabled ? "disabled" : ""}>Disconnect</button>
               </div>
+              `
+                  : ""
+              }
             </div>
           </div>
         </div>
@@ -338,8 +346,7 @@ function setupSettingsEventListeners(syncEnabled) {
     // Add event listener for Enable sync checkbox
     setupSyncEnabledListener();
 
-    // Add event listener for provider changes
-    setupProviderChangeListener();
+    // Provider selection removed - only PocketBase is supported
 
     // Add event listener for WiFi-only setting
     setupWifiOnlyListener();
@@ -392,12 +399,20 @@ function setupSyncEnabledListener() {
         }
 
         syncSettings.classList.remove("disabled-section");
-        document.getElementById("sync-provider").disabled = false;
-        document.getElementById("sync-wifi-only").disabled = false;
-        document.getElementById("sync-reauth-btn").disabled = false;
+        const syncWifiOnly = document.getElementById("sync-wifi-only");
+        const settingsEmailInput = document.getElementById("settings-email");
+        const settingsPasswordInput = document.getElementById("settings-password");
+        const signinBtn = document.getElementById("settings-signin-btn");
+        const registerBtn = document.getElementById("settings-register-btn");
+        
+        if (syncWifiOnly) syncWifiOnly.disabled = false;
+        if (settingsEmailInput) settingsEmailInput.disabled = false;
+        if (settingsPasswordInput) settingsPasswordInput.disabled = false;
+        if (signinBtn) signinBtn.disabled = false;
+        if (registerBtn) registerBtn.disabled = false;
 
         // Initialize sync object immediately if needed
-        const provider = document.getElementById("sync-provider").value;
+        const provider = "pocketbase";
         let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
 
         if (!cloudSync) {
@@ -428,8 +443,7 @@ function setupSyncEnabledListener() {
             statusElement.className =
               "status-value " +
               (cloudSync.isAuthenticated ? "connected" : "disconnected");
-            document.getElementById("sync-now-btn").disabled =
-              !cloudSync.isAuthenticated;
+            // Cloud sync is now initialized, authentication status is shown in the UI
           } catch (error) {
             logger.error("Failed to initialize cloud sync:", error);
             uiRenderer.showToast(
@@ -440,10 +454,19 @@ function setupSyncEnabledListener() {
         }
       } else {
         syncSettings.classList.add("disabled-section");
-        document.getElementById("sync-provider").disabled = true;
-        document.getElementById("sync-wifi-only").disabled = true;
-        document.getElementById("sync-reauth-btn").disabled = true;
-        document.getElementById("sync-now-btn").disabled = true;
+        const syncWifiOnly = document.getElementById("sync-wifi-only");
+        const settingsEmailInput = document.getElementById("settings-email");
+        const settingsPasswordInput = document.getElementById("settings-password");
+        const signinBtn = document.getElementById("settings-signin-btn");
+        const registerBtn = document.getElementById("settings-register-btn");
+        const disconnectBtn = document.getElementById("sync-disconnect-btn");
+        
+        if (syncWifiOnly) syncWifiOnly.disabled = true;
+        if (settingsEmailInput) settingsEmailInput.disabled = true;
+        if (settingsPasswordInput) settingsPasswordInput.disabled = true;
+        if (signinBtn) signinBtn.disabled = true;
+        if (registerBtn) registerBtn.disabled = true;
+        if (disconnectBtn) disconnectBtn.disabled = true;
 
         // Disable sync if it was enabled
         let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
@@ -459,75 +482,7 @@ function setupSyncEnabledListener() {
     });
 }
 
-/**
- * Setup provider change listener
- */
-function setupProviderChangeListener() {
-  const syncProviderSelect = document.getElementById("sync-provider");
-  if (syncProviderSelect) {
-    syncProviderSelect.addEventListener("change", async (e) => {
-      const newProvider = e.target.value;
-      let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
-      let currentProvider = "none";
-      if (cloudSync && cloudSync.provider) {
-        if (cloudSync.provider.providerName === "DropboxProvider") {
-          currentProvider = "dropbox";
-        } else if (cloudSync.provider.providerName === "PocketbaseProvider") {
-          currentProvider = "pocketbase";
-        } else {
-          currentProvider = "gdrive";
-        }
-      }
-
-      logger.info(
-        `Provider changing from ${currentProvider} to ${newProvider}`
-      );
-
-      // Save preference immediately
-      await dataService.savePreference("cloudSyncProvider", newProvider);
-
-      // If provider changes, reset the connection status
-      if (newProvider !== currentProvider) {
-        // Update status to show not connected
-        const statusElement = document.getElementById("sync-status");
-        if (statusElement) {
-          statusElement.textContent = "Not connected";
-          statusElement.className = "status-value disconnected";
-        }
-
-        // Disable sync button until authenticated with new provider
-        const syncNowBtn = document.getElementById("sync-now-btn");
-        if (syncNowBtn) {
-          syncNowBtn.disabled = true;
-        }
-
-        // If we're enabled, initialize the new provider
-        const syncEnabled = getSyncEnabled ? getSyncEnabled() : false;
-        if (syncEnabled) {
-          try {
-            if (setSyncReadyCallback) setSyncReadyCallback(false);
-            cloudSync = new CloudSyncManager(
-              dataService,
-              stateManager,
-              uiRenderer,
-              handleSyncCompleteCallback,
-              handleSyncErrorCallback
-            );
-            await cloudSync.initialize(newProvider);
-            if (setCloudSyncState) setCloudSyncState(cloudSync);
-            if (setSyncReadyCallback) setSyncReadyCallback(true);
-          } catch (error) {
-            logger.error("Failed to initialize new provider:", error);
-            uiRenderer.showToast(
-              "Failed to initialize new provider: " + error.message,
-              "error"
-            );
-          }
-        }
-      }
-    });
-  }
-}
+// Provider selection removed - setupProviderChangeListener no longer needed
 
 /**
  * Setup WiFi-only checkbox listener
@@ -552,83 +507,29 @@ function setupWifiOnlyListener() {
  * Setup action button listeners
  */
 function setupActionButtonListeners() {
-  // Sync Now button
-  document
-    .getElementById("sync-now-btn")
-    .addEventListener("click", async () => {
-      if (syncDataCallback) {
-        try {
-          // Show syncing status
-          const syncNowBtn = document.getElementById("sync-now-btn");
-          const originalText = syncNowBtn.textContent;
-          syncNowBtn.textContent = "Syncing...";
-          syncNowBtn.disabled = true;
-
-          // Use centralized sync coordination for manual sync
-          await syncDataCallback(false, true); // Not initial sync, but is manual sync
-
-          // Update the last sync time display
-          const cloudSync = getCloudSyncState ? getCloudSyncState() : null;
-          if (cloudSync && cloudSync.lastSyncTimestamp) {
-            const lastSyncElement = document.getElementById("sync-last-time");
-            if (lastSyncElement) {
-              lastSyncElement.textContent = new Date(
-                cloudSync.lastSyncTimestamp
-              ).toLocaleString();
-            }
-          }
-
-          // Reset button
-          syncNowBtn.textContent = originalText;
-          syncNowBtn.disabled = false;
-        } catch (error) {
-          logger.error("Sync failed:", error);
-          // Reset button on error
-          const syncNowBtn = document.getElementById("sync-now-btn");
-          syncNowBtn.textContent = "Sync Now";
-          syncNowBtn.disabled = false;
-        }
-      }
+  // Sign In button
+  const signinBtn = document.getElementById("settings-signin-btn");
+  if (signinBtn) {
+    signinBtn.addEventListener("click", async () => {
+      await handleSettingsAuth("signin");
     });
+  }
 
-  // Connect/Re-authenticate button
-  document
-    .getElementById("sync-reauth-btn")
-    .addEventListener("click", async () => {
-      try {
-        const provider = document.getElementById("sync-provider").value;
-
-        if (provider === "pocketbase") {
-          // Handle PocketBase authentication
-          await handlePocketbaseAuth();
-        } else {
-          // Handle OAuth providers (existing code)
-          const state = {
-            wizardContext: "settingsAuth",
-            provider: provider,
-            timestamp: Date.now(),
-          };
-
-          const stateParam = btoa(JSON.stringify(state));
-
-          if (provider === "dropbox") {
-            window.location.href = `/api/dropbox/auth?state=${encodeURIComponent(
-              stateParam
-            )}`;
-          } else if (provider === "gdrive") {
-            window.location.href = `/api/gdrive/auth?state=${encodeURIComponent(
-              stateParam
-            )}`;
-          }
-        }
-      } catch (error) {
-        logger.error("Failed to initiate authentication:", error);
-        uiRenderer.showToast(
-          "Authentication failed: " + error.message,
-          "error"
-        );
-      }
+  // Register button
+  const registerBtn = document.getElementById("settings-register-btn");
+  if (registerBtn) {
+    registerBtn.addEventListener("click", async () => {
+      await handleSettingsAuth("register");
     });
+  }
+
+  // Disconnect button
+  const disconnectBtn = document.getElementById("sync-disconnect-btn");
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener("click", async () => {
+      await handleDisconnect();
+    });
+  }
 }
 
 /**
@@ -676,42 +577,149 @@ function setPendingInitialSync(value) {
 /**
  * Handle PocketBase authentication in settings
  */
-async function handlePocketbaseAuth() {
-  const cloudSync = getCloudSyncState ? getCloudSyncState() : null;
-
-  if (!cloudSync) {
-    logger.error("Cloud sync not available");
+async function handleSettingsAuth(action) {
+  const email = document.getElementById("settings-email")?.value?.trim();
+  const password = document.getElementById("settings-password")?.value;
+  
+  if (!email || !password) {
+    showSettingsAuthError("Please fill in all fields");
     return;
   }
-
-  const authModal = new PocketbaseAuthModal(
-    cloudSync,
-    async (authResult) => {
-      // Success callback
-      logger.info("PocketBase authentication successful:", authResult);
-
-      // Update UI to show connected state
-      const statusElement = document.getElementById("sync-status");
-      if (statusElement) {
-        statusElement.textContent = "Connected";
-        statusElement.className = "status-value connected";
-      }
-
-      const syncNowBtn = document.getElementById("sync-now-btn");
-      if (syncNowBtn) {
-        syncNowBtn.disabled = false;
-      }
-
-      // Show success message
-      uiRenderer.showToast("Successfully connected to PocketBase!", "success");
-    },
-    () => {
-      // Cancel callback
-      logger.info("PocketBase authentication cancelled");
+  
+  setSettingsAuthLoading(true);
+  clearSettingsAuthError();
+  
+  try {
+    // Get or initialize cloud sync
+    let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
+    
+    if (!cloudSync) {
+      cloudSync = new CloudSyncManager(
+        dataService,
+        stateManager,
+        uiRenderer,
+        handleSyncCompleteCallback,
+        handleSyncErrorCallback
+      );
+      await cloudSync.initialize("pocketbase");
+      if (setCloudSyncState) setCloudSyncState(cloudSync);
     }
-  );
+    
+    let success = false;
+    if (action === "signin") {
+      success = await cloudSync.authenticatePocketbase(email, password);
+    } else if (action === "register") {
+      // For register, we need a username - use email prefix
+      const username = email.split('@')[0];
+      success = await cloudSync.registerPocketbase(username, email, password);
+    }
+    
+    if (success) {
+      // Update UI state
+      if (setSyncReadyCallback) setSyncReadyCallback(true);
+      
+      // Refresh the settings dialog to show connected state
+      showSettingsAuthSuccess(`Successfully ${action === 'signin' ? 'signed in' : 'registered'}!`);
+      setTimeout(() => {
+        showSettings(); // Refresh the entire dialog
+      }, 1500);
+    }
+  } catch (error) {
+    logger.error(`PocketBase ${action} error:`, error);
+    let errorMessage = error.message || `${action} failed. Please try again.`;
+    
+    // Handle specific error types
+    if (error?.data?.data) {
+      const fieldErrors = Object.entries(error.data.data);
+      if (fieldErrors.length > 0) {
+        const [field, details] = fieldErrors[0];
+        errorMessage = `${field.charAt(0).toUpperCase() + field.slice(1)}: ${details.message}`;
+      }
+    }
+    
+    showSettingsAuthError(errorMessage);
+  } finally {
+    setSettingsAuthLoading(false);
+  }
+}
 
-  authModal.show("signin");
+/**
+ * Handle disconnect from PocketBase
+ */
+async function handleDisconnect() {
+  try {
+    const cloudSync = getCloudSyncState ? getCloudSyncState() : null;
+    
+    if (cloudSync && cloudSync.provider && cloudSync.provider.logout) {
+      await cloudSync.provider.logout();
+    }
+    
+    // Clear cloud sync state
+    if (setCloudSyncState) setCloudSyncState(null);
+    if (setSyncReadyCallback) setSyncReadyCallback(false);
+    
+    // Show success message and refresh dialog
+    uiRenderer.showToast("Successfully disconnected", "success");
+    setTimeout(() => {
+      showSettings(); // Refresh the entire dialog
+    }, 1000);
+  } catch (error) {
+    logger.error("Disconnect error:", error);
+    uiRenderer.showToast("Failed to disconnect: " + error.message, "error");
+  }
+}
+
+/**
+ * Show authentication error in settings
+ */
+function showSettingsAuthError(message) {
+  const statusElement = document.getElementById("settings-auth-status");
+  const messageElement = statusElement?.querySelector(".status-message");
+  
+  if (statusElement && messageElement) {
+    messageElement.textContent = message;
+    statusElement.className = "auth-status error";
+    statusElement.classList.remove("hidden");
+  }
+}
+
+/**
+ * Show authentication success in settings
+ */
+function showSettingsAuthSuccess(message) {
+  const statusElement = document.getElementById("settings-auth-status");
+  const messageElement = statusElement?.querySelector(".status-message");
+  
+  if (statusElement && messageElement) {
+    messageElement.textContent = message;
+    statusElement.className = "auth-status success";
+    statusElement.classList.remove("hidden");
+  }
+}
+
+/**
+ * Clear authentication error in settings
+ */
+function clearSettingsAuthError() {
+  const statusElement = document.getElementById("settings-auth-status");
+  if (statusElement) {
+    statusElement.classList.add("hidden");
+  }
+}
+
+/**
+ * Set loading state for authentication buttons in settings
+ */
+function setSettingsAuthLoading(loading) {
+  const signinBtn = document.getElementById("settings-signin-btn");
+  const registerBtn = document.getElementById("settings-register-btn");
+  
+  [signinBtn, registerBtn].forEach(btn => {
+    if (btn) {
+      btn.disabled = loading;
+      btn.textContent = loading ? "..." : (btn.id.includes("signin") ? "Sign In" : "Create Account");
+    }
+  });
 }
 
 // =============================================================================
