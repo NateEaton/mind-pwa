@@ -210,28 +210,31 @@ function reducer(state, action) {
         foodGroups: initialPayload.foodGroups || state.foodGroups || [], // Preserve foodGroups if already set
       };
 
-    case ACTION_TYPES.UPDATE_DAILY_COUNT:
+    case ACTION_TYPES.UPDATE_DAILY_COUNT: {
+      // Use a block scope for clarity
       const { date, groupId, count } = action.payload;
       const newCount = Math.max(0, parseInt(count, 10) || 0);
 
-      const currentDailyCountsForDate = state.dailyCounts[date] || {};
-      const oldDailyValue = currentDailyCountsForDate[groupId] || 0;
-      const delta = newCount - oldDailyValue;
+      // --- Start with a fresh copy of the state to modify ---
+      const nextState = JSON.parse(JSON.stringify(state));
 
-      return {
-        ...state,
-        dailyCounts: {
-          ...state.dailyCounts,
-          [date]: {
-            ...currentDailyCountsForDate,
-            [groupId]: newCount,
-          },
-        },
-        weeklyCounts: {
-          ...state.weeklyCounts,
-          [groupId]: (state.weeklyCounts[groupId] || 0) + delta,
-        },
-      };
+      // --- 1. Update Daily Count ---
+      const oldDailyValue = nextState.dailyCounts[date]?.[groupId] || 0;
+      if (!nextState.dailyCounts[date]) {
+        nextState.dailyCounts[date] = {};
+      }
+      nextState.dailyCounts[date][groupId] = newCount;
+
+      // --- 2. Recalculate Weekly Count (Logic moved from separate function) ---
+      const delta = newCount - oldDailyValue;
+      nextState.weeklyCounts[groupId] =
+        (nextState.weeklyCounts[groupId] || 0) + delta;
+
+      // --- 3. Update the Master Timestamp (Logic moved from separate function) ---
+      nextState.metadata.lastModified = dataService.getCurrentTimestamp();
+
+      return nextState;
+    }
 
     // UPDATE_WEEKLY_COUNT is deprecated - weekly counts are now derived from daily counts
     /*
@@ -277,40 +280,52 @@ function reducer(state, action) {
         dailyCounts: updatedDailyCountsForSelect,
       };
 
-    case ACTION_TYPES.RESET_DAILY_COUNTS:
-      // Resets counts for a specific date and updates weekly totals accordingly.
+    case ACTION_TYPES.RESET_DAILY_COUNTS: {
       const { dateToReset } = action.payload;
-      const dailyCountsToClear = state.dailyCounts[dateToReset] || {};
-      let updatedWeeklyCountsAfterDailyReset = { ...state.weeklyCounts };
+      const timestamp =
+        action.payload.resetTimestamp || dataService.getCurrentTimestamp();
+
+      const nextState = JSON.parse(JSON.stringify(state));
+
+      const dailyCountsToClear = nextState.dailyCounts[dateToReset] || {};
 
       for (const foodId in dailyCountsToClear) {
         if (dailyCountsToClear.hasOwnProperty(foodId)) {
           const countToSubtract = dailyCountsToClear[foodId] || 0;
-          updatedWeeklyCountsAfterDailyReset[foodId] =
-            (updatedWeeklyCountsAfterDailyReset[foodId] || 0) - countToSubtract;
-          if (updatedWeeklyCountsAfterDailyReset[foodId] < 0) {
-            updatedWeeklyCountsAfterDailyReset[foodId] = 0;
+          nextState.weeklyCounts[foodId] =
+            (nextState.weeklyCounts[foodId] || 0) - countToSubtract;
+          if (nextState.weeklyCounts[foodId] < 0) {
+            nextState.weeklyCounts[foodId] = 0;
           }
         }
       }
-      return {
-        ...state,
-        dailyCounts: {
-          ...state.dailyCounts,
-          [dateToReset]: {}, // Set to empty object for that date
-        },
-        weeklyCounts: updatedWeeklyCountsAfterDailyReset,
-      };
+      nextState.dailyCounts[dateToReset] = {};
 
-    case ACTION_TYPES.RESET_WEEKLY_COUNTS:
-      // Resets all daily counts for the current week and all weekly counts
+      // Logic moved from the action creator into the reducer:
+      nextState.metadata.dailyResetTimestamp = timestamp;
+      nextState.metadata.dailyTotalsDirty = true;
+      nextState.metadata.lastModified = timestamp;
+
+      return nextState;
+    }
+
+    case ACTION_TYPES.RESET_WEEKLY_COUNTS: {
+      const timestamp =
+        action.payload.resetTimestamp || dataService.getCurrentTimestamp();
       const currentDayForWeeklyReset =
         state.currentDayDate || dataService.getTodayDateString();
-      return {
-        ...state,
-        dailyCounts: { [currentDayForWeeklyReset]: {} },
-        weeklyCounts: {},
-      };
+
+      const nextState = JSON.parse(JSON.stringify(state));
+
+      nextState.dailyCounts = { [currentDayForWeeklyReset]: {} };
+      nextState.weeklyCounts = {};
+
+      // Logic moved from the action creator into the reducer:
+      nextState.metadata.weeklyResetTimestamp = timestamp;
+      nextState.metadata.lastModified = timestamp;
+
+      return nextState;
+    }
 
     case ACTION_TYPES.RECALCULATE_WEEKLY_TOTALS:
       const weekStartForRecalc = state.currentWeekStartDate;
@@ -328,11 +343,7 @@ function reducer(state, action) {
       for (let i = 0; i < 7; i++) {
         const dayToProcess = new Date(startDateForRecalc);
         dayToProcess.setDate(startDateForRecalc.getDate() + i);
-        // Format date as YYYY-MM-DD
-        const year = dayToProcess.getFullYear();
-        const month = String(dayToProcess.getMonth() + 1).padStart(2, "0");
-        const day = String(dayToProcess.getDate()).padStart(2, "0");
-        const dateStr = `${year}-${month}-${day}`;
+        const dateStr = dateUtils.formatDateToYYYYMMDD(dayToProcess);
 
         if (state.dailyCounts[dateStr]) {
           for (const foodId in state.dailyCounts[dateStr]) {
@@ -344,6 +355,7 @@ function reducer(state, action) {
           }
         }
       }
+
       return {
         ...state,
         weeklyCounts: newCalculatedWeeklyTotals,
@@ -541,31 +553,14 @@ function getState() {
 }
 
 /**
- * Action creator for updating daily count for a specific date (usually selectedTrackerDate)
- * @param {string} date - The date for which to update the count (YYYY-MM-DD)
- * @param {string} groupId - The food group ID
- * @param {number} count - The new count value
- * @returns {Object} The action object
+ * Action creator for updating daily count. This now only dispatches a single,
+ * atomic action, and the reducer handles all calculations.
  */
 function updateDailyCount(date, groupId, count) {
-  // Added 'date' parameter
-  const result = dispatch({
+  return dispatch({
     type: ACTION_TYPES.UPDATE_DAILY_COUNT,
     payload: { date, groupId, count },
   });
-
-  // Recalculate weekly totals since daily count changed
-  recalculateWeeklyTotals();
-
-  const updateTime = Date.now();
-  updateMetadata({
-    dailyTotalsUpdatedAt: updateTime,
-    dailyTotalsDirty: true, // A daily count changed
-    weeklyTotalsUpdatedAt: updateTime, // Weekly sum also changed
-    lastModified: updateTime, // Overall state modified
-  });
-
-  return result;
 }
 
 /**
@@ -608,12 +603,6 @@ function resetDailyCounts(dateToReset, resetTimestamp = null) {
     payload: { dateToReset, resetTimestamp: timestamp },
   });
 
-  updateMetadata({
-    dailyResetTimestamp: timestamp, // Or a more specific one if needed
-    dailyTotalsDirty: true,
-    currentWeekDirty: true, // Legacy
-    lastModified: timestamp,
-  });
   return result;
 }
 
@@ -638,16 +627,6 @@ function resetWeeklyCounts(resetTimestamp = null) {
     payload: { resetTimestamp: timestamp },
   });
 
-  // Update metadata with reset timestamp - important: don't update the weeklyTotalsUpdatedAt
-  // because we want to preserve when totals were last changed by user
-  updateMetadata({
-    weeklyResetTimestamp: timestamp,
-
-    // Legacy flag for backward compatibility
-    currentWeekDirty: true,
-    lastModified: timestamp,
-  });
-
   // Verify the reset worked
   const afterState = getState();
   logger.debug(
@@ -668,10 +647,6 @@ function recalculateWeeklyTotals() {
     payload: {}, // No payload needed, uses current state
   });
 
-  updateMetadata({
-    weeklyTotalsUpdatedAt: Date.now(),
-    lastModified: Date.now(),
-  });
   return result;
 }
 

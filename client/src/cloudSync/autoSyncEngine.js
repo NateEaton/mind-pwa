@@ -165,49 +165,53 @@ export class AutoSyncEngine {
   }
 
   /**
-   * Handle remote current week changes
+   * Handle remote current week changes robustly, preventing sync loops.
    */
   async handleRemoteCurrentWeekChange(changeEvent) {
-    const remoteData = changeEvent.record;
-    const currentState = this.stateManager.getState();
+    const remoteRecord = changeEvent.record;
 
-    // Skip if this was our own change
-    if (this.isOwnChange(remoteData)) {
-      logger.debug("Ignoring own change");
+    // 1. Prevent loop by ignoring echoes of our own changes.
+    if (this.isOwnChange(remoteRecord)) {
+      logger.debug("Ignoring own remote change (echo).");
       return;
     }
 
-    // Check if we have conflicting local changes
-    const hasRecentLocalChanges =
-      this.lastLocalChange > 0 &&
-      getCurrentTimestamp() - this.lastLocalChange < 5000; // 5 second window
+    logger.info(
+      "Remote change from another device detected. Resolving conflict."
+    );
+    this.notifySyncStatus("syncing");
 
-    if (hasRecentLocalChanges) {
-      logger.info("Conflict detected, merging changes");
-      const mergedData = await this.resolveConflict(currentState, remoteData);
+    const localData = this.stateManager.getState();
+    const originalLocalDataString = JSON.stringify(localData);
 
-      // Update local state with merged data
+    // 2. Resolve conflict using the "Last Write Wins" timestamp logic.
+    // This will return either the existing local data or the new remote data.
+    const winningData = await this.resolveConflict(localData, remoteRecord);
+    const winningDataString = JSON.stringify(winningData);
+
+    // 3. Only update the local state if the winning data is actually different
+    //    from what we already have. This is the key to stopping the loop.
+    if (originalLocalDataString !== winningDataString) {
+      logger.info(
+        "State has changed after merge. Applying new remote state locally."
+      );
+
       this.stateManager.dispatch({
         type: ACTION_TYPES.SET_STATE,
-        payload: { state: mergedData },
+        payload: winningData,
       });
 
-      // Push merged data back to remote (will be ignored by other clients due to deviceId)
-      setTimeout(() => {
-        this.provider.syncCurrentWeek(mergedData);
-      }, 100);
+      this.showRemoteUpdateNotification("current_week");
     } else {
-      logger.info("No local changes, applying remote changes");
-      const localData = this.provider.convertPocketBaseToLocal(remoteData);
-
-      this.stateManager.dispatch({
-        type: ACTION_TYPES.SET_STATE,
-        payload: { state: localData },
-      });
+      logger.info(
+        "No state change after merge. Local data is already up-to-date."
+      );
     }
 
-    // Show user notification of remote update
-    this.showRemoteUpdateNotification("current_week");
+    // 4. IMPORTANT: Do NOT write anything back to the server here.
+    // This function's only job is to apply incoming changes. This breaks the loop.
+
+    this.notifySyncStatus("synced");
   }
 
   /**
@@ -246,7 +250,7 @@ export class AutoSyncEngine {
       if (this.pendingChanges.has("current_week") || trigger === "periodic") {
         // Check if this is an initial sync with empty local data
         const isInitialSyncWithEmptyData = this.isInitialSync(currentState);
-        
+
         if (isInitialSyncWithEmptyData) {
           // Pull remote data instead of pushing empty local data
           const result = await this.pullRemoteData(currentState);
@@ -301,50 +305,33 @@ export class AutoSyncEngine {
   }
 
   /**
-   * Resolve conflicts between local and remote data
+   * Resolve conflicts using a "Last Write Wins" strategy based on a record timestamp.
    */
-  async resolveConflict(localData, remoteData) {
-    logger.info("Resolving data conflict using daily-only merge strategy");
+  async resolveConflict(localData, remoteRecord) {
+    logger.info("Resolving conflict with 'Last Write Wins' strategy.");
 
-    // Convert remote data to local format (includes weekly recalculation)
-    const remoteLocal = this.provider.convertPocketBaseToLocal(remoteData);
+    const remoteLocalFormat =
+      this.provider.convertPocketBaseToLocal(remoteRecord);
 
-    // Merge strategy: higher values win for daily counts, most recent for dates
-    const merged = {
-      ...localData,
-      metadata: {
-        ...localData.metadata,
-        conflictResolved: true,
-        conflictTimestamp: getCurrentTimestamp(),
-        lastSyncTimestamp: getCurrentTimestamp(),
-      },
-    };
+    const localTimestamp = localData.metadata?.lastModified || 0;
+    const remoteTimestamp = remoteLocalFormat.metadata?.lastModified || 0;
 
-    // Merge daily counts - take higher values
-    if (remoteLocal.dailyCounts && localData.dailyCounts) {
-      merged.dailyCounts = this.mergeCountObjects(
-        localData.dailyCounts,
-        remoteLocal.dailyCounts
-      );
-    }
-
-    // Recalculate weekly totals for merged data
-    merged.weeklyCounts = this.provider.calculateWeeklyTotals(
-      merged.dailyCounts,
-      merged.weekStartDate || merged.currentWeekStartDate
+    logger.debug(
+      `Comparing timestamps -> Local: ${localTimestamp}, Remote: ${remoteTimestamp}`
     );
 
-    // Use more recent dates
-    if (remoteLocal.currentDayDate > localData.currentDayDate) {
-      merged.currentDayDate = remoteLocal.currentDayDate;
+    // The record with the newer timestamp wins. The entire record is kept.
+    if (localTimestamp > remoteTimestamp) {
+      logger.info(
+        "Conflict Resolution: Local data is newer. Keeping local version."
+      );
+      return localData;
+    } else {
+      logger.info(
+        "Conflict Resolution: Remote data is newer or identical. Applying remote version."
+      );
+      return remoteLocalFormat;
     }
-    if (remoteLocal.selectedTrackerDate > localData.selectedTrackerDate) {
-      merged.selectedTrackerDate = remoteLocal.selectedTrackerDate;
-    }
-
-    logger.info("Conflict resolved with recalculated weekly totals:", merged.weeklyCounts);
-
-    return merged;
   }
 
   /**
@@ -379,16 +366,17 @@ export class AutoSyncEngine {
     // 1. Daily counts are empty or only contain empty day entries
     // 2. No meaningful data has been entered yet
     const dailyCounts = currentState.dailyCounts || {};
-    const isEmpty = Object.keys(dailyCounts).length === 0 || 
-                   Object.values(dailyCounts).every(dayCounts => 
-                     Object.keys(dayCounts || {}).length === 0
-                   );
-    
+    const isEmpty =
+      Object.keys(dailyCounts).length === 0 ||
+      Object.values(dailyCounts).every(
+        (dayCounts) => Object.keys(dayCounts || {}).length === 0
+      );
+
     if (isEmpty) {
       logger.info("Detected initial sync with empty local data");
       return true;
     }
-    
+
     return false;
   }
 
@@ -398,26 +386,30 @@ export class AutoSyncEngine {
   async pullRemoteData(currentState) {
     try {
       const userId = this.provider.pb.authStore.model.id;
-      const weekStartDate = currentState.weekStartDate || currentState.currentWeekStartDate;
-      
+      const weekStartDate =
+        currentState.weekStartDate || currentState.currentWeekStartDate;
+
       // Get remote data
-      const remoteRecord = await this.provider.getRemoteCurrentWeek(userId, weekStartDate);
-      
+      const remoteRecord = await this.provider.getRemoteCurrentWeek(
+        userId,
+        weekStartDate
+      );
+
       if (remoteRecord) {
         logger.info("Found remote data during initial sync, pulling to local");
-        
+
         // Convert remote data to local format
         const remoteData = this.provider.convertPocketBaseToLocal(remoteRecord);
-        
+
         // Merge remote data with current local state to preserve today's empty entry
         const mergedData = this.mergeInitialSyncData(currentState, remoteData);
-        
+
         // Update local state with merged data
         this.stateManager.dispatch({
           type: ACTION_TYPES.SET_STATE,
           payload: mergedData,
         });
-        
+
         return { success: true, data: mergedData };
       } else {
         logger.info("No remote data found during initial sync");
@@ -440,28 +432,30 @@ export class AutoSyncEngine {
 
     // Start with remote data as base
     const merged = { ...remoteData };
-    
+
     // Merge daily counts - combine both local and remote dates
     merged.dailyCounts = {
       ...(remoteData.dailyCounts || {}),
       ...(localState.dailyCounts || {}),
     };
-    
+
     // Use the most recent dates from either source
-    merged.currentDayDate = localState.currentDayDate || remoteData.currentDayDate;
-    merged.selectedTrackerDate = localState.selectedTrackerDate || remoteData.selectedTrackerDate;
-    
+    merged.currentDayDate =
+      localState.currentDayDate || remoteData.currentDayDate;
+    merged.selectedTrackerDate =
+      localState.selectedTrackerDate || remoteData.selectedTrackerDate;
+
     // Recalculate weekly totals after merge
     merged.weeklyCounts = this.provider.calculateWeeklyTotals(
       merged.dailyCounts,
       merged.weekStartDate || merged.currentWeekStartDate
     );
-    
+
     logger.debug("Initial sync merge result:", {
       mergedDailyCounts: Object.keys(merged.dailyCounts || {}),
       weeklyTotals: merged.weeklyCounts,
     });
-    
+
     return merged;
   }
 
