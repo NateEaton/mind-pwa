@@ -1,0 +1,19 @@
+FROM alpine:latest
+
+RUN apk add --no-cache curl unzip ca-certificates
+
+WORKDIR /pb
+
+ENV PB_VERSION=0.28.1
+
+# Fixed URL format - includes version in filename
+RUN curl -L "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip" -o pb.zip \
+    && unzip pb.zip \
+    && rm pb.zip \
+    && chmod +x pocketbase
+
+VOLUME /pb_data
+EXPOSE 8090
+
+# Fixed command to use proper data directory
+CMD ["./pocketbase", "serve", "--http=0.0.0.0:8090"]

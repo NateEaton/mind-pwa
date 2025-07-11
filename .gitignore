@@ -34,12 +34,16 @@ client_secret*.json
 .history/
 .prettierrc
 mind-pwa.code-workspace
+CLAUDE.md
+.claude
 
 # --- Logs --- Ignore log files
 logs/ 
 *.log 
 npm-debug.log* 
 yarn-debug.log* yarn-error.log*
+safariConsole*.txt
+
 
 # --- Sub-Repositories --- Ignore the separately-cloned wiki Git 
 # repository. This prevents git from treating it as a submodule.
@@ -47,4 +51,10 @@ yarn-debug.log* yarn-error.log*
 
 # For now, transient notes that are useful locally but not necessarily 
 # a permenant part of project or something to push to Github
-/notes/
+/_notes/
+/tmp/
+/_tasks/
+
+# Misc dev files
+*schem*.json
+repomix-output.xml

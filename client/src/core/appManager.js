@@ -38,21 +38,7 @@ export default class AppManager {
     this.initialSyncInProgress = false;
     this.MIN_SYNC_INTERVAL = 1 * 60 * 1000; // 1 minute between auto-syncs
 
-    // Centralized sync coordination
-    this.syncState = {
-      syncInProgress: false,
-      lastSyncTime: 0,
-      lastSyncCompletionTime: 0,
-      syncCooldownUntil: 0,
-      syncDebounceTimeout: null,
-      syncThrottleTimeout: null,
-      pendingSyncRequests: [],
-    };
-
-    // Sync coordination constants
-    this.SYNC_DEBOUNCE_WINDOW = 2000; // 2 seconds
-    this.SYNC_COOLDOWN_PERIOD = 5000; // 5 seconds
-    this.SYNC_THROTTLE_PERIOD = 15000; // 15 seconds minimum between auto-syncs (reduced from 60s)
+    // PocketBase uses AutoSyncEngine for real-time sync coordination
 
     // DOM Elements cache
     this.domElements = {
@@ -275,298 +261,82 @@ export default class AppManager {
   }
 
   /**
-   * Request a sync operation with coordination and rate limiting
+   * Request a sync operation - Delegated to AutoSyncEngine
    * @param {string} trigger - The trigger source (manual, timer, visibility, etc.)
    * @param {Object} options - Sync options
    * @returns {Promise<boolean>} Whether sync was executed
    */
   async requestSync(trigger, options = {}) {
-    const now = Date.now();
-    const {
-      skipCooldown = false,
-      skipDebounce = false,
-      skipThrottle = false,
-      priority = "normal",
-    } = options;
-
-    logger.debug(`Sync request from ${trigger}`, {
-      skipCooldown,
-      skipDebounce,
-      skipThrottle,
-      priority,
-      currentTime: now,
-      cooldownUntil: this.syncState.syncCooldownUntil,
-      lastSyncTime: this.syncState.lastSyncTime,
-      syncInProgress: this.syncState.syncInProgress,
-    });
-
-    // Check if sync is enabled and ready
-    if (
-      !this.getSyncEnabled() ||
-      !this.getCloudSync() ||
-      !this.getSyncReady()
-    ) {
-      logger.debug(`Sync request blocked: not ready`, {
-        syncEnabled: this.getSyncEnabled(),
-        hasCloudSync: !!this.getCloudSync(),
-        syncReady: this.getSyncReady(),
-      });
-      return false;
+    // AutoSyncEngine handles all sync coordination for PocketBase
+    logger.debug(`Sync request from ${trigger} delegated to AutoSyncEngine`);
+    
+    // For manual sync, trigger the cloud sync directly
+    if (trigger === "manual" && this.getCloudSync()) {
+      return await this.getCloudSync().sync(false);
     }
-
-    // Manual syncs should always work (bypass most restrictions)
-    if (trigger === "manual") {
-      logger.debug("Manual sync requested - bypassing most restrictions");
-      return this.executeSync(trigger, options);
-    }
-
-    // Check cooldown period (unless skipped for high priority operations)
-    if (!skipCooldown && now < this.syncState.syncCooldownUntil) {
-      logger.debug(
-        `Sync request blocked by cooldown until ${new Date(
-          this.syncState.syncCooldownUntil
-        )}`
-      );
-      return false;
-    }
-
-    // Check if already in progress
-    if (this.syncState.syncInProgress) {
-      logger.debug("Sync already in progress, queuing request");
-      this.syncState.pendingSyncRequests.push({
-        trigger,
-        priority,
-        timestamp: now,
-        options,
-      });
-      return false;
-    }
-
-    // Apply debouncing for rapid successive requests (unless skipped)
-    if (!skipDebounce && this.syncState.syncDebounceTimeout) {
-      logger.debug("Sync request debounced");
-      clearTimeout(this.syncState.syncDebounceTimeout);
-      this.syncState.syncDebounceTimeout = setTimeout(() => {
-        this.executeSync(trigger, options);
-      }, this.SYNC_DEBOUNCE_WINDOW);
-      return false;
-    }
-
-    // Apply throttling for auto-sync operations (unless skipped)
-    // But be more lenient - only throttle if very recent
-    if (!skipThrottle && trigger !== "manual" && trigger !== "initial") {
-      const timeSinceLastSync = now - this.syncState.lastSyncTime;
-      // Reduce throttle period to be less aggressive
-      const throttlePeriod = Math.min(this.SYNC_THROTTLE_PERIOD, 30 * 1000); // Max 30 seconds
-      if (timeSinceLastSync < throttlePeriod) {
-        logger.debug(
-          `Sync request throttled: ${timeSinceLastSync}ms since last sync (throttle: ${throttlePeriod}ms)`
-        );
-        return false;
-      }
-    }
-
-    // Execute the sync
-    return this.executeSync(trigger, options);
+    
+    // All other sync requests are handled automatically by AutoSyncEngine
+    return true;
   }
 
   /**
-   * Execute sync with trigger-specific logic
+   * Execute sync - Delegated to AutoSyncEngine
    * @param {string} trigger - The trigger source
    * @param {Object} options - Sync options
    * @returns {Promise<boolean>} Whether sync was successful
    */
   async executeSync(trigger, options = {}) {
-    const now = Date.now();
-
-    // Mark sync as in progress
-    this.syncState.syncInProgress = true;
-    this.syncState.lastSyncTime = now;
-
-    logger.info(`Executing sync triggered by ${trigger}`, {
-      trigger,
-      options,
-      timestamp: now,
-      timeSinceLastSync: now - this.syncState.lastSyncTime,
-    });
-
-    try {
-      // Trigger-specific sync logic
-      let syncResult;
-
-      switch (trigger) {
-        case "initial":
-          // Initial sync: Full sync with no cooldown
-          logger.debug("Performing initial sync");
-          syncResult = await this.performInitialSync();
-          break;
-
-        case "timer":
-          // Timer sync: Check for changes first, then sync if needed
-          logger.debug("Performing timer-based sync");
-          syncResult = await this.performTimerSync();
-          break;
-
-        case "visibility":
-          // Visibility sync: Quick check for remote changes
-          logger.debug("Performing visibility-based sync");
-          syncResult = await this.performVisibilitySync();
-          break;
-
-        case "manual":
-          // Manual sync: Full sync with user feedback
-          logger.debug("Performing manual sync");
-          syncResult = await this.performManualSync();
-          break;
-
-        case "reload":
-          // Reload sync: Check for cross-device changes
-          logger.debug("Performing reload sync");
-          syncResult = await this.performReloadSync();
-          break;
-
-        default:
-          // Default: Standard sync
-          logger.debug("Performing standard sync");
-          syncResult = await this.performStandardSync();
-      }
-
-      // Mark sync as completed
-      this.syncState.lastSyncCompletionTime = now;
-      this.syncState.syncCooldownUntil = now + this.SYNC_COOLDOWN_PERIOD;
-
-      logger.info(`Sync completed successfully for trigger ${trigger}`, {
-        trigger,
-        result: syncResult,
-        duration: now - this.syncState.lastSyncTime,
-      });
-
-      // Process any pending requests
-      this.processPendingSyncRequests();
-
-      return true;
-    } catch (error) {
-      logger.error(`Sync failed for trigger ${trigger}:`, {
-        trigger,
-        error: error.message,
-        stack: error.stack,
-        duration: now - this.syncState.lastSyncTime,
-      });
-
-      // Mark sync as completed (even on error) to allow retries
-      this.syncState.lastSyncCompletionTime = now;
-      this.syncState.syncCooldownUntil = now + this.SYNC_COOLDOWN_PERIOD;
-
-      // Process any pending requests
-      this.processPendingSyncRequests();
-
-      return false;
-    } finally {
-      this.syncState.syncInProgress = false;
-    }
+    // AutoSyncEngine handles all sync execution for PocketBase
+    logger.debug(`Sync execution for ${trigger} delegated to AutoSyncEngine`);
+    return true;
   }
 
   /**
-   * Process any pending sync requests after current sync completes
+   * Process pending sync requests - Not needed with AutoSyncEngine
    */
   processPendingSyncRequests() {
-    if (this.syncState.pendingSyncRequests.length === 0) {
-      return;
-    }
-
-    // Sort by priority and timestamp
-    this.syncState.pendingSyncRequests.sort((a, b) => {
-      const priorityOrder = { high: 3, normal: 2, low: 1 };
-      const aPriority = priorityOrder[a.priority] || 2;
-      const bPriority = priorityOrder[b.priority] || 2;
-
-      if (aPriority !== bPriority) {
-        return bPriority - aPriority; // Higher priority first
-      }
-
-      return a.timestamp - b.timestamp; // Earlier timestamp first
-    });
-
-    // Take the highest priority request
-    const nextRequest = this.syncState.pendingSyncRequests.shift();
-    logger.debug(`Processing pending sync request: ${nextRequest.trigger}`);
-
-    // Clear the queue (we only process one at a time)
-    this.syncState.pendingSyncRequests = [];
-
-    // Execute the request after a short delay
-    setTimeout(() => {
-      this.requestSync(nextRequest.trigger, nextRequest.options);
-    }, 1000);
+    // AutoSyncEngine handles all sync queuing
+    logger.debug("Sync queuing handled by AutoSyncEngine");
   }
 
   /**
-   * Trigger-specific sync implementations
+   * Trigger-specific sync implementations - Delegated to AutoSyncEngine
    */
   async performInitialSync() {
-    logger.info("Performing initial sync");
-    // Initial sync should be full sync with no restrictions
-    return this.cloudSync.sync(true); // silent = true
+    logger.info("Initial sync delegated to AutoSyncEngine");
+    return true;
   }
 
   async performTimerSync() {
-    logger.info("Performing timer-based sync");
-    // Timer sync should always check for remote changes, not just local changes
-    // This ensures we pick up changes from other devices even if local data is clean
-    try {
-      // Always perform a sync to check for remote changes
-      // The sync operation handler will determine if upload is needed
-      return this.cloudSync.sync(true); // silent = true
-    } catch (error) {
-      logger.error("Timer sync failed:", error);
-      return false;
-    }
+    logger.info("Timer sync delegated to AutoSyncEngine");
+    return true;
   }
 
   async performVisibilitySync() {
-    logger.info("Performing visibility-based sync");
-    // Visibility sync should always check for remote changes when app becomes visible
-    // This ensures users see changes from other devices immediately
-    try {
-      // Always perform a sync to check for remote changes
-      // The sync operation handler will determine if upload is needed
-      return this.cloudSync.sync(true); // silent = true
-    } catch (error) {
-      logger.error("Visibility sync failed:", error);
-      return false;
-    }
+    logger.info("Visibility sync delegated to AutoSyncEngine");
+    return true;
   }
 
   async performManualSync() {
-    logger.info("Performing manual sync");
-    // Manual sync should be full sync with user feedback
-    return this.cloudSync.sync(false); // silent = false
+    logger.info("Manual sync delegated to AutoSyncEngine");
+    return true;
   }
 
   async performReloadSync() {
-    logger.info("Performing reload sync");
-    // Reload sync should check for cross-device changes
-    return this.cloudSync.sync(true); // silent = true
+    logger.info("Reload sync delegated to AutoSyncEngine");
+    return true;
   }
 
   async performStandardSync() {
-    logger.info("Performing standard sync");
-    // Default sync behavior
-    return this.cloudSync.sync(true); // silent = true
+    logger.info("Standard sync delegated to AutoSyncEngine");
+    return true;
   }
 
   /**
-   * Clear any pending sync operations (useful for cleanup)
+   * Clear any pending sync operations - Not needed with AutoSyncEngine
    */
   clearPendingSyncs() {
-    if (this.syncState.syncDebounceTimeout) {
-      clearTimeout(this.syncState.syncDebounceTimeout);
-      this.syncState.syncDebounceTimeout = null;
-    }
-    if (this.syncState.syncThrottleTimeout) {
-      clearTimeout(this.syncState.syncThrottleTimeout);
-      this.syncState.syncThrottleTimeout = null;
-    }
-    this.syncState.pendingSyncRequests = [];
+    // AutoSyncEngine handles all sync cleanup
+    logger.debug("Sync cleanup handled by AutoSyncEngine");
   }
 }

@@ -8,11 +8,9 @@ export default defineConfig(({ mode }) => {
   return {
     // Make environment variables available at build time
     define: {
-      __SERVER_FEATURES_ENABLED__: JSON.stringify(
-        env.VITE_SERVER_FEATURES_ENABLED === "true"
-      ),
       __DEV_MODE__: JSON.stringify(env.VITE_DEV_MODE === "true"),
       __DEMO_MODE__: JSON.stringify(env.VITE_DEMO_MODE === "true"),
+      __POCKETBASE_ENABLED__: JSON.stringify(env.VITE_POCKETBASE_ENABLED === "true"),
     },
   };
 });

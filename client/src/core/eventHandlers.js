@@ -21,8 +21,7 @@ import appUtils from "../utils/appUtils.js";
 import DevTools from "./devTools.js";
 import { CONFIG } from "../config.js";
 
-// Check if server features are enabled (build-time constant)
-const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+// PocketBase sync is always enabled
 
 const logger = createLogger("eventHandlers");
 
@@ -564,18 +563,10 @@ class EventHandlers {
         }
       </div>
 
-      ${
-        SERVER_FEATURES_ENABLED
-          ? `
-      <!-- Cloud data reset controls -->
+      <!-- Cloud sync status -->
       <div style="display: flex; align-items: center; margin-bottom: 10px;">
-        <label style="margin-right: 10px;">Cloud Data:</label>
+        <label style="margin-right: 10px;">Cloud Sync:</label>
         <span style="font-weight: bold; margin-right: 10px;">${currentProvider}</span>
-        <button id="view-cloud-files-btn" style="margin-left: 5px;" ${
-          !this.appManager.getSyncEnabled() || currentProvider === "None"
-            ? "disabled"
-            : ""
-        }>View Files</button>
       </div>
       
       <div id="cloud-clear-status" style="font-size: 12px; color: #888;">
@@ -585,9 +576,6 @@ class EventHandlers {
             : "Cloud sync is not enabled"
         }
       </div>
-      `
-          : ""
-      }
     </div>
     
     <!-- Development information section -->
@@ -638,8 +626,7 @@ class EventHandlers {
         const hasDirtyFlags =
           state.metadata?.currentWeekDirty ||
           state.metadata?.historyDirty ||
-          state.metadata?.dailyTotalsDirty ||
-          state.metadata?.weeklyTotalsDirty;
+          state.metadata?.dailyTotalsDirty;
 
         if (hasDirtyFlags) {
           logger.info(

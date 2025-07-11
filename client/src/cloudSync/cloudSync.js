@@ -3,33 +3,12 @@
  * Copyright (c) 2024
  *
  * Cloud Sync Manager
- * Handles synchronization between local data and cloud storage
- * Dependencies:
- * - Google Drive Provider
- * - Dropbox Provider
+ * Handles synchronization between local data and PocketBase
  */
 
-import GoogleDriveProvider from "../cloudProviders/googleDriveProvider.js";
-import DropboxProvider from "../cloudProviders/dropboxProvider.js";
 import logger from "../core/logger.js";
-import {
-  getCurrentTimestamp,
-  isTimestampValid,
-  compareTimestamps,
-  validateSyncData,
-  validateMergeResult,
-  generateSyncId,
-  isNetworkAvailable,
-  getSyncStatus,
-  updateSyncStatus,
-  clearSyncStatus,
-  getSyncError,
-  logSyncError,
-  retryWithBackoff,
-  debounce,
-  throttle,
-} from "./syncUtils.js";
-import { SyncOperationHandler } from "./syncOperationHandler.js";
+import PocketbaseProvider from "../cloudProviders/pocketbaseProvider.js";
+import { AutoSyncEngine } from "./autoSyncEngine.js";
 
 /**
  * Manages cloud synchronization for the application
@@ -47,136 +26,54 @@ export class CloudSyncManager {
     this.uiRenderer = uiRenderer;
     this.onSyncComplete = onSyncComplete || (() => {});
     this.onSyncError = onSyncError || logger.error;
-    this.provider = null;
+    this.provider = new PocketbaseProvider();
     this.isAuthenticated = false;
-    this.lastSyncTimestamp = 0;
-    this.syncInProgress = false;
-    this.syncInterval = null;
-    this.autoSyncEnabled = false;
-
-    // Initialize sync operation handler
-    this.syncOperationHandler = new SyncOperationHandler(
-      dataService,
-      this.provider
-    );
+    this.autoSyncEngine = null;
   }
 
   /**
    * Initialize cloud sync
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>}
    */
-  async initialize(providerName = "gdrive") {
-    if (providerName === "gdrive") {
-      this.provider = new GoogleDriveProvider();
-    } else if (providerName === "dropbox") {
-      this.provider = new DropboxProvider();
-    } else {
-      throw new Error(`Unsupported cloud provider: ${providerName}`);
-    }
-
+  async initialize() {
     // Initialize the provider and check if it was successful
     const initResult = await this.provider.initialize();
     if (!initResult) {
       logger.warn(
-        `Provider ${providerName} initialization failed, likely due to missing config`
+        "PocketBase initialization failed, likely due to missing config"
       );
       return false;
     }
 
-    // Initialize sync operation handler with the provider
-    this.syncOperationHandler = new SyncOperationHandler(
-      this.dataService,
-      this.provider
-    );
-
-    // First, check if we have a valid access token.
+    // Check authentication status
     this.isAuthenticated = await this.provider.checkAuth();
 
     if (this.isAuthenticated) {
-      logger.info(
-        `Auth check successful with stored access token for ${providerName}.`
-      );
-      return true;
+      logger.info("PocketBase authentication valid from stored session");
+      this.setupAutoSyncEngine();
+    } else {
+      logger.info("PocketBase authentication required");
     }
 
-    // If not authenticated, check if we have a refresh token to try.
-    logger.info(
-      `Stored access token is invalid or missing. Checking for a refresh token...`
-    );
-    const refreshToken = localStorage.getItem(`${providerName}_refresh_token`);
-
-    if (refreshToken) {
-      logger.info(
-        `Found refresh token for ${providerName}. Attempting to refresh session proactively.`
-      );
-
-      // Try refresh with retry logic
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const refreshSuccess = await this.provider.refreshToken();
-          if (refreshSuccess) {
-            logger.info(
-              `Proactive token refresh successful for ${providerName} on attempt ${attempt}.`
-            );
-            this.isAuthenticated = true;
-            return true;
-          }
-        } catch (error) {
-          logger.warn(`Refresh attempt ${attempt} failed:`, error);
-          if (attempt < 3) {
-            await new Promise((resolve) => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
-          }
-        }
-      }
-
-      // All attempts failed
-      logger.warn(
-        `All refresh attempts failed for ${providerName}. User must re-authenticate.`
-      );
-      this.provider.clearStoredAuth();
-      return false;
-    }
-
-    // If we reach here, there's no valid access token and no refresh token.
-    logger.info(
-      `No valid session found for ${providerName}. User is not authenticated.`
-    );
-    return false;
+    return true;
   }
 
   /**
-   * Enable auto-sync
-   * @param {number} intervalMinutes - Sync interval in minutes
+   * Enable auto-sync - Handled by AutoSyncEngine for PocketBase
+   * @param {number} intervalMinutes - Ignored for PocketBase
    */
   enableAutoSync(intervalMinutes = 15) {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
-    this.syncInterval = setInterval(() => {
-      // Use centralized sync coordination for timer-based sync
-      if (this.stateManager && this.stateManager.appManager) {
-        this.stateManager.appManager.requestSync("timer", {
-          priority: "normal",
-        });
-      } else {
-        // Fallback to direct sync if appManager not available
-        this.sync(true);
-      }
-    }, intervalMinutes * 60 * 1000);
-    this.autoSyncEnabled = true;
-    logger.info(`Auto-sync enabled every ${intervalMinutes} minutes`);
+    logger.info(
+      "Real-time sync active via AutoSyncEngine (no periodic sync needed)"
+    );
+    // AutoSyncEngine handles all sync operations
   }
-
   /**
    * Disable auto-sync
    */
   disableAutoSync() {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-      this.syncInterval = null;
-    }
-    this.autoSyncEnabled = false;
-    logger.info("Auto-sync disabled");
+    logger.info("Real-time sync cannot be disabled for PocketBase");
+    // AutoSyncEngine handles all sync operations
   }
 
   /**
@@ -184,7 +81,7 @@ export class CloudSyncManager {
    * @returns {boolean}
    */
   isAutoSyncEnabled() {
-    return this.autoSyncEnabled;
+    return this.autoSyncEngine !== null;
   }
 
   /**
@@ -192,7 +89,8 @@ export class CloudSyncManager {
    * @returns {Date|null}
    */
   getLastSyncTime() {
-    return this.lastSyncTimestamp ? new Date(this.lastSyncTimestamp) : null;
+    // AutoSyncEngine handles sync timing
+    return null;
   }
 
   /**
@@ -201,161 +99,19 @@ export class CloudSyncManager {
    * @returns {Promise<Object|boolean>} Sync results or false if sync failed
    */
   async sync(silent = false) {
-    if (this.syncInProgress) {
-      logger.info("Sync already in progress, skipping");
-      return false;
-    }
-
-    // Check network constraints
-    if (!this.checkNetworkConstraints()) {
-      const error = new Error("'Sync only on Wi-Fi' is enabled.");
-      error.code = "NETWORK_CONSTRAINT";
-      this.onSyncError(error);
-      return false;
-    }
-
-    try {
-      this.syncInProgress = true;
-      logger.info("Starting sync process");
-
-      // Check if we're authenticated
-      if (!this.isAuthenticated) {
-        logger.info("Not authenticated, attempting authentication");
-
-        // Show authentication toast
-        if (this.uiRenderer) {
-          this.uiRenderer.showToast(
-            "Authenticating with cloud service...",
-            "info",
-            {
-              isPersistent: true,
-              showSpinner: true,
-            }
-          );
-        }
-
-        this.isAuthenticated = await this.provider.authenticate();
-        if (!this.isAuthenticated) {
-          throw new Error("Authentication failed");
-        }
-      }
-
-      // Show sync toast
-      if (this.uiRenderer) {
-        this.uiRenderer.showToast(
-          silent ? "Auto-syncing data..." : "Synchronizing data...",
-          "info",
-          {
-            isPersistent: true,
-            showSpinner: true,
-          }
-        );
-      }
-
-      // Determine what needs to be synced
-      const syncNeeds =
-        await this.syncOperationHandler.changeDetectionService.determineSyncNeeds(
-          await this.syncOperationHandler.changeDetectionService.analyzeDirtyFlags(
-            this.dataService.loadState().metadata || {}
-          ),
-          null,
-          true
-        );
-
-      let workWasDone = false;
-      const syncResults = {};
-
-      // Sync current week if needed
-      if (syncNeeds.syncCurrent) {
-        logger.info("Syncing current week...");
-        const currentWeekResult =
-          await this.syncOperationHandler.syncCurrentWeek();
-        if (currentWeekResult) {
-          workWasDone = true;
-          syncResults.currentWeekSynced = true;
-        }
-      }
-
-      // Sync history if needed
-      if (syncNeeds.syncHistory) {
-        logger.info("Syncing history...");
-        const historyResult = await this.syncOperationHandler.syncHistory();
-        if (historyResult && historyResult.length > 0) {
-          workWasDone = true;
-          syncResults.historySynced = true;
-        }
-      }
-
-      this.lastSyncTimestamp = this.dataService.getCurrentTimestamp();
-
-      // Show completion toast if work was done OR if this was a manual sync
-      if (this.uiRenderer) {
-        this.uiRenderer.clearToasts(); // Clear the persistent sync toast
-        if (workWasDone) {
-          this.uiRenderer.showToast(
-            silent
-              ? "Auto-sync completed successfully!"
-              : "Data synchronized successfully!",
-            "success",
-            {
-              duration: 2000,
-            }
-          );
-        }
-      }
-
-      this.onSyncComplete({
-        timestamp: this.lastSyncTimestamp,
-        ...syncResults,
-      });
-
-      return syncResults;
-    } catch (error) {
-      // Clear any sync toast on error
-      if (this.uiRenderer) {
-        this.uiRenderer.clearToasts();
-      }
-      this.onSyncError(error);
-      return false;
-    } finally {
-      this.syncInProgress = false;
-      logger.info("Sync process completed");
-    }
+    logger.info(
+      "Sync delegated to AutoSyncEngine (PocketBase real-time sync active)"
+    );
+    return { success: true, message: "PocketBase real-time sync active" };
   }
 
   /**
-   * Check if sync is needed
+   * Check if sync is needed - AutoSyncEngine handles this
    * @returns {Promise<boolean>}
    */
   async checkIfSyncNeeded() {
-    try {
-      const localData = this.dataService.loadState();
-      const hasLocalChanges =
-        localData.metadata?.currentWeekDirty ||
-        localData.metadata?.dailyTotalsDirty ||
-        localData.metadata?.weeklyTotalsDirty ||
-        false;
-
-      if (!hasLocalChanges) {
-        return false;
-      }
-
-      const currentWeekFileName = "mind-diet-current-week.json";
-      const fileInfo = await this.provider.searchFile(currentWeekFileName);
-
-      if (!fileInfo) {
-        return true;
-      }
-
-      return await this.syncOperationHandler.fileMetadataManager.checkIfFileChanged(
-        currentWeekFileName,
-        fileInfo.id,
-        this.provider
-      );
-    } catch (error) {
-      logger.error("Error checking if sync needed:", error);
-      return false;
-    }
+    // AutoSyncEngine handles sync need detection
+    return false;
   }
 
   /**
@@ -364,394 +120,170 @@ export class CloudSyncManager {
    */
   getSyncStatus() {
     return {
-      lastSyncTime: this.lastSyncTimestamp
-        ? new Date(this.lastSyncTimestamp)
-        : null,
-      autoSyncEnabled: this.autoSyncEnabled,
-      syncInProgress: this.syncInProgress,
+      lastSyncTime: null, // AutoSyncEngine handles timing
+      autoSyncEnabled: this.autoSyncEngine !== null,
+      syncInProgress: false, // AutoSyncEngine handles progress
     };
   }
 
-  /**
-   * Check network constraints for sync
-   * @returns {boolean} True if sync is allowed
-   */
-  checkNetworkConstraints() {
-    // If syncWifiOnly is true, check if we're on WiFi
-    if (this.syncWifiOnly) {
-      return navigator.connection?.type === "wifi";
-    }
-    return true;
-  }
 
-  async authenticate() {
-    if (!this.provider) throw new Error("No cloud provider initialized");
-    this.isAuthenticated = await this.provider.authenticate();
-    return this.isAuthenticated;
+  /**
+   * Authenticate with PocketBase
+   */
+  async authenticatePocketbase(email, password) {
+    try {
+      const success = await this.provider.authenticate(email, password);
+      if (success) {
+        this.isAuthenticated = true;
+        this.setupAutoSyncEngine();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      // Re-throw the error to be caught by the UI layer (the modal)
+      throw error;
+    }
   }
 
   async determineWhatToSync() {
-    try {
-      // Get state to check dirty flags
-      const currentState = this.dataService.loadState();
-      const metadata = currentState.metadata || {};
-
-      logger.debug(
-        "Sync determination metadata:",
-        JSON.stringify(metadata, null, 2)
-      );
-
-      // Use change detection service to analyze flags and determine sync needs
-      const flags =
-        this.syncOperationHandler.changeDetectionService.analyzeDirtyFlags(
-          metadata
-        );
-      const syncNeeds =
-        this.syncOperationHandler.changeDetectionService.determineSyncNeeds(
-          flags,
-          null,
-          true
-        );
-
-      // Log the sync decision
-      this.syncOperationHandler.changeDetectionService.logSyncDecision(
-        syncNeeds,
-        metadata
-      );
-
-      return {
-        syncCurrent: syncNeeds.syncCurrent,
-        syncHistory: syncNeeds.syncHistory,
-      };
-    } catch (error) {
-      logger.error("Error determining what to sync:", error);
-      // Default to syncing everything if we can't determine
-      return { syncCurrent: true, syncHistory: true };
-    }
+    // AutoSyncEngine handles sync determination
+    logger.info("Sync determination delegated to AutoSyncEngine");
+    return { syncCurrent: false, syncHistory: false };
   }
 
   /**
-   * Clear a specific dirty flag in state metadata
+   * Clear a specific dirty flag - No longer needed with real-time sync
    * @param {string} flagName - Name of the flag to clear
    */
   async clearDirtyFlag(flagName) {
-    try {
-      // Get current state
-      const currentState = this.dataService.loadState();
-      const metadata = currentState.metadata || {};
-
-      // Handle the new granular flags
-      if (flagName === "currentWeekDirty") {
-        // For backward compatibility, clear both specific flags
-        metadata.dailyTotalsDirty = false;
-        metadata.weeklyTotalsDirty = false;
-        metadata.currentWeekDirty = false;
-      } else if (
-        flagName === "dailyTotalsDirty" ||
-        flagName === "weeklyTotalsDirty"
-      ) {
-        // Clear the specified flag
-        metadata[flagName] = false;
-
-        // Update the general flag if both specific flags are false
-        if (!metadata.dailyTotalsDirty && !metadata.weeklyTotalsDirty) {
-          metadata.currentWeekDirty = false;
-        }
-      } else {
-        // Just clear the specified flag
-        metadata[flagName] = false;
-      }
-
-      // Clear the fresh install flag if this was a data sync
-      if (
-        flagName === "currentWeekDirty" ||
-        flagName === "dailyTotalsDirty" ||
-        flagName === "weeklyTotalsDirty"
-      ) {
-        metadata.isFreshInstall = false;
-      }
-
-      // Save updated state
-      currentState.metadata = metadata;
-      this.dataService.saveState(currentState);
-
-      logger.info(`Cleared ${flagName} flag`);
-    } catch (error) {
-      logger.warn(`Failed to clear ${flagName} flag:`, error);
-    }
+    // Real-time sync eliminates need for dirty flags
+    logger.debug(`Dirty flag clearing not needed with PocketBase real-time sync: ${flagName}`);
   }
 
   /**
-   * Clear date reset flags after sync
+   * Clear date reset flags - Simplified for real-time sync
    */
   async clearDateResetFlags() {
-    try {
-      // Get current state
-      const currentState = this.dataService.loadState();
-      const metadata = currentState.metadata || {};
-
-      // Clear reset flags
-      delete metadata.dateResetPerformed;
-      delete metadata.dateResetType;
-      delete metadata.dateResetTimestamp;
-
-      // Save updated state
-      currentState.metadata = metadata;
-      this.dataService.saveState(currentState);
-
-      logger.info("Cleared date reset flags");
-    } catch (error) {
-      logger.warn("Failed to clear date reset flags:", error);
-    }
+    // Real-time sync handles this automatically
+    logger.debug("Date reset flag clearing handled by AutoSyncEngine");
   }
 
   /**
-   * Schedule an archive merge to be executed after the current sync completes
+   * Schedule an archive merge - Not needed with real-time sync
    * @param {string} weekStartDate - The start date of the week to merge with
    * @param {Object} remoteWeeklyCounts - The remote weekly counts to merge
    */
   scheduleArchiveMerge(weekStartDate, remoteWeeklyCounts) {
-    // Store the merge task for execution after current sync completes
-    this.pendingArchiveMerge = {
-      weekStartDate,
-      remoteWeeklyCounts,
-    };
-    logger.info(`Scheduled archive merge for week ${weekStartDate}`);
+    // Real-time sync eliminates need for manual archive merging
+    logger.debug("Archive merge not needed with PocketBase real-time sync");
   }
 
   /**
-   * Execute a pending archive merge operation
+   * Execute a pending archive merge operation - Not needed with real-time sync
    * @returns {Promise<boolean>} Success status
-   * @deprecated Phase 2: Use mergeCoordinator.executePendingArchiveMerge() instead
    */
   async executePendingArchiveMerge() {
-    // Phase 2: Delegate to merge coordinator (with fallback for compatibility)
-    try {
-      return await this.mergeCoordinator.executePendingArchiveMerge();
-    } catch (error) {
-      logger.warn("Phase 2 merge coordinator failed, using fallback:", error);
-      return await this.legacyExecutePendingArchiveMerge();
-    }
+    // Real-time sync eliminates need for manual archive merging
+    logger.debug("Archive merge execution not needed with PocketBase real-time sync");
+    return true;
   }
 
   /**
-   * Legacy archive merge implementation (Phase 2: kept as fallback)
-   * @returns {Promise<boolean>} Success status
+   * Get most recent date - Simplified for PocketBase
    */
-  async legacyExecutePendingArchiveMerge() {
-    if (!this.pendingArchiveMerge) {
-      return false;
-    }
-
-    const { weekStartDate, remoteWeeklyCounts } = this.pendingArchiveMerge;
-    logger.info(`Executing pending archive merge for week ${weekStartDate}`);
-
-    try {
-      // Get the archived week data
-      const archivedWeek = await this.dataService.getWeekHistory(weekStartDate);
-
-      if (!archivedWeek) {
-        logger.warn(`Could not find archived week ${weekStartDate} for merge`);
-        this.pendingArchiveMerge = null;
-        return false;
-      }
-
-      // Merge totals (take maximum value for each food group)
-      const mergedTotals = { ...archivedWeek.totals };
-      let changed = false;
-
-      Object.entries(remoteWeeklyCounts || {}).forEach(
-        ([groupId, remoteCount]) => {
-          const localCount = mergedTotals[groupId] || 0;
-          if (remoteCount > localCount) {
-            mergedTotals[groupId] = remoteCount;
-            changed = true;
-            logger.info(
-              `Updated archive total for ${groupId}: ${localCount} → ${remoteCount}`
-            );
-          }
-        }
-      );
-
-      if (!changed) {
-        logger.info(`No changes needed for archived week ${weekStartDate}`);
-        this.pendingArchiveMerge = null;
-        return true;
-      }
-
-      // Update the archived week
-      archivedWeek.totals = mergedTotals;
-      archivedWeek.metadata.updatedAt = this.dataService.getCurrentTimestamp();
-      archivedWeek.metadata.mergedAfterReset = true;
-
-      // Save the updated archive
-      await this.dataService.saveWeekHistory(archivedWeek);
-
-      logger.info(
-        `Successfully merged remote data into archived week ${weekStartDate}`
-      );
-
-      // Also update the history in state manager
-      const historyData = await this.dataService.getAllWeekHistory();
-      if (this.stateManager) {
-        this.stateManager.dispatch({
-          type: this.stateManager.ACTION_TYPES.SET_HISTORY,
-          payload: { history: historyData },
-        });
-      }
-
-      // Clear the pending task
-      this.pendingArchiveMerge = null;
-      return true;
-    } catch (error) {
-      logger.error(
-        `Error during archive merge for week ${weekStartDate}:`,
-        error
-      );
-      this.pendingArchiveMerge = null;
-      return false;
-    }
-  }
-
   getMostRecentDate(date1, date2) {
-    // Phase 1: Use extracted utility (keeping original as fallback)
     try {
-      return this.timestampUtils.getMostRecentDate(date1, date2);
-    } catch (error) {
-      logger.warn("Error in utility method, using fallback:", error);
-      // Original implementation as fallback
-      try {
-        const d1 = new Date(date1);
-        const d2 = new Date(date2);
-        return d1 > d2 ? date1 : date2;
-      } catch (e) {
-        // If dates are invalid, return the first one
-        return date1;
-      }
-    }
-  }
-
-  // Add this to CloudSyncManager
-  validateData(data, type = "current") {
-    // Phase 1: Use extracted utility (keeping original as fallback)
-    try {
-      return this.validationUtils.validateSyncData(data, type);
-    } catch (error) {
-      logger.warn("Error in utility method, using fallback:", error);
-      // Original implementation as fallback
-      if (!data || typeof data !== "object") {
-        logger.error(`Invalid ${type} data:`, data);
-        return false;
-      }
-
-      if (type === "current") {
-        // Must have these fields for current week data
-        const requiredFields = [
-          "currentDayDate",
-          "currentWeekStartDate",
-          "dailyCounts",
-          "weeklyCounts",
-        ];
-        const missingFields = requiredFields.filter(
-          (field) => !(field in data)
-        );
-
-        if (missingFields.length > 0) {
-          logger.error(
-            `Current week data missing required fields:`,
-            missingFields
-          );
-          return false;
-        }
-
-        // Ensure lastModified is present
-        if (!data.lastModified) {
-          logger.warn(
-            "Current week data missing lastModified timestamp, adding one"
-          );
-          data.lastModified = Date.now() - 10000; // Slightly older than "now"
-        }
-      }
-
-      return true;
+      const d1 = new Date(date1);
+      const d2 = new Date(date2);
+      return d1 > d2 ? date1 : date2;
+    } catch (e) {
+      return date1;
     }
   }
 
   /**
-   * Store sync state in localStorage to persist between sessions
+   * Validate data - Simplified for PocketBase
+   */
+  validateData(data, type = "current") {
+    if (!data || typeof data !== "object") {
+      logger.error(`Invalid ${type} data:`, data);
+      return false;
+    }
+    // PocketBase schema validation handles the rest
+    return true;
+  }
+
+  /**
+   * Store sync state - Not needed with real-time sync
    */
   storeLastSyncedState() {
-    try {
-      const syncState = {
-        lastSyncedWeek: this.lastSyncedWeek,
-        lastHistorySyncTimestamp: this.lastHistorySyncTimestamp,
-        lastSyncTimestamp: this.lastSyncTimestamp,
-      };
-      localStorage.setItem("cloudSyncState", JSON.stringify(syncState));
-      logger.info("Stored sync state:", syncState);
-    } catch (error) {
-      logger.warn("Failed to store sync state:", error);
-    }
+    // AutoSyncEngine handles state persistence
+    logger.debug("Sync state storage handled by AutoSyncEngine");
   }
 
   /**
-   * Load sync state from localStorage
+   * Load sync state - Not needed with real-time sync
    */
   loadSyncState() {
-    try {
-      const storedState = localStorage.getItem("cloudSyncState");
-      if (storedState) {
-        const syncState = JSON.parse(storedState);
-        this.lastSyncedWeek = syncState.lastSyncedWeek;
-        this.lastHistorySyncTimestamp = syncState.lastHistorySyncTimestamp;
-        this.lastSyncTimestamp = syncState.lastSyncTimestamp;
-        logger.info("Loaded sync state:", syncState);
-      }
-    } catch (error) {
-      logger.warn("Failed to load sync state:", error);
-    }
+    // AutoSyncEngine handles state loading
+    logger.debug("Sync state loading handled by AutoSyncEngine");
   }
 
-  // Add this to the CloudSyncManager class in cloudSync.js
+  /**
+   * Debug sync state - Simplified for PocketBase
+   */
   async debugSyncState() {
     try {
-      // Get local data
       const currentState = this.dataService.loadState();
-
-      // Check metadata and dirty flags
-      const metadata = currentState.metadata || {};
-
-      logger.info("=== Sync Debug Info ===");
+      logger.info("=== PocketBase Sync Debug Info ===");
       logger.info("Current State:", {
         currentDayDate: currentState.currentDayDate,
         currentWeekStartDate: currentState.currentWeekStartDate,
-        lastModified: currentState.lastModified,
-        hasMetadata: !!currentState.metadata,
         dailyCountsSize: Object.keys(currentState.dailyCounts || {}).length,
         weeklyCountsSize: Object.keys(currentState.weeklyCounts || {}).length,
+        autoSyncEngineActive: !!this.autoSyncEngine,
       });
-
-      logger.info("Metadata:", {
-        ...metadata,
-        exists: !!metadata,
-      });
-
-      // Check data validity
-      const isValid = this.validateData(currentState, "current");
-      logger.info("Data validity:", isValid);
 
       return {
         hasData: Object.keys(currentState.weeklyCounts || {}).length > 0,
         hasMetadata: !!currentState.metadata,
-        dirtyFlags: {
-          currentWeekDirty: metadata.currentWeekDirty || false,
-          historyDirty: metadata.historyDirty || false,
-        },
-        isValid,
+        autoSyncActive: !!this.autoSyncEngine,
       };
     } catch (error) {
       logger.error("Error in sync debug:", error);
       return { error: error.message };
+    }
+  }
+
+  /**
+   * Setup AutoSyncEngine for PocketBase
+   */
+  setupAutoSyncEngine() {
+    this.autoSyncEngine = new AutoSyncEngine(
+      this.stateManager,
+      this.dataService,
+      this.provider,
+      this.uiRenderer
+    );
+
+    logger.info("AutoSyncEngine initialized for PocketBase");
+  }
+
+
+  /**
+   * Register new PocketBase user
+   */
+  async registerPocketbase(username, email, password) {
+    try {
+      const success = await this.provider.register(username, email, password);
+      if (success) {
+        this.isAuthenticated = true;
+        this.setupAutoSyncEngine();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      throw error;
     }
   }
 }

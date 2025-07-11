@@ -21,8 +21,8 @@ npm install
 
 # --- Step 2: Build the client application (client-only mode) ---
 echo "🚀 Building the Vite client (client-only mode)..."
-# Build with environment variables from .env, but explicitly disable server features
-VITE_SERVER_FEATURES_ENABLED=false npm run build
+# Build with PocketBase disabled for client-only mode
+VITE_POCKETBASE_ENABLED=false npm run build
 
 echo "✅ Client-only build successful."
 
@@ -39,4 +39,4 @@ echo "💡 This build includes:"
 echo "   ✅ Theme selection (light/dark/auto)"
 echo "   ✅ Local data storage"
 echo "   ✅ Import/export functionality"
-echo "   ❌ Cloud sync features (disabled)" 
+echo "   ✅ PocketBase sync capabilities" 

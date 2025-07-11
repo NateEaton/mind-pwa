@@ -19,9 +19,11 @@
 import dataService from "./dataService.js";
 import stateManager from "./stateManager.js";
 import { createLogger } from "./logger.js";
+import { PocketbaseAuthModal } from "../auth/pocketbaseAuthModal.js";
+import CloudSyncManager from "../cloudSync/cloudSync.js";
 
-// Check if server features are enabled (build-time constant)
-const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+// Check if PocketBase is enabled at build time
+const POCKETBASE_ENABLED = typeof __POCKETBASE_ENABLED__ !== 'undefined' ? __POCKETBASE_ENABLED__ : false;
 
 const logger = createLogger("setupWizard");
 
@@ -70,6 +72,74 @@ class SetupWizard {
     this.setupKeyboardNavigation();
 
     this.initialized = true;
+  }
+
+  async initiatePocketbaseAuth() {
+    // Store wizard state so we can resume after authentication
+    localStorage.setItem(
+      "setupWizardState",
+      JSON.stringify({
+        isActive: true,
+        selections: this.selections,
+      })
+    );
+
+    // Initialize cloud sync with PocketBase provider
+    const cloudSync = new CloudSyncManager(
+      dataService,
+      stateManager,
+      null, // uiRenderer not needed for basic auth
+      () => {}, // onSyncComplete
+      (error) => logger.error("Sync error:", error) // onSyncError
+    );
+
+    try {
+      const initResult = await cloudSync.initialize("pocketbase");
+
+      if (!initResult) {
+        this.showError("Failed to initialize PocketBase connection");
+        return;
+      }
+
+      // Show PocketBase authentication modal
+      const authModal = new PocketbaseAuthModal(
+        cloudSync,
+        async (authResult) => {
+          // Success callback
+          logger.info(
+            "PocketBase authentication successful in wizard:",
+            authResult
+          );
+
+          // Save authentication state
+          this.selections.cloudSyncAuthenticated = true;
+          this.selections.cloudSyncUserInfo = {
+            email: authResult.email,
+            provider: "PocketBase",
+            type: authResult.type,
+          };
+
+          // Store cloud sync instance for the rest of the app
+          if (typeof setCloudSyncState === "function") {
+            setCloudSyncState(cloudSync);
+          }
+
+          // Continue to completion step
+          this.currentStep = WIZARD_STEPS.COMPLETE;
+          this.renderCurrentStep();
+        },
+        () => {
+          // Cancel callback
+          logger.info("PocketBase authentication cancelled in wizard");
+          // Stay on current step, user can try again
+        }
+      );
+
+      authModal.show("signin");
+    } catch (error) {
+      logger.error("Failed to initialize PocketBase in wizard:", error);
+      this.showError("Failed to connect to PocketBase: " + error.message);
+    }
   }
 
   async start() {
@@ -136,19 +206,19 @@ class SetupWizard {
         content = this.renderAppearanceStep();
         break;
       case WIZARD_STEPS.CLOUD_SYNC:
-        if (SERVER_FEATURES_ENABLED) {
+        if (POCKETBASE_ENABLED) {
           content = this.renderCloudSyncStep();
         } else {
-          // Skip to complete if server features are disabled
+          // Skip to complete if PocketBase is disabled
           this.currentStep = WIZARD_STEPS.COMPLETE;
           content = await this.renderCompleteStep();
         }
         break;
       case WIZARD_STEPS.CLOUD_PROVIDER:
-        if (SERVER_FEATURES_ENABLED) {
+        if (POCKETBASE_ENABLED) {
           content = this.renderCloudProviderStep();
         } else {
-          // Skip to complete if server features are disabled
+          // Skip to complete if PocketBase is disabled
           this.currentStep = WIZARD_STEPS.COMPLETE;
           content = await this.renderCompleteStep();
         }
@@ -160,7 +230,7 @@ class SetupWizard {
 
     if (content) {
       this.contentElement.innerHTML = content;
-      await this.attachStepEventListeners();
+      await this.setupStepEventListeners();
     }
   }
 
@@ -184,7 +254,7 @@ class SetupWizard {
   }
 
   renderFirstDayStep() {
-    const totalSteps = SERVER_FEATURES_ENABLED ? 3 : 2;
+    const totalSteps = POCKETBASE_ENABLED ? 3 : 2;
     return `
       <div class="wizard-header">
         <h2>First Day of Week</h2>
@@ -227,8 +297,8 @@ class SetupWizard {
   }
 
   renderAppearanceStep() {
-    const totalSteps = SERVER_FEATURES_ENABLED ? 3 : 2;
-    const nextStep = SERVER_FEATURES_ENABLED ? "Continue" : "Finish";
+    const totalSteps = POCKETBASE_ENABLED ? 3 : 2;
+    const nextStep = POCKETBASE_ENABLED ? "Continue" : "Finish";
     return `
       <div class="wizard-header">
         <h2>Appearance</h2>
@@ -317,116 +387,166 @@ class SetupWizard {
 
   renderCloudProviderStep() {
     return `
-      <div class="wizard-header">
+    <div class="wizard-step" id="cloud-provider-step">
+      <div class="step-header">
         <h2>Choose Cloud Provider</h2>
+        <p>Select your preferred cloud storage provider for syncing your data across devices.</p>
       </div>
-      <div class="wizard-content">
-        <div class="wizard-step">
-          <p>Select the cloud provider you'd like to connect to:</p>
-          <div class="wizard-form">
-            <div class="radio-group">
-              <label>
-                <input type="radio" name="cloudProvider" value="gdrive"
-                  ${
-                    this.selections.cloudSyncProvider === "gdrive"
-                      ? "checked"
-                      : ""
-                  }>
-                <span>Google Drive</span>
-              </label>
-              <label>
-                <input type="radio" name="cloudProvider" value="dropbox"
-                  ${
-                    this.selections.cloudSyncProvider === "dropbox"
-                      ? "checked"
-                      : ""
-                  }>
-                <span>Dropbox</span>
-              </label>
+      
+      <div class="provider-options">
+        <div class="provider-option">
+          <input type="radio" id="provider-gdrive" name="cloudProvider" value="gdrive">
+          <label for="provider-gdrive" class="provider-card">
+            <div class="provider-icon">📗</div>
+            <div class="provider-details">
+              <h3>Google Drive</h3>
+              <p>Sync with your Google Drive account. Data is stored in a private app folder.</p>
+              <ul class="provider-features">
+                <li>✓ Automatic OAuth authentication</li>
+                <li>✓ Data stored securely in Google Drive</li>
+                <li>✓ Works across all your devices</li>
+              </ul>
             </div>
-          </div>
-          <div class="wizard-note">
-            <p><strong>Note:</strong> If you've used this app on another device and synced data to the cloud, your existing data will be downloaded to this device on first sync.</p>
+          </label>
+        </div>
+
+        <div class="provider-option">
+          <input type="radio" id="provider-dropbox" name="cloudProvider" value="dropbox">
+          <label for="provider-dropbox" class="provider-card">
+            <div class="provider-icon">📘</div>
+            <div class="provider-details">
+              <h3>Dropbox</h3>
+              <p>Sync with your Dropbox account. Data is stored in a dedicated app folder.</p>
+              <ul class="provider-features">
+                <li>✓ Automatic OAuth authentication</li>
+                <li>✓ Data stored securely in Dropbox</li>
+                <li>✓ Works across all your devices</li>
+              </ul>
+            </div>
+          </label>
+        </div>
+
+        ${
+          import.meta.env.VITE_POCKETBASE_ENABLED === "true"
+            ? `
+        <div class="provider-option">
+          <input type="radio" id="provider-pocketbase" name="cloudProvider" value="pocketbase">
+          <label for="provider-pocketbase" class="provider-card">
+            <div class="provider-icon">🗄️</div>
+            <div class="provider-details">
+              <h3>PocketBase</h3>
+              <p>Real-time sync with your own PocketBase server. Fast and private.</p>
+              <ul class="provider-features">
+                <li>✓ Real-time synchronization</li>
+                <li>✓ Offline support with auto-sync</li>
+                <li>✓ Email/password authentication</li>
+                <li>✓ Self-hosted privacy</li>
+              </ul>
+            </div>
+          </label>
+        </div>
+        `
+            : ""
+        }
+      </div>
+
+      <div class="step-actions">
+        <button class="btn-secondary" id="cloud-provider-back-btn">Back</button>
+        <button class="btn-primary" id="cloud-provider-connect-btn" disabled>Connect</button>
+      </div>
+    </div>
+  `;
+  }
+
+  renderCompleteStep() {
+    const cloudSyncEnabled = this.selections.enableCloudSync;
+    const cloudSyncAuthenticated = this.selections.cloudSyncAuthenticated;
+    const userInfo = this.selections.cloudSyncUserInfo;
+
+    let cloudSyncStatus = "";
+    if (cloudSyncEnabled) {
+      if (cloudSyncAuthenticated && userInfo) {
+        cloudSyncStatus = `
+        <div class="setup-success">
+          <span class="success-icon">✅</span>
+          <div class="success-details">
+            <strong>Successfully connected to ${userInfo.provider}!</strong>
+            <br><small>Account: ${userInfo.email}</small>
+            ${
+              userInfo.type === "register"
+                ? "<br><small>New account created</small>"
+                : ""
+            }
           </div>
         </div>
-      </div>
-      <div class="wizard-footer">
-        <div class="wizard-progress">Step 4 of 4</div>
-        <div class="wizard-buttons">
-          <button id="cloud-provider-back-btn" class="secondary-btn">Back</button>
-          <button id="cloud-provider-connect-btn" class="${
-            this.selections.cloudSyncProvider ? "primary-btn" : "small-btn"
-          }" ${
-      !this.selections.cloudSyncProvider ? "disabled" : ""
-    }>Connect</button>
+      `;
+      } else {
+        cloudSyncStatus = `
+        <div class="setup-warning">
+          <span class="warning-icon">⚠️</span>
+          <div class="warning-details">
+            <strong>Cloud sync setup was not completed</strong>
+            <br><small>You can finish setup later from Settings</small>
+          </div>
+        </div>
+      `;
+      }
+    } else {
+      cloudSyncStatus = `
+      <div class="setup-info">
+        <span class="info-icon">ℹ️</span>
+        <div class="info-details">
+          <strong>Cloud sync disabled</strong>
+          <br><small>Your data will be stored locally only</small>
         </div>
       </div>
     `;
-  }
-
-  async renderCompleteStep() {
-    let syncMessage = "";
-
-    if (SERVER_FEATURES_ENABLED && this.selections.enableCloudSync) {
-      if (this.selections.cloudSyncProvider) {
-        // Check connection status
-        try {
-          const isConnected = await this.verifyCloudConnection();
-          syncMessage = isConnected
-            ? `Successfully connected to ${
-                this.selections.cloudSyncProvider === "gdrive"
-                  ? "Google Drive"
-                  : "Dropbox"
-              }!`
-            : `Failed to connect to ${
-                this.selections.cloudSyncProvider === "gdrive"
-                  ? "Google Drive"
-                  : "Dropbox"
-              }. You can try again later from Settings.`;
-        } catch (error) {
-          logger.error("Error verifying cloud connection:", error);
-          syncMessage =
-            "There was an error verifying the cloud connection. You can try again from Settings.";
-        }
-      } else {
-        syncMessage =
-          "Cloud sync setup was not completed. You can finish setting it up from Settings.";
-      }
-    } else if (SERVER_FEATURES_ENABLED) {
-      syncMessage = "You can enable cloud sync anytime from the settings menu.";
     }
 
     return `
-      <div class="wizard-header">
+    <div class="wizard-step" id="complete-step">
+      <div class="step-header">
         <h2>Setup Complete!</h2>
+        <p>Your MIND Diet Tracker is ready to use.</p>
       </div>
-      <div class="wizard-content">
-        <div class="wizard-step">
-          <p>Your preferences have been saved. You're ready to start tracking your MIND diet journey.</p>
-          ${
-            syncMessage
-              ? `
-          <div class="sync-status ${
-            this.selections.enableCloudSync
-              ? syncMessage.includes("Successfully")
-                ? "success"
-                : "warning"
-              : ""
-          }">
-            <p>${syncMessage}</p>
-          </div>
-          `
-              : ""
+      
+      <div class="setup-summary">
+        <div class="summary-item">
+          <strong>Week starts on:</strong> ${
+            this.selections.firstDayOfWeek === "Monday" ? "Monday" : "Sunday"
           }
         </div>
-      </div>
-      <div class="wizard-footer">
-        <div class="wizard-buttons">
-          <div></div>
-          <button id="complete-finish-btn" class="primary-btn">Start Using App</button>
+        
+        <div class="summary-item">
+          <strong>Theme:</strong> ${this.capitalizeFirst(this.selections.theme)}
+        </div>
+        
+        <div class="summary-item">
+          <strong>Cloud sync:</strong>
+          ${cloudSyncStatus}
         </div>
       </div>
-    `;
+
+      ${
+        cloudSyncEnabled && cloudSyncAuthenticated
+          ? `
+        <div class="next-steps">
+          <h3>What happens next?</h3>
+          <ul>
+            <li>Your data will automatically sync across all your devices</li>
+            <li>Changes are saved in real-time</li>
+            <li>You can manage sync settings anytime from the Settings menu</li>
+          </ul>
+        </div>
+      `
+          : ""
+      }
+
+      <div class="step-actions">
+        <button class="btn-primary" id="complete-finish-btn">Start Using App</button>
+      </div>
+    </div>
+  `;
   }
 
   async verifyCloudConnection() {
@@ -435,7 +555,7 @@ class SetupWizard {
     return true;
   }
 
-  attachStepEventListeners() {
+  setupStepEventListeners() {
     switch (this.currentStep) {
       case WIZARD_STEPS.WELCOME:
         document
@@ -447,7 +567,6 @@ class SetupWizard {
         break;
 
       case WIZARD_STEPS.FIRST_DAY:
-        // Back button
         document
           .getElementById("first-day-back-btn")
           ?.addEventListener("click", () => {
@@ -455,27 +574,18 @@ class SetupWizard {
             this.renderCurrentStep();
           });
 
-        // Next button
         document
           .getElementById("first-day-next-btn")
-          ?.addEventListener("click", async () => {
+          ?.addEventListener("click", () => {
             const selectedDay = document.querySelector(
               'input[name="firstDay"]:checked'
             )?.value;
             if (selectedDay) {
               this.selections.firstDayOfWeek = selectedDay;
-              await dataService.savePreference("weekStartDay", selectedDay);
               this.currentStep = WIZARD_STEPS.APPEARANCE;
               this.renderCurrentStep();
             }
           });
-
-        // Radio button change
-        document.querySelectorAll('input[name="firstDay"]').forEach((radio) => {
-          radio.addEventListener("change", (e) => {
-            this.selections.firstDayOfWeek = e.target.value;
-          });
-        });
         break;
 
       case WIZARD_STEPS.APPEARANCE:
@@ -488,111 +598,97 @@ class SetupWizard {
 
         document
           .getElementById("appearance-next-btn")
-          ?.addEventListener("click", async () => {
-            // Save theme preference
+          ?.addEventListener("click", () => {
             const selectedTheme = document.querySelector(
               'input[name="theme"]:checked'
             )?.value;
             if (selectedTheme) {
               this.selections.theme = selectedTheme;
-              await dataService.savePreference("theme", selectedTheme);
-            }
-
-            if (SERVER_FEATURES_ENABLED) {
-              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
-            } else {
-              // Skip cloud sync steps in local-only mode
-              this.selections.enableCloudSync = false;
-              this.currentStep = WIZARD_STEPS.COMPLETE;
-            }
-            this.renderCurrentStep();
-          });
-
-        // Radio button changes for theme
-        document.querySelectorAll('input[name="theme"]').forEach((radio) => {
-          radio.addEventListener("change", (e) => {
-            this.selections.theme = e.target.value;
-          });
-        });
-
-        break;
-
-      case WIZARD_STEPS.CLOUD_SYNC:
-        if (SERVER_FEATURES_ENABLED) {
-          document
-            .getElementById("cloud-sync-back-btn")
-            ?.addEventListener("click", () => {
-              this.currentStep = WIZARD_STEPS.APPEARANCE;
-              this.renderCurrentStep();
-            });
-
-          document
-            .getElementById("cloud-sync-next-btn")
-            ?.addEventListener("click", async () => {
-              const enableSync =
-                document.querySelector('input[name="cloudSync"]:checked')
-                  ?.value === "true";
-
-              this.selections.enableCloudSync = enableSync;
-              await dataService.savePreference("cloudSyncEnabled", enableSync);
-
-              if (enableSync) {
-                this.currentStep = WIZARD_STEPS.CLOUD_PROVIDER;
+              if (POCKETBASE_ENABLED) {
+                this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
               } else {
+                this.selections.enableCloudSync = false;
                 this.currentStep = WIZARD_STEPS.COMPLETE;
               }
               this.renderCurrentStep();
-            });
+            }
+          });
+        break;
 
-          // Radio button change
-          document
-            .querySelectorAll('input[name="cloudSync"]')
-            .forEach((radio) => {
-              radio.addEventListener("change", (e) => {
-                this.selections.enableCloudSync = e.target.value === "true";
-                this.renderCurrentStep(); // Re-render to update step count
-              });
-            });
-        }
+      case WIZARD_STEPS.CLOUD_SYNC:
+        document
+          .getElementById("cloud-sync-back-btn")
+          ?.addEventListener("click", () => {
+            this.currentStep = WIZARD_STEPS.APPEARANCE;
+            this.renderCurrentStep();
+          });
+
+        document
+          .getElementById("cloud-sync-next-btn")
+          ?.addEventListener("click", async () => {
+            const enableSync =
+              document.querySelector('input[name="cloudSync"]:checked')
+                ?.value === "true";
+            this.selections.enableCloudSync = enableSync;
+            if (enableSync) {
+              // Skip provider selection - go directly to PocketBase auth
+              this.selections.cloudSyncProvider = "pocketbase";
+              await dataService.savePreference("cloudSyncProvider", "pocketbase");
+              await this.initiatePocketbaseAuth();
+            } else {
+              this.currentStep = WIZARD_STEPS.COMPLETE;
+              this.renderCurrentStep();
+            }
+          });
         break;
 
       case WIZARD_STEPS.CLOUD_PROVIDER:
-        if (SERVER_FEATURES_ENABLED) {
-          document
-            .getElementById("cloud-provider-back-btn")
-            ?.addEventListener("click", () => {
-              this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
-              this.renderCurrentStep();
-            });
+        document
+          .getElementById("cloud-provider-back-btn")
+          ?.addEventListener("click", () => {
+            this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+            this.renderCurrentStep();
+          });
 
-          document
-            .getElementById("cloud-provider-connect-btn")
-            ?.addEventListener("click", async () => {
-              const provider = document.querySelector(
-                'input[name="cloudProvider"]:checked'
-              )?.value;
-              if (provider) {
-                this.selections.cloudSyncProvider = provider;
-                await dataService.savePreference("cloudSyncProvider", provider);
+        document
+          .getElementById("cloud-provider-connect-btn")
+          ?.addEventListener("click", async () => {
+            const provider = document.querySelector(
+              'input[name="cloudProvider"]:checked'
+            )?.value;
+            if (provider) {
+              this.selections.cloudSyncProvider = provider;
+              await dataService.savePreference("cloudSyncProvider", provider);
+
+              if (provider === "pocketbase") {
+                await this.initiatePocketbaseAuth();
+              } else {
                 await this.initiateOAuthFlow(provider);
               }
-            });
+            }
+          });
 
-          // Radio button change
-          document
-            .querySelectorAll('input[name="cloudProvider"]')
-            .forEach((radio) => {
-              radio.addEventListener("change", (e) => {
-                this.selections.cloudSyncProvider = e.target.value;
-                const connectBtn = document.getElementById(
-                  "cloud-provider-connect-btn"
-                );
-                if (connectBtn) {
-                  connectBtn.disabled = false;
+        // Radio button change
+        document
+          .querySelectorAll('input[name="cloudProvider"]')
+          .forEach((radio) => {
+            radio.addEventListener("change", (e) => {
+              this.selections.cloudSyncProvider = e.target.value;
+              const connectBtn = document.getElementById(
+                "cloud-provider-connect-btn"
+              );
+              if (connectBtn) {
+                connectBtn.disabled = false;
+
+                // Update button text based on provider
+                if (e.target.value === "pocketbase") {
+                  connectBtn.textContent = "Sign In";
+                } else {
+                  connectBtn.textContent = "Connect";
                 }
-              });
+              }
             });
-        }
+          });
         break;
 
       case WIZARD_STEPS.COMPLETE:
@@ -635,23 +731,45 @@ class SetupWizard {
 
   async finish() {
     try {
+      // Save all preferences
+      await dataService.savePreference(
+        "firstDayOfWeek",
+        this.selections.firstDayOfWeek
+      );
+      await dataService.savePreference("appearanceTheme", this.selections.theme);
+      await dataService.savePreference(
+        "cloudSyncEnabled",
+        this.selections.enableCloudSync
+      );
+
+      if (this.selections.enableCloudSync) {
+        await dataService.savePreference(
+          "cloudSyncProvider",
+          this.selections.cloudSyncProvider
+        );
+      }
+
       // Mark setup as completed
       await dataService.savePreference("initialSetupCompleted", true);
 
+      // Clear wizard state
+      localStorage.removeItem("setupWizardState");
+
+      // Hide wizard
       this.hide();
 
-      // Dispatch event that setup is complete
+      // Dispatch an event to notify app.js that the wizard is complete.
+      // This will trigger the event listener in app.js to call completeAppInitialization.
       window.dispatchEvent(
         new CustomEvent("setupWizardComplete", {
-          detail: {
-            selections: this.selections,
-          },
+          detail: { selections: this.selections },
         })
       );
 
-      logger.info("Setup wizard completed successfully");
+      logger.info("Setup wizard completed successfully", this.selections);
     } catch (error) {
-      logger.error("Error finishing setup wizard:", error);
+      logger.error("Error completing setup wizard:", error);
+      this.showError("Failed to save settings. Please try again.");
     }
   }
 
@@ -710,7 +828,7 @@ class SetupWizard {
         if (selectedTheme) {
           this.selections.theme = selectedTheme;
           dataService.savePreference("theme", selectedTheme).then(() => {
-            if (SERVER_FEATURES_ENABLED) {
+            if (POCKETBASE_ENABLED) {
               this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
             } else {
               this.selections.enableCloudSync = false;
@@ -722,37 +840,40 @@ class SetupWizard {
         break;
 
       case WIZARD_STEPS.CLOUD_SYNC:
-        if (SERVER_FEATURES_ENABLED) {
-          const enableSync =
-            document.querySelector('input[name="cloudSync"]:checked')?.value ===
-            "true";
-          this.selections.enableCloudSync = enableSync;
-          dataService
-            .savePreference("cloudSyncEnabled", enableSync)
-            .then(() => {
-              if (enableSync) {
-                this.currentStep = WIZARD_STEPS.CLOUD_PROVIDER;
-              } else {
-                this.currentStep = WIZARD_STEPS.COMPLETE;
-              }
+        const enableSync =
+          document.querySelector('input[name="cloudSync"]:checked')?.value ===
+          "true";
+        this.selections.enableCloudSync = enableSync;
+        dataService
+          .savePreference("cloudSyncEnabled", enableSync)
+          .then(async () => {
+            if (enableSync) {
+              // Skip provider selection - go directly to PocketBase auth
+              this.selections.cloudSyncProvider = "pocketbase";
+              await dataService.savePreference("cloudSyncProvider", "pocketbase");
+              await this.initiatePocketbaseAuth();
+            } else {
+              this.currentStep = WIZARD_STEPS.COMPLETE;
               this.renderCurrentStep();
-            });
-        }
+            }
+          });
         break;
 
       case WIZARD_STEPS.CLOUD_PROVIDER:
-        if (SERVER_FEATURES_ENABLED) {
-          const provider = document.querySelector(
-            'input[name="cloudProvider"]:checked'
-          )?.value;
-          if (provider) {
-            this.selections.cloudSyncProvider = provider;
-            dataService
-              .savePreference("cloudSyncProvider", provider)
-              .then(() => {
+        const provider = document.querySelector(
+          'input[name="cloudProvider"]:checked'
+        )?.value;
+        if (provider) {
+          this.selections.cloudSyncProvider = provider;
+          dataService
+            .savePreference("cloudSyncProvider", provider)
+            .then(() => {
+              if (provider === "pocketbase") {
+                this.initiatePocketbaseAuth();
+              } else {
                 this.initiateOAuthFlow(provider);
-              });
-          }
+              }
+            });
         }
         break;
 
@@ -775,17 +896,13 @@ class SetupWizard {
         break;
 
       case WIZARD_STEPS.CLOUD_SYNC:
-        if (SERVER_FEATURES_ENABLED) {
-          this.currentStep = WIZARD_STEPS.APPEARANCE;
-          this.renderCurrentStep();
-        }
+        this.currentStep = WIZARD_STEPS.APPEARANCE;
+        this.renderCurrentStep();
         break;
 
       case WIZARD_STEPS.CLOUD_PROVIDER:
-        if (SERVER_FEATURES_ENABLED) {
-          this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
-          this.renderCurrentStep();
-        }
+        this.currentStep = WIZARD_STEPS.CLOUD_SYNC;
+        this.renderCurrentStep();
         break;
 
       // No back action for WELCOME and COMPLETE steps
@@ -793,6 +910,36 @@ class SetupWizard {
       case WIZARD_STEPS.COMPLETE:
         break;
     }
+  }
+
+  /**
+   * Show error message in wizard
+   */
+  showError(message) {
+    // Remove any existing error
+    const existingError = document.querySelector(".wizard-error");
+    if (existingError) {
+      existingError.remove();
+    }
+
+    // Add new error message
+    const stepContent = document.querySelector(".wizard-step");
+    if (stepContent) {
+      const errorHtml = `
+      <div class="wizard-error">
+        <span class="error-icon">❌</span>
+        <span class="error-message">${message}</span>
+      </div>
+    `;
+      stepContent.insertAdjacentHTML("afterbegin", errorHtml);
+    }
+  }
+
+  /**
+   * Helper method to capitalize first letter
+   */
+  capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 }
 

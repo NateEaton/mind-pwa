@@ -19,84 +19,10 @@
 // Detect if we're running on the Vercel demo site
 const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
-// Check if server features are enabled (build-time constant)
-const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+// Check if PocketBase is enabled at build time
+const POCKETBASE_ENABLED = typeof __POCKETBASE_ENABLED__ !== 'undefined' ? __POCKETBASE_ENABLED__ : false;
 
-// Detect and handle OAuth redirects from our server before any other initialization
-(function detectOAuthRedirect() {
-  // A redirect from our server will contain 'provider' and 'access_token' in the query parameters
-  if (
-    window.location.search.includes("access_token=") &&
-    window.location.search.includes("provider=")
-  ) {
-    try {
-      // Use URLSearchParams for robust parsing of the query string
-      const params = new URLSearchParams(window.location.search.substring(1)); // remove the leading '?'
-
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token"); // This is the new, crucial token
-      const provider = params.get("provider");
-
-      let state = null;
-      if (params.has("state")) {
-        try {
-          state = JSON.parse(atob(decodeURIComponent(params.get("state"))));
-        } catch (e) {
-          console.error("Error parsing OAuth state parameter:", e);
-        }
-      }
-
-      if (!accessToken || !provider) {
-        throw new Error("Incomplete token information in redirect URL.");
-      }
-
-      // Store tokens based on the provider sent back from our server
-      if (provider === "gdrive") {
-        localStorage.setItem("gdrive_access_token", accessToken);
-        // Only store the refresh token if the server provided one.
-        // Google often only sends it on the very first consent.
-        if (refreshToken) {
-          localStorage.setItem("gdrive_refresh_token", refreshToken);
-        }
-      } else if (provider === "dropbox") {
-        localStorage.setItem("dropbox_access_token", accessToken);
-        if (refreshToken) {
-          localStorage.setItem("dropbox_refresh_token", refreshToken);
-        }
-      }
-
-      // Check if this was a wizard OAuth flow to signal continuation
-      if (state?.wizardContext === "cloudProviderConnect") {
-        localStorage.setItem("pendingWizardContinuation", "true");
-        console.log("OAuth redirect detected for wizard flow");
-      } else if (state?.wizardContext === "settingsAuth") {
-        // This was a settings dialog OAuth flow
-        localStorage.setItem("pendingSettingsAuth", "true");
-        console.log("OAuth redirect detected for settings flow");
-      } else {
-        // Legacy or unknown context - store state for backward compatibility
-        if (state) {
-          localStorage.setItem(
-            `${provider}_auth_state`,
-            JSON.stringify({
-              ...state,
-              timestamp: Date.now(),
-            })
-          );
-        }
-        console.log("OAuth redirect detected for unknown context");
-      }
-
-      // Clear the query parameters from the URL so it doesn't get processed again on reload
-      window.history.replaceState(null, "", window.location.pathname);
-      console.log(`Successfully processed OAuth redirect for ${provider}.`);
-    } catch (error) {
-      console.error("OAuth redirect handling error:", error);
-      // It's often better to clear the query even on error to prevent loops.
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }
-})();
+// PocketBase-only authentication - no OAuth redirects needed
 
 import dataService from "./core/dataService.js";
 import stateManager from "./core/stateManager.js";
@@ -526,51 +452,29 @@ async function completeAppInitialization(fromWizard = false) {
     // Initialize import/export manager
     importExportManager.initialize(appManager.getDomElements().importFileInput);
 
-    // Initialize settings manager with conditional cloud sync features
-    if (SERVER_FEATURES_ENABLED) {
-      logger.info(
-        "Server features are enabled. Initializing cloud sync components."
-      );
-      settingsManager.initialize({
-        CloudSyncManager: CloudSyncManager,
-        closeMenu: closeMenu,
-        updateSyncUIElements: () => appManager.updateSyncUIElements(),
-        setSyncReady: (ready) => appManager.setSyncReady(ready),
-        syncData: syncData,
-        handleSyncComplete: handleSyncComplete,
-        handleSyncError: handleSyncError,
-        stateManager: stateManager,
-        getCloudSyncState: () => appManager.getCloudSync(),
-        setCloudSyncState: (newCloudSync) =>
-          appManager.setCloudSync(newCloudSync),
-        getSyncEnabled: () => appManager.getSyncEnabled(),
-        setSyncEnabled: (enabled) => appManager.setSyncEnabled(enabled),
-        getSyncReady: () => appManager.getSyncReady(),
-        getIsDemoHost: () => isDemoHost,
-      });
+    // Initialize settings manager
+    if (POCKETBASE_ENABLED) {
+      logger.info("Initializing PocketBase sync components.");
     } else {
-      logger.info("Server features are disabled. Running in local-only mode.");
-      settingsManager.initialize({
-        CloudSyncManager: null,
-        closeMenu: closeMenu,
-        updateSyncUIElements: () => appManager.updateSyncUIElements(),
-        setSyncReady: (ready) => appManager.setSyncReady(ready),
-        syncData: () => logger.warn("Sync called in local-only mode."),
-        handleSyncComplete: () =>
-          logger.warn("Sync complete called in local-only mode."),
-        handleSyncError: () =>
-          logger.warn("Sync error called in local-only mode."),
-        stateManager: stateManager,
-        getCloudSyncState: () => null,
-        setCloudSyncState: () =>
-          logger.warn("Set cloud sync state called in local-only mode."),
-        getSyncEnabled: () => false,
-        setSyncEnabled: () =>
-          logger.warn("Set sync enabled called in local-only mode."),
-        getSyncReady: () => false,
-        getIsDemoHost: () => isDemoHost,
-      });
+      logger.info("PocketBase sync disabled - client-only mode.");
     }
+    settingsManager.initialize({
+      CloudSyncManager: CloudSyncManager,
+      closeMenu: closeMenu,
+      updateSyncUIElements: () => appManager.updateSyncUIElements(),
+      setSyncReady: (ready) => appManager.setSyncReady(ready),
+      syncData: syncData,
+      handleSyncComplete: handleSyncComplete,
+      handleSyncError: handleSyncError,
+      stateManager: stateManager,
+      getCloudSyncState: () => appManager.getCloudSync(),
+      setCloudSyncState: (newCloudSync) =>
+        appManager.setCloudSync(newCloudSync),
+      getSyncEnabled: () => appManager.getSyncEnabled(),
+      setSyncEnabled: (enabled) => appManager.setSyncEnabled(enabled),
+      getSyncReady: () => appManager.getSyncReady(),
+      getIsDemoHost: () => isDemoHost,
+    });
 
     // Render all UI components after initialization
     uiRenderer.renderEverything();
@@ -602,8 +506,8 @@ async function completeAppInitialization(fromWizard = false) {
     // Setup event listeners
     eventHandlers.setupEventListeners();
 
-    // Setup sync button in menu (only if server features are enabled)
-    if (SERVER_FEATURES_ENABLED) {
+    // Setup sync button in menu (only if PocketBase is enabled)
+    if (POCKETBASE_ENABLED) {
       setupSyncButton();
     }
 
@@ -618,10 +522,11 @@ async function completeAppInitialization(fromWizard = false) {
     // 5. Setup network listeners
     setupNetworkListeners();
 
-    // 6. Initialize cloud sync capabilities (only if server features are enabled)
+    // 6. Initialize PocketBase sync capabilities
     let syncInitialized = false;
 
-    if (SERVER_FEATURES_ENABLED) {
+    // Initialize PocketBase sync if enabled
+    if (POCKETBASE_ENABLED) {
       if (fromWizard) {
         // If coming from wizard, cloud sync is already set up if the user enabled it
         appManager.setSyncEnabled(
@@ -697,40 +602,36 @@ async function completeAppInitialization(fromWizard = false) {
         syncInitialized = await initializeCloudSync();
       }
     } else {
-      logger.info(
-        "Cloud sync initialization skipped - server features disabled"
-      );
+      logger.info("PocketBase sync disabled - running in client-only mode");
     }
 
-    // Check for settings OAuth return when app is already initialized (only if server features enabled)
-    if (SERVER_FEATURES_ENABLED) {
-      const pendingSettingsAuth = localStorage.getItem("pendingSettingsAuth");
-      if (pendingSettingsAuth && !fromWizard) {
-        logger.info("Detected settings OAuth return, showing settings dialog");
-        localStorage.removeItem("pendingSettingsAuth");
+    // Check for settings OAuth return when app is already initialized
+    const pendingSettingsAuth = localStorage.getItem("pendingSettingsAuth");
+    if (pendingSettingsAuth && !fromWizard) {
+      logger.info("Detected settings OAuth return, showing settings dialog");
+      localStorage.removeItem("pendingSettingsAuth");
 
-        // Show settings dialog after a short delay to ensure app is fully initialized
-        setTimeout(() => {
-          settingsManager.showSettings();
-          uiRenderer.showToast("Authentication successful", "success");
+      // Show settings dialog after a short delay to ensure app is fully initialized
+      setTimeout(() => {
+        settingsManager.showSettings();
+        uiRenderer.showToast("Authentication successful", "success");
 
-          // Set pending initial sync flag so sync will be triggered when dialog closes
-          if (settingsManager.setPendingInitialSync) {
-            settingsManager.setPendingInitialSync(true);
-          }
-        }, 1000);
-      }
+        // Set pending initial sync flag so sync will be triggered when dialog closes
+        if (settingsManager.setPendingInitialSync) {
+          settingsManager.setPendingInitialSync(true);
+        }
+      }, 1000);
+    }
 
-      // 7. Perform initial sync if enabled and initialized
-      // Only for normal startup, not after wizard completion
-      if (
-        !fromWizard &&
-        appManager.getSyncEnabled() &&
-        appManager.getSyncReady()
-      ) {
-        logger.info("Performing initial sync");
-        await syncData();
-      }
+    // 7. Perform initial sync if enabled and initialized
+    // Only for normal startup, not after wizard completion
+    if (
+      !fromWizard &&
+      appManager.getSyncEnabled() &&
+      appManager.getSyncReady()
+    ) {
+      logger.info("Performing initial sync");
+      await syncData();
     }
 
     logger.info("App initialization complete");

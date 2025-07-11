@@ -379,7 +379,6 @@ async function processImport(importedData, dateRelationship) {
             historyDirty: true,
             dailyTotalsDirty: true,
             dailyTotalsUpdatedAt: now,
-            weeklyTotalsDirty: true,
             weeklyTotalsUpdatedAt: now,
           },
         },

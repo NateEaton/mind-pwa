@@ -24,6 +24,7 @@ import dataService from "./dataService.js";
 import uiRenderer from "../ui/renderer.js";
 import logger from "./logger.js";
 import themeManager from "./themeManager.js";
+import { PocketbaseAuthModal } from "../auth/pocketbaseAuthModal.js";
 
 // Module state
 let sectionCollapseState = {}; // Track which sections are expanded/collapsed
@@ -47,8 +48,8 @@ let setSyncEnabled = null;
 let getSyncReady = null;
 let getIsDemoHost = null;
 
-// Check if server features are enabled (build-time constant)
-const SERVER_FEATURES_ENABLED = __SERVER_FEATURES_ENABLED__;
+// Check if PocketBase is enabled at build time
+const POCKETBASE_ENABLED = typeof __POCKETBASE_ENABLED__ !== 'undefined' ? __POCKETBASE_ENABLED__ : false;
 
 /**
  * Initialize the settings manager
@@ -101,8 +102,8 @@ async function showSettings() {
       freshSyncEnabled
     );
 
-    // Update the global variable to match what's in storage (only if server features enabled)
-    if (SERVER_FEATURES_ENABLED && setSyncEnabled) {
+    // Update the global variable to match what's in storage
+    if (setSyncEnabled) {
       setSyncEnabled(freshSyncEnabled);
     }
 
@@ -111,10 +112,13 @@ async function showSettings() {
     const cloudSync = getCloudSyncState ? getCloudSyncState() : null;
     if (cloudSync && cloudSync.provider) {
       // If we have an active cloud sync, check what type it is
-      currentSyncProvider =
-        cloudSync.provider.providerName === "DropboxProvider"
-          ? "dropbox"
-          : "gdrive";
+      if (cloudSync.provider.providerName === "DropboxProvider") {
+        currentSyncProvider = "dropbox";
+      } else if (cloudSync.provider.providerName === "PocketbaseProvider") {
+        currentSyncProvider = "pocketbase";
+      } else {
+        currentSyncProvider = "gdrive";
+      }
       logger.debug("Active provider detected:", currentSyncProvider);
     } else {
       // Fall back to saved preference
@@ -147,7 +151,7 @@ async function showSettings() {
       <div class="settings-container">
 
         ${
-          SERVER_FEATURES_ENABLED
+          POCKETBASE_ENABLED
             ? `
         <!-- Cloud Synchronization Section -->
         <div class="settings-section">
@@ -168,17 +172,11 @@ async function showSettings() {
             }">
               <div class="settings-row provider-row">
                 <div class="provider-select-row">
-                  <label for="sync-provider">Provider:</label>
-                  <select id="sync-provider" ${
-                    !freshSyncEnabled ? "disabled" : ""
-                  }>
-                    <option value="gdrive" ${
-                      currentSyncProvider === "gdrive" ? "selected" : ""
-                    }>Google Drive</option>
-                    <option value="dropbox" ${
-                      currentSyncProvider === "dropbox" ? "selected" : ""
-                    }>Dropbox</option>
-                  </select>
+                  <label>Provider:</label>
+                  <span style="font-weight: bold; color: #4CAF50;">PocketBase</span>
+                  <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Real-time sync with PocketBase backend
+                  </p>
                 </div>
                 
                 <div class="connection-status">
@@ -237,14 +235,13 @@ async function showSettings() {
         <!-- Local-Only Mode Notice -->
         <div class="settings-section">
           <div class="section-header">
-            <h4>Cloud Synchronization</h4>
+            <h4>Data Storage</h4>
           </div>
           <div class="section-content">
             <div class="settings-row">
               <p style="margin: 0; color: var(--text-muted);">
-                Cloud sync is not available in this version. 
-                To enable cloud synchronization, please see the project's 
-                <a href="https://github.com/NateEaton/mind-pwa/wiki/Installation-Guide" target="_blank" style="color: var(--primary-color);">Installation Guide</a>.
+                Your data is stored locally in your browser. 
+                Use Export/Import from the menu to backup or transfer your data.
               </p>
             </div>
           </div>
@@ -336,8 +333,8 @@ function setupSettingsEventListeners(syncEnabled) {
   // Add event listeners for appearance settings
   setupAppearanceListeners();
 
-  // Add cloud sync event listeners only if server features are enabled
-  if (SERVER_FEATURES_ENABLED) {
+  // Add cloud sync event listeners only if PocketBase is enabled
+  if (POCKETBASE_ENABLED) {
     // Add event listener for Enable sync checkbox
     setupSyncEnabledListener();
 
@@ -471,11 +468,16 @@ function setupProviderChangeListener() {
     syncProviderSelect.addEventListener("change", async (e) => {
       const newProvider = e.target.value;
       let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
-      const currentProvider = cloudSync
-        ? cloudSync.provider.providerName === "DropboxProvider"
-          ? "dropbox"
-          : "gdrive"
-        : "none";
+      let currentProvider = "none";
+      if (cloudSync && cloudSync.provider) {
+        if (cloudSync.provider.providerName === "DropboxProvider") {
+          currentProvider = "dropbox";
+        } else if (cloudSync.provider.providerName === "PocketbaseProvider") {
+          currentProvider = "pocketbase";
+        } else {
+          currentProvider = "gdrive";
+        }
+      }
 
       logger.info(
         `Provider changing from ${currentProvider} to ${newProvider}`
@@ -593,49 +595,36 @@ function setupActionButtonListeners() {
   document
     .getElementById("sync-reauth-btn")
     .addEventListener("click", async () => {
-      const provider = document.getElementById("sync-provider").value;
-      let cloudSync = getCloudSyncState ? getCloudSyncState() : null;
-
-      if (
-        !cloudSync ||
-        cloudSync.provider?.providerName !==
-          (provider === "gdrive" ? "GoogleDriveProvider" : "DropboxProvider")
-      ) {
-        // Initialize with new provider
-        cloudSync = new CloudSyncManager(
-          dataService,
-          stateManager,
-          uiRenderer,
-          handleSyncCompleteCallback,
-          handleSyncErrorCallback
-        );
-        await cloudSync.initialize(provider);
-        if (setCloudSyncState) setCloudSyncState(cloudSync);
-      }
-
       try {
-        // Create state parameter for settings OAuth flow
-        const state = {
-          wizardContext: "settingsAuth",
-          source: "settingsDialog",
-        };
-        const stateParam = btoa(JSON.stringify(state));
+        const provider = document.getElementById("sync-provider").value;
 
-        // Redirect to server OAuth with state parameter
-        if (provider === "dropbox") {
-          window.location.href = `/api/dropbox/auth?state=${encodeURIComponent(
-            stateParam
-          )}`;
-        } else if (provider === "gdrive") {
-          window.location.href = `/api/gdrive/auth?state=${encodeURIComponent(
-            stateParam
-          )}`;
+        if (provider === "pocketbase") {
+          // Handle PocketBase authentication
+          await handlePocketbaseAuth();
+        } else {
+          // Handle OAuth providers (existing code)
+          const state = {
+            wizardContext: "settingsAuth",
+            provider: provider,
+            timestamp: Date.now(),
+          };
+
+          const stateParam = btoa(JSON.stringify(state));
+
+          if (provider === "dropbox") {
+            window.location.href = `/api/dropbox/auth?state=${encodeURIComponent(
+              stateParam
+            )}`;
+          } else if (provider === "gdrive") {
+            window.location.href = `/api/gdrive/auth?state=${encodeURIComponent(
+              stateParam
+            )}`;
+          }
         }
-
-        // The page will reload after OAuth, so we don't need to handle the return here
       } catch (error) {
+        logger.error("Failed to initiate authentication:", error);
         uiRenderer.showToast(
-          `Authentication failed: ${error.message}`,
+          "Authentication failed: " + error.message,
           "error"
         );
       }
@@ -682,6 +671,47 @@ function closeSettingsModal() {
 function setPendingInitialSync(value) {
   pendingInitialSync = value;
   logger.debug(`Set pendingInitialSync to: ${value}`);
+}
+
+/**
+ * Handle PocketBase authentication in settings
+ */
+async function handlePocketbaseAuth() {
+  const cloudSync = getCloudSyncState ? getCloudSyncState() : null;
+
+  if (!cloudSync) {
+    logger.error("Cloud sync not available");
+    return;
+  }
+
+  const authModal = new PocketbaseAuthModal(
+    cloudSync,
+    async (authResult) => {
+      // Success callback
+      logger.info("PocketBase authentication successful:", authResult);
+
+      // Update UI to show connected state
+      const statusElement = document.getElementById("sync-status");
+      if (statusElement) {
+        statusElement.textContent = "Connected";
+        statusElement.className = "status-value connected";
+      }
+
+      const syncNowBtn = document.getElementById("sync-now-btn");
+      if (syncNowBtn) {
+        syncNowBtn.disabled = false;
+      }
+
+      // Show success message
+      uiRenderer.showToast("Successfully connected to PocketBase!", "success");
+    },
+    () => {
+      // Cancel callback
+      logger.info("PocketBase authentication cancelled");
+    }
+  );
+
+  authModal.show("signin");
 }
 
 // =============================================================================

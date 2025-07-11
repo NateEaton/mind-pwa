@@ -76,7 +76,6 @@ const defaultState = {
     weekStartDay: "Sunday", // New, will be loaded from preferences
     // Granular dirty flags
     dailyTotalsDirty: false,
-    weeklyTotalsDirty: false,
   },
 };
 
@@ -497,10 +496,8 @@ async function initialize(foodGroups) {
   await checkDateAndReset();
   logger.debug("StateManager Initialize: checkDateAndReset() complete.");
 
-  // 6. Recalculate weekly totals based on the (potentially) updated daily counts and week structure
-  logger.debug("StateManager Initialize: Calling recalculateWeeklyTotals()...");
-  recalculateWeeklyTotals();
-  logger.debug("StateManager Initialize: recalculateWeeklyTotals() complete.");
+  // 6. Weekly totals will be calculated automatically when daily counts are loaded
+  // No need to recalculate during initialization since data is coming from storage
 
   // 7. CRITICAL FINAL STEP FOR FRESH INSTALL:
   //    After all initialization, if it's still marked as a fresh install,
@@ -557,12 +554,14 @@ function updateDailyCount(date, groupId, count) {
     payload: { date, groupId, count },
   });
 
+  // Recalculate weekly totals since daily count changed
+  recalculateWeeklyTotals();
+
   const updateTime = Date.now();
   updateMetadata({
     dailyTotalsUpdatedAt: updateTime,
     dailyTotalsDirty: true, // A daily count changed
     weeklyTotalsUpdatedAt: updateTime, // Weekly sum also changed
-    weeklyTotalsDirty: true,
     lastModified: updateTime, // Overall state modified
   });
 
@@ -585,7 +584,6 @@ function updateWeeklyCount(groupId, count) {
   const updateTime = Date.now();
   updateMetadata({
     weeklyTotalsUpdatedAt: updateTime,
-    weeklyTotalsDirty: true,
 
     // Legacy flag for backward compatibility
     currentWeekDirty: true,
@@ -613,7 +611,6 @@ function resetDailyCounts(dateToReset, resetTimestamp = null) {
   updateMetadata({
     dailyResetTimestamp: timestamp, // Or a more specific one if needed
     dailyTotalsDirty: true,
-    weeklyTotalsDirty: true, // Because weekly sum changed
     currentWeekDirty: true, // Legacy
     lastModified: timestamp,
   });
@@ -645,7 +642,6 @@ function resetWeeklyCounts(resetTimestamp = null) {
   // because we want to preserve when totals were last changed by user
   updateMetadata({
     weeklyResetTimestamp: timestamp,
-    weeklyTotalsDirty: true,
 
     // Legacy flag for backward compatibility
     currentWeekDirty: true,
@@ -674,7 +670,6 @@ function recalculateWeeklyTotals() {
 
   updateMetadata({
     weeklyTotalsUpdatedAt: Date.now(),
-    weeklyTotalsDirty: true, // Mark as dirty because it was just recalculated
     lastModified: Date.now(),
   });
   return result;
@@ -790,7 +785,6 @@ async function checkDateAndReset() {
         previousWeekStartDate: completedWeekState.currentWeekStartDate, // Store the week that was just archived
         // Reset dirty flags for the new week
         dailyTotalsDirty: false,
-        weeklyTotalsDirty: false,
         currentWeekDirty: false, // Legacy
       });
 
@@ -836,7 +830,7 @@ async function checkDateAndReset() {
       dateResetType: resetType,
       dateResetTimestamp: dataService.getCurrentTimestamp(),
       // For daily reset, we don't clear dirty flags, as data might have been entered on previous days.
-      // dailyTotalsDirty and weeklyTotalsDirty will be updated by RECALCULATE_WEEKLY_TOTALS if values change.
+      // dailyTotalsDirty will be updated when daily counts change.
     });
     logger.info(`Daily reset complete. Current day set to: ${systemTodayStr}`);
   }
@@ -1092,13 +1086,8 @@ async function reload(skipRecalculation = false) {
       payload: { history: historyData },
     });
 
-    // Recalculate weekly totals to ensure consistency unless caller will handle it
-    if (!skipRecalculation) {
-      logger.debug("Auto-recalculating weekly totals after reload");
-      recalculateWeeklyTotals();
-    } else {
-      logger.debug("Skipping auto-recalculation - caller will handle it");
-    }
+    // Weekly totals are now calculated automatically when data is converted from remote format
+    // No need to recalculate here as it would be redundant
 
     logger.info("State reloaded successfully");
     return true;
