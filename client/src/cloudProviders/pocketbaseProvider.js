@@ -306,125 +306,16 @@ export default class PocketbaseProvider {
   }
 
   /**
-   * Sync current week data - matches interface of other providers
-   * @param {Object} localData Current week data
-   * @returns {Object} Sync result
-   */
-  async syncCurrentWeek(localData) {
-    if (!this.isAuthenticated) {
-      if (this.isOnline) {
-        return { success: false, error: "Not authenticated" };
-      } else {
-        this.addToSyncQueue("current_week", localData);
-        return { success: false, error: "Offline - queued for sync" };
-      }
-    }
-
-    const userId = this.pb.authStore.model.id;
-    const weekStartDate =
-      localData.weekStartDate || localData.currentWeekStartDate;
-    const syncData = this._toRemoteFormat(localData);
-
-    try {
-      // Try to get existing record
-      const existingRecord = await this.getRemoteCurrentWeek(
-        userId,
-        weekStartDate
-      );
-
-      // Validate required fields
-      if (!syncData.user) {
-        logger.error("PocketBase sync validation: Missing user ID");
-        return { success: false, error: "Missing user ID" };
-      }
-
-      if (!syncData.week_start_date) {
-        logger.error("PocketBase sync validation: Missing week_start_date");
-        return { success: false, error: "Missing week_start_date" };
-      }
-
-      logger.debug(
-        "PocketBase syncCurrentWeek - Attempting to sync with data:",
-        syncData
-      );
-
-      let result;
-      if (existingRecord) {
-        // Check if data has actually changed before updating
-        const hasChanged = this.hasDataChanged(existingRecord, syncData);
-
-        if (hasChanged) {
-          // Update existing record only if data changed
-          result = await this.pb
-            .collection("current_weeks")
-            .update(existingRecord.id, syncData);
-          logger.info("Updated current week data in PocketBase (data changed)");
-        } else {
-          // No changes needed, return existing record
-          logger.debug("No changes detected, skipping PocketBase update");
-          result = existingRecord;
-        }
-      } else {
-        // Create new record
-        result = await this.pb.collection("current_weeks").create(syncData);
-        logger.info("Created new current week data in PocketBase");
-      }
-
-      return {
-        success: true,
-        data: this._toLocalFormat(result),
-      };
-    } catch (error) {
-      logger.error("Failed to sync current week to PocketBase:", error);
-      logger.error("PocketBase error details:", {
-        message: error.message,
-        status: error.status,
-        data: error.data,
-        url: error.url,
-        originalError: error.originalError,
-      });
-
-      // Log detailed validation errors if available
-      if (error.data && error.data.data) {
-        logger.error(
-          "PocketBase validation errors:",
-          JSON.stringify(error.data.data, null, 2)
-        );
-      }
-
-      // Log the raw error object for debugging
-      logger.error(
-        "Raw PocketBase error object:",
-        JSON.stringify(error, null, 2)
-      );
-
-      // Log the sync data that failed
-      try {
-        const failedSyncData = this._toRemoteFormat(localData);
-        logger.error("Sync data that failed:", failedSyncData);
-      } catch (formatError) {
-        logger.error("Could not format sync data for logging:", formatError);
-      }
-
-      if (!this.isOnline) {
-        this.addToSyncQueue("current_week", localData);
-      }
-
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Sync weekly history - matches interface of other providers
+   * Sync weekly data - works for current week OR historical weeks
    * @param {Object} weekData Week data to sync
    * @returns {Object} Sync result
    */
-  async syncWeeklyHistory(weekData) {
+  async syncWeeklyData(weekData) {
     if (!this.isAuthenticated) {
       if (this.isOnline) {
         return { success: false, error: "Not authenticated" };
       } else {
-        this.addToSyncQueue("weekly_history", weekData);
+        this.addToSyncQueue("weekly_data", weekData);
         return { success: false, error: "Offline - queued for sync" };
       }
     }
@@ -433,10 +324,10 @@ export default class PocketbaseProvider {
       const userId = this.pb.authStore.model.id;
       const weekStartDate = weekData.weekStartDate;
 
-      // Check if record already exists - using consistent PocketBase format
+      // Check if record already exists
       const weekStartDatePB = this.convertLocalDateToPocketBase(weekStartDate);
       const existingRecords = await this.pb
-        .collection("weekly_history")
+        .collection("weekly_data")
         .getList(1, 1, {
           filter: `user = "${userId}" && week_start_date = '${weekStartDatePB}'`,
         });
@@ -457,21 +348,23 @@ export default class PocketbaseProvider {
 
       let result;
       if (existingRecords.items.length > 0) {
+        // Update existing record
         result = await this.pb
-          .collection("weekly_history")
+          .collection("weekly_data")
           .update(existingRecords.items[0].id, syncData);
-        logger.info("Updated weekly history in PocketBase:", weekStartDate);
+        logger.info("Updated weekly data in PocketBase:", weekStartDate);
       } else {
-        result = await this.pb.collection("weekly_history").create(syncData);
-        logger.info("Created new weekly history in PocketBase:", weekStartDate);
+        // Create new record
+        result = await this.pb.collection("weekly_data").create(syncData);
+        logger.info("Created new weekly data in PocketBase:", weekStartDate);
       }
 
       return { success: true, data: result };
     } catch (error) {
-      logger.error("Failed to sync weekly history to PocketBase:", error);
+      logger.error("Failed to sync weekly data to PocketBase:", error);
 
       if (!this.isOnline) {
-        this.addToSyncQueue("weekly_history", weekData);
+        this.addToSyncQueue("weekly_data", weekData);
       }
 
       return { success: false, error: error.message };
@@ -519,7 +412,7 @@ export default class PocketbaseProvider {
       );
 
       const records = await this.pb
-        .collection("current_weeks")
+        .collection("weekly_data")
         .getList(1, 1, queryOptions);
 
       logger.debug(
@@ -552,6 +445,36 @@ export default class PocketbaseProvider {
   }
 
   /**
+   * Get all weekly data for initial sync
+   * @returns {Array} All weekly data records for current user
+   */
+  async getAllWeeklyData() {
+    if (!this.isAuthenticated) {
+      throw new Error("Not authenticated");
+    }
+
+    try {
+      const userId = this.pb.authStore.model.id;
+
+      // Get all records for this user, ordered by week
+      const records = await this.pb.collection("weekly_data").getFullList({
+        filter: `user = "${userId}"`,
+        sort: "-week_start_date", // Most recent first
+      });
+
+      logger.info(
+        `Retrieved ${records.length} weekly data records for bulk sync`
+      );
+
+      // Convert to local format
+      return records.map((record) => this._toLocalFormat(record));
+    } catch (error) {
+      logger.error("Failed to get all weekly data:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Setup real-time subscriptions for automatic sync
    */
   async setupRealtimeSubscriptions() {
@@ -560,16 +483,16 @@ export default class PocketbaseProvider {
     const userId = this.pb.authStore.model.id;
 
     try {
-      // Subscribe to current weeks changes
-      await this.pb.collection("current_weeks").subscribe(
+      // Single subscription for all weekly data changes
+      await this.pb.collection("weekly_data").subscribe(
         "*",
         (e) => {
           // Only process changes from other devices
           if (e.record.metadata?.deviceId !== this.deviceId) {
-            logger.info("Received current week change from another device");
-            this.notifyChangeCallbacks("current_week", e);
+            logger.info("Received weekly data change from another device");
+            this.notifyChangeCallbacks("weekly_data", e);
           } else {
-            logger.debug("Ignoring current week change from same device");
+            logger.debug("Ignoring weekly data change from same device");
           }
         },
         {
@@ -577,26 +500,11 @@ export default class PocketbaseProvider {
         }
       );
 
-      // Subscribe to weekly history changes
-      await this.pb.collection("weekly_history").subscribe(
-        "*",
-        (e) => {
-          // Only process changes from other devices
-          if (e.record.metadata?.deviceId !== this.deviceId) {
-            logger.info("Received weekly history change from another device");
-            this.notifyChangeCallbacks("weekly_history", e);
-          } else {
-            logger.debug("Ignoring weekly history change from same device");
-          }
-        },
-        {
-          filter: `user = '${userId}'`,
-        }
+      logger.info(
+        "PocketBase real-time subscription established for weekly_data"
       );
-
-      logger.info("PocketBase real-time subscriptions established");
     } catch (error) {
-      logger.error("Failed to setup PocketBase subscriptions:", error);
+      logger.error("Failed to setup PocketBase subscription:", error);
     }
   }
 
@@ -654,7 +562,7 @@ export default class PocketbaseProvider {
         let result;
         if (item.type === "current_week") {
           result = await this.syncCurrentWeek(item.data);
-        } else if (item.type === "weekly_history") {
+        } else if (item.type === "weekly_data") {
           result = await this.syncWeeklyHistory(item.data);
         }
 
@@ -702,8 +610,7 @@ export default class PocketbaseProvider {
     try {
       if (this.pb) {
         // Unsubscribe from all collections
-        this.pb.collection("current_weeks").unsubscribe();
-        this.pb.collection("weekly_history").unsubscribe();
+        this.pb.collection("weekly_data").unsubscribe();
 
         // Clear auth store
         this.pb.authStore.clear();

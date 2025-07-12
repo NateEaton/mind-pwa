@@ -149,10 +149,8 @@ export class AutoSyncEngine {
       this.syncInProgress = true;
       this.notifySyncStatus("syncing");
 
-      if (dataType === "current_week") {
-        await this.handleRemoteCurrentWeekChange(changeEvent);
-      } else if (dataType === "weekly_history") {
-        await this.handleRemoteHistoryChange(changeEvent);
+      if (dataType === "weekly_data") {
+        await this.handleRemoteWeeklyDataChange(changeEvent);
       }
 
       this.notifySyncStatus("synced");
@@ -165,62 +163,44 @@ export class AutoSyncEngine {
   }
 
   /**
-   * Handle remote current week changes robustly, preventing sync loops.
+   * Handle remote weekly data changes - works for current OR historical weeks
+   * @param {Object} changeEvent PocketBase change event
    */
-  async handleRemoteCurrentWeekChange(changeEvent) {
-    const remoteRecord = changeEvent.record;
-
-    // 1. Prevent loop by ignoring echoes of our own changes.
-    if (this.isOwnChange(remoteRecord)) {
-      logger.debug("Ignoring own remote change (echo).");
-      return;
-    }
-
-    logger.info(
-      "Remote change from another device detected. Resolving conflict."
-    );
-    this.notifySyncStatus("syncing");
-
-    const localData = this.stateManager.getState();
-    const originalLocalDataString = JSON.stringify(localData);
-
-    // 2. Resolve conflict using the "Last Write Wins" timestamp logic.
-    // This will return either the existing local data or the new remote data.
-    const winningData = await this.resolveConflict(localData, remoteRecord);
-    const winningDataString = JSON.stringify(winningData);
-
-    // 3. Only update the local state if the winning data is actually different
-    //    from what we already have. This is the key to stopping the loop.
-    if (originalLocalDataString !== winningDataString) {
-      logger.info(
-        "State has changed after merge. Applying new remote state locally."
+  async handleRemoteWeeklyDataChange(changeEvent) {
+    try {
+      const remoteRecord = changeEvent.record;
+      const weekStartDate = this.convertPocketBaseDateToLocal(
+        remoteRecord.week_start_date
       );
 
-      this.stateManager.dispatch({
-        type: ACTION_TYPES.SET_STATE,
-        payload: winningData,
-      });
+      logger.info(`Processing remote change for week: ${weekStartDate}`);
 
-      this.showRemoteUpdateNotification("current_week");
-    } else {
-      logger.info(
-        "No state change after merge. Local data is already up-to-date."
-      );
+      // Get local version for comparison
+      const localRecord = await dataService.getWeekData(weekStartDate);
+
+      // Apply Last Write Wins conflict resolution
+      const remoteUpdated = new Date(remoteRecord.updated).getTime();
+      const localUpdated = localRecord?.metadata?.updatedAt || 0;
+
+      if (!localRecord || remoteUpdated > localUpdated) {
+        logger.info(
+          `Remote version newer, updating local data for week: ${weekStartDate}`
+        );
+
+        // Convert and save remote data
+        const convertedData = this.convertFromPocketBaseFormat(remoteRecord);
+        await dataService.saveWeekData(convertedData);
+
+        // Refresh UI if this affects current week or visible history
+        await this.refreshUIAfterRemoteChange(weekStartDate);
+      } else {
+        logger.debug(
+          `Local version newer or equal, keeping local data for week: ${weekStartDate}`
+        );
+      }
+    } catch (error) {
+      logger.error("Error handling remote weekly data change:", error);
     }
-
-    // 4. IMPORTANT: Do NOT write anything back to the server here.
-    // This function's only job is to apply incoming changes. This breaks the loop.
-
-    this.notifySyncStatus("synced");
-  }
-
-  /**
-   * Handle remote history changes
-   */
-  async handleRemoteHistoryChange(changeEvent) {
-    // For now, just log - implement full history sync later
-    logger.info("Remote history change detected:", changeEvent.action);
-    this.showRemoteUpdateNotification("weekly_history");
   }
 
   /**
@@ -301,6 +281,37 @@ export class AutoSyncEngine {
       this.notifySyncStatus("error", error.message);
     } finally {
       this.syncInProgress = false;
+    }
+  }
+
+  /**
+   * Perform initial bulk sync of all weekly data
+   * Called when setting up sync on a new device
+   */
+  async performInitialBulkSync() {
+    try {
+      logger.info("Starting initial bulk sync of weekly data");
+
+      // Get all remote weekly data
+      const allRemoteWeeks = await this.provider.getAllWeeklyData();
+
+      if (allRemoteWeeks.length === 0) {
+        logger.info("No remote weekly data found for bulk sync");
+        return;
+      }
+
+      logger.info(`Bulk syncing ${allRemoteWeeks.length} weekly records`);
+
+      // Save all records to local storage
+      await this.dataService.bulkSaveWeeklyData(allRemoteWeeks);
+
+      // Refresh the UI with all the new data
+      await this._refreshHistoryInState();
+
+      logger.info("Initial bulk sync completed successfully");
+    } catch (error) {
+      logger.error("Failed to perform initial bulk sync:", error);
+      throw error;
     }
   }
 
