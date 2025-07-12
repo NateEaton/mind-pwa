@@ -272,7 +272,7 @@ export default class PocketbaseProvider {
         passwordConfirm: password,
         username,
         preferences: {
-          firstDayOfWeek: "sunday",
+          weekStartDay: "sunday",
           initialSetupCompleted: false,
         },
       };
@@ -835,5 +835,27 @@ export default class PocketbaseProvider {
     }
 
     return weeklyTotals;
+  }
+
+  /**
+   * Update user preferences in PocketBase
+   * @param {Object} preferences User preferences object
+   */
+  async updateUserPreferences(preferences) {
+    if (!this.isAuthenticated)
+      return { success: false, error: "Not authenticated" };
+
+    try {
+      const userId = this.pb.authStore.model.id;
+      await this.pb.collection("users").update(userId, {
+        preferences: preferences,
+      });
+
+      logger.info("User preferences updated in PocketBase:", preferences);
+      return { success: true };
+    } catch (error) {
+      logger.error("Failed to update user preferences:", error);
+      return { success: false, error: error.message };
+    }
   }
 }

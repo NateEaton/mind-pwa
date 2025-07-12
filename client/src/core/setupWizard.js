@@ -44,7 +44,7 @@ class SetupWizard {
   constructor() {
     this.currentStep = WIZARD_STEPS.WELCOME;
     this.selections = {
-      firstDayOfWeek: "Sunday", // Default value
+      weekStartDay: "Sunday", // Default value
       theme: "auto", // Default to auto theme
       enableCloudSync: false, // Default to false
       cloudSyncCredentials: null, // Store email/password for PocketBase
@@ -359,16 +359,12 @@ class SetupWizard {
             <div class="radio-group">
               <label>
                 <input type="radio" name="firstDay" value="Sunday" 
-                  ${
-                    this.selections.firstDayOfWeek === "Sunday" ? "checked" : ""
-                  }>
+                  ${this.selections.weekStartDay === "Sunday" ? "checked" : ""}>
                 <span>Sunday</span>
               </label>
               <label>
                 <input type="radio" name="firstDay" value="Monday"
-                  ${
-                    this.selections.firstDayOfWeek === "Monday" ? "checked" : ""
-                  }>
+                  ${this.selections.weekStartDay === "Monday" ? "checked" : ""}>
                 <span>Monday</span>
               </label>
             </div>
@@ -582,9 +578,7 @@ class SetupWizard {
           <div class="setup-summary">
             <div class="summary-item">
               <strong>Week starts on:</strong> ${
-                this.selections.firstDayOfWeek === "Monday"
-                  ? "Monday"
-                  : "Sunday"
+                this.selections.weekStartDay === "Monday" ? "Monday" : "Sunday"
               }
             </div>
             
@@ -642,7 +636,7 @@ class SetupWizard {
               'input[name="firstDay"]:checked'
             )?.value;
             if (selectedDay) {
-              this.selections.firstDayOfWeek = selectedDay;
+              this.selections.weekStartDay = selectedDay;
               this.currentStep = WIZARD_STEPS.APPEARANCE;
               this.renderCurrentStep();
             }
@@ -850,8 +844,8 @@ class SetupWizard {
 
       // Save all preferences
       await dataService.savePreference(
-        "firstDayOfWeek",
-        this.selections.firstDayOfWeek
+        "weekStartDay",
+        this.selections.weekStartDay
       );
 
       // Apply final theme before saving to ensure consistency
@@ -872,6 +866,24 @@ class SetupWizard {
 
       // Mark setup as completed
       await dataService.savePreference("initialSetupCompleted", true);
+
+      // Sync preferences to PocketBase if cloud sync is enabled
+      if (
+        this.selections.enableCloudSync &&
+        window.appManager?.cloudSync?.isEnabled
+      ) {
+        const preferencesToSync = {
+          weekStartDay: this.selections.weekStartDay,
+          initialSetupCompleted: true,
+          theme: this.selections.theme,
+          cloudSyncEnabled: this.selections.enableCloudSync,
+        };
+
+        await window.appManager.cloudSync.provider.updateUserPreferences(
+          preferencesToSync
+        );
+        logger.info("Preferences synced to cloud during setup");
+      }
 
       // Clear wizard state completely
       localStorage.removeItem("setupWizardState");
@@ -948,7 +960,7 @@ class SetupWizard {
           'input[name="firstDay"]:checked'
         )?.value;
         if (selectedDay) {
-          this.selections.firstDayOfWeek = selectedDay;
+          this.selections.weekStartDay = selectedDay;
           dataService.savePreference("weekStartDay", selectedDay).then(() => {
             this.currentStep = WIZARD_STEPS.APPEARANCE;
             this.renderCurrentStep();
