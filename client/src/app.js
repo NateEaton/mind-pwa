@@ -20,7 +20,10 @@
 const isDemoHost = window?.location?.hostname?.includes("vercel.app");
 
 // Check if PocketBase is enabled at build time
-const POCKETBASE_ENABLED = typeof __POCKETBASE_ENABLED__ !== 'undefined' ? __POCKETBASE_ENABLED__ : false;
+const POCKETBASE_ENABLED =
+  typeof __POCKETBASE_ENABLED__ !== "undefined"
+    ? __POCKETBASE_ENABLED__
+    : false;
 
 // PocketBase-only authentication - no OAuth redirects needed
 
@@ -506,7 +509,6 @@ async function completeAppInitialization(fromWizard = false) {
     // Setup event listeners
     eventHandlers.setupEventListeners();
 
-
     // Check if test mode is active and add banner if needed
     if (dataService.isTestModeEnabled()) {
       const testDate = dataService.getCurrentDate();
@@ -802,7 +804,6 @@ async function initializeCloudSync() {
   }
 }
 
-
 /**
  * Close the main menu
  */
@@ -846,121 +847,33 @@ function handleSyncError(error) {
   }
 }
 
-// Update syncData to track last sync time
 async function syncData(isInitialSync = false, isManualSync = false) {
-  logger.debug("syncData called", {
-    cloudSync: appManager.getCloudSync(),
-    syncEnabled: appManager.getSyncEnabled(),
-    syncReady: appManager.getSyncReady(),
-    online: navigator.onLine,
-    isInitialSync,
-    isManualSync,
-  });
+  logger.debug(`syncData request received`, { isInitialSync, isManualSync });
 
   if (
     !appManager.getCloudSync() ||
     !appManager.getSyncEnabled() ||
     !appManager.getSyncReady()
   ) {
-    logger.debug("Sync skipped: not ready", {
-      cloudSync: appManager.getCloudSync(),
-      syncEnabled: appManager.getSyncEnabled(),
-      syncReady: appManager.getSyncReady(),
-    });
+    logger.warn("Sync skipped: not ready or enabled.");
     return;
   }
-
-  // If this is not an initial sync and one is in progress, skip
-  if (!isInitialSync && appManager.initialSyncInProgress) {
-    logger.info("Skipping sync while initial sync is in progress");
-    return;
-  }
-
-  // Use centralized sync coordination instead of direct sync
-  const trigger = isInitialSync
-    ? "initial"
-    : isManualSync
-    ? "manual"
-    : "reload";
-  const options = {
-    skipCooldown: isInitialSync || isManualSync, // Skip cooldown for high priority operations
-    skipDebounce: isManualSync, // Skip debounce for manual syncs
-    skipThrottle: isInitialSync || isManualSync, // Skip throttle for high priority operations
-    priority: isManualSync ? "high" : "normal",
-  };
 
   try {
-    logger.info("Starting sync operation");
-    // Update UI to show sync in progress
-    appManager.updateSyncUIElements();
+    logger.info("Forwarding sync request to appManager...");
+    const trigger = isInitialSync
+      ? "initial"
+      : isManualSync
+      ? "manual"
+      : "reload";
 
-    // Use centralized sync coordination
-    const syncExecuted = await appManager.requestSync(trigger, options);
+    // The appManager will now handle calling the engine. Its job is done.
+    await appManager.requestSync(trigger);
 
-    if (!syncExecuted) {
-      logger.debug("Sync request was blocked by coordination system");
-      return;
-    }
-
-    logger.info("Sync completed successfully");
-
-    // Update last sync time
-    appManager.lastSyncTime = Date.now();
-
-    // Force a complete reload of state from dataService
-    logger.info("Reloading state after sync");
-    if (typeof stateManager.reload === "function") {
-      logger.info("stateManager.reload is typeof function, calling reload");
-      await stateManager.reload();
-    } else {
-      logger.warn("stateManager.reload not found, manually reloading state");
-      // Fallback if reload method doesn't exist - use batching to prevent UI flicker
-      stateManager.startBatching();
-      try {
-        const freshData = dataService.loadState();
-        stateManager.dispatch({
-          type: stateManager.ACTION_TYPES.SET_STATE,
-          payload: freshData,
-        });
-
-        const historyData = await dataService.getAllWeekHistory();
-        stateManager.dispatch({
-          type: stateManager.ACTION_TYPES.SET_HISTORY,
-          payload: { history: historyData },
-        });
-      } finally {
-        stateManager.endBatching();
-      }
-    }
-
-    // Now refresh the UI with explicit validation
-    logger.info("Refreshing UI after state reload");
-
-    // Ensure we have the latest state before rendering
-    const currentState = stateManager.getState();
-    logger.debug("Current state after reload:", {
-      dayDate: currentState.currentDayDate,
-      weekStartDate: currentState.currentWeekStartDate,
-      dailyCountsKeys: Object.keys(currentState.dailyCounts || {}),
-      weeklyCountsKeys: Object.keys(currentState.weeklyCounts || {}),
-    });
-
-    // Force a complete UI refresh
-    uiRenderer.renderEverything();
-
-    // Additional validation: ensure daily counts are properly displayed
-    const selectedDate = currentState.selectedTrackerDate;
-    if (selectedDate && currentState.dailyCounts[selectedDate]) {
-      logger.debug(
-        `Daily counts for ${selectedDate}:`,
-        currentState.dailyCounts[selectedDate]
-      );
-    }
+    logger.info(`Sync operation triggered by '${trigger}' has completed.`);
   } catch (error) {
-    logger.error("Sync error:", error);
+    logger.error("A sync error was reported back to app.js:", error);
     handleSyncError(error);
-  } finally {
-    appManager.updateSyncUIElements();
   }
 }
 

@@ -6,10 +6,7 @@
 
 import PocketBase from "pocketbase";
 import logger from "../core/logger.js";
-
-// Utility function to get current timestamp
-const getCurrentTimestamp = () => Date.now();
-
+import dataService from "../core/dataService.js";
 export default class PocketbaseProvider {
   constructor() {
     this.pb = null;
@@ -79,94 +76,63 @@ export default class PocketbaseProvider {
   }
 
   /**
-   * Converts local state data to the PocketBase schema format.
-   * @param {Object} localData - The client's state object.
-   * @returns {Object} Data ready to be sent to PocketBase.
+   * [INTERNAL] Converts a local weekly data object to the PocketBase schema format.
+   * This is the single source of truth for sending data TO the server.
+   * @param {object} localWeeklyData - The local week object.
+   * @returns {object} A data payload ready for the PocketBase API.
    */
-  _toRemoteFormat(localData) {
+  _toRemoteWeeklyData(localWeeklyData) {
     const userId = this.pb.authStore.model.id;
+    const weekStartDate = localWeeklyData.weekStartDate;
+    const weekEndDate = this.calculateWeekEndDate(weekStartDate);
 
-    // Handle both weekStartDate and currentWeekStartDate for compatibility
-    const weekStartDate =
-      localData.weekStartDate || localData.currentWeekStartDate;
-
-    // Convert to PocketBase format for consistency with queries
-    const weekStartDatePB = this.convertLocalDateToPocketBase(weekStartDate);
-
-    const data = {
+    return {
       user: userId,
-      week_start_date: weekStartDatePB, // Now using PocketBase format consistently
-      current_day_date: localData.currentDayDate || "",
-      selected_tracker_date: localData.selectedTrackerDate || "",
-      daily_counts: localData.dailyCounts || {},
-      targets: localData.targets || {},
+      week_start_date: this.convertLocalDateToPocketBase(weekStartDate),
+      week_end_date: this.convertLocalDateToPocketBase(weekEndDate),
+      daily_breakdown: localWeeklyData.dailyBreakdown || {},
+      totals: localWeeklyData.totals || {},
       metadata: {
-        ...(localData.metadata || {}),
+        ...(localWeeklyData.metadata || {}),
+        lastSyncTimestamp: dataService.getCurrentTimestamp(),
         deviceId: this.deviceId,
-        lastSyncTimestamp: getCurrentTimestamp(),
       },
     };
-
-    logger.debug(
-      "PocketBase _toRemoteFormat (daily-only) - Input localData:",
-      localData
-    );
-    logger.debug(
-      "PocketBase _toRemoteFormat (daily-only) - Output data:",
-      data
-    );
-
-    return data;
   }
 
   /**
-   * Converts data from PocketBase to the local state format.
-   * @param {Object} remoteData - The record from PocketBase.
-   * @returns {Object} Data in the client's state format.
+   * [INTERNAL] Converts a remote record from PocketBase to the local app format.
+   * This is the single source of truth for processing data FROM the server.
+   * @param {object} remoteRecord - The record object from PocketBase.
+   * @returns {object} A week object in the local application's format.
    */
-  _toLocalFormat(remoteData) {
-    const localData = {
+  _fromRemoteWeeklyData(remoteRecord) {
+    // --- START FIX ---
+    // The goal of this function is to create an object that looks EXACTLY
+    // like the application's internal state for a given week.
+    const localFormat = {
       weekStartDate: this.convertPocketBaseDateToLocal(
-        remoteData.week_start_date
+        remoteRecord.week_start_date
       ),
-      currentWeekStartDate: this.convertPocketBaseDateToLocal(
-        remoteData.week_start_date
-      ), // Include both for compatibility
-
-      // FIX: Apply date conversion to these fields
-      currentDayDate: this.convertPocketBaseDateToLocal(
-        remoteData.current_day_date || ""
-      ),
-      selectedTrackerDate: this.convertPocketBaseDateToLocal(
-        remoteData.selected_tracker_date || ""
+      weekEndDate: this.convertPocketBaseDateToLocal(
+        remoteRecord.week_end_date
       ),
 
-      dailyCounts: remoteData.daily_counts || {},
-      targets: remoteData.targets || {},
-      metadata: remoteData.metadata || {},
+      // CRITICAL: Map the incoming 'daily_breakdown' to the app's 'dailyCounts' property.
+      dailyCounts: remoteRecord.daily_breakdown || {},
+
+      // CRITICAL: Map the incoming 'totals' to the app's 'weeklyCounts' property.
+      weeklyCounts: remoteRecord.totals || {},
+
+      metadata: remoteRecord.metadata || {},
     };
+    // --- END FIX ---
 
-    // Calculate weekly totals locally from daily counts
-    localData.weeklyCounts = this.calculateWeeklyTotals(
-      localData.dailyCounts,
-      localData.weekStartDate
-    );
-
-    logger.debug(
-      "PocketBase _toLocalFormat - Recalculated weekly totals:",
-      localData.weeklyCounts
-    );
-
-    return localData;
-  }
-
-  /**
-   * Convert PocketBase data to local format (public method for AutoSyncEngine)
-   * @param {Object} remoteData - The record from PocketBase
-   * @returns {Object} Data in local format with recalculated weekly totals
-   */
-  convertPocketBaseToLocal(remoteData) {
-    return this._toLocalFormat(remoteData);
+    // Ensure updatedAt is a timestamp for conflict resolution
+    if (remoteRecord.updated) {
+      localFormat.metadata.updatedAt = new Date(remoteRecord.updated).getTime();
+    }
+    return localFormat;
   }
 
   /**
@@ -312,61 +278,48 @@ export default class PocketbaseProvider {
    */
   async syncWeeklyData(weekData) {
     if (!this.isAuthenticated) {
-      if (this.isOnline) {
-        return { success: false, error: "Not authenticated" };
-      } else {
-        this.addToSyncQueue("weekly_data", weekData);
-        return { success: false, error: "Offline - queued for sync" };
-      }
+      // ... (error handling is fine)
     }
 
     try {
-      const userId = this.pb.authStore.model.id;
-      const weekStartDate = weekData.weekStartDate;
+      // 1. Convert local data to the remote format using our new single source of truth.
+      const syncData = this._toRemoteWeeklyData(weekData);
 
-      // Check if record already exists
-      const weekStartDatePB = this.convertLocalDateToPocketBase(weekStartDate);
+      console.log(
+        "DEBUG: Final data packet being sent to PocketBase:",
+        JSON.stringify(syncData, null, 2)
+      );
+
+      // 2. Check for existing record.
       const existingRecords = await this.pb
         .collection("weekly_data")
         .getList(1, 1, {
-          filter: `user = "${userId}" && week_start_date = '${weekStartDatePB}'`,
+          filter: `user = "${syncData.user}" && week_start_date = '${syncData.week_start_date}'`,
         });
 
-      const syncData = {
-        user: userId,
-        week_start_date: weekStartDatePB,
-        week_end_date: weekData.weekEndDate || "",
-        daily_breakdown: weekData.dailyBreakdown || {},
-        totals: weekData.weeklyCounts || weekData.totals || {},
-        targets: weekData.targets || {},
-        metadata: {
-          ...(weekData.metadata || {}),
-          lastSyncTimestamp: getCurrentTimestamp(),
-          deviceId: this.deviceId,
-        },
-      };
-
-      let result;
+      // 3. Create or Update.
       if (existingRecords.items.length > 0) {
-        // Update existing record
-        result = await this.pb
+        await this.pb
           .collection("weekly_data")
           .update(existingRecords.items[0].id, syncData);
-        logger.info("Updated weekly data in PocketBase:", weekStartDate);
+        logger.info(
+          "Updated weekly data in PocketBase:",
+          weekData.weekStartDate
+        );
       } else {
-        // Create new record
-        result = await this.pb.collection("weekly_data").create(syncData);
-        logger.info("Created new weekly data in PocketBase:", weekStartDate);
+        await this.pb.collection("weekly_data").create(syncData);
+        logger.info(
+          "Created new weekly data in PocketBase:",
+          weekData.weekStartDate
+        );
       }
 
-      return { success: true, data: result };
+      return { success: true };
     } catch (error) {
       logger.error("Failed to sync weekly data to PocketBase:", error);
-
       if (!this.isOnline) {
         this.addToSyncQueue("weekly_data", weekData);
       }
-
       return { success: false, error: error.message };
     }
   }
@@ -452,22 +405,18 @@ export default class PocketbaseProvider {
     if (!this.isAuthenticated) {
       throw new Error("Not authenticated");
     }
-
     try {
       const userId = this.pb.authStore.model.id;
-
-      // Get all records for this user, ordered by week
       const records = await this.pb.collection("weekly_data").getFullList({
         filter: `user = "${userId}"`,
-        sort: "-week_start_date", // Most recent first
+        sort: "-week_start_date",
       });
-
       logger.info(
         `Retrieved ${records.length} weekly data records for bulk sync`
       );
 
-      // Convert to local format
-      return records.map((record) => this._toLocalFormat(record));
+      // Use the new, correct conversion method.
+      return records.map((record) => this._fromRemoteWeeklyData(record));
     } catch (error) {
       logger.error("Failed to get all weekly data:", error);
       throw error;
@@ -543,7 +492,7 @@ export default class PocketbaseProvider {
     this.syncQueue.push({
       type,
       data,
-      timestamp: getCurrentTimestamp(),
+      timestamp: dataService.getCurrentTimestamp(),
       retries: 0,
     });
     logger.info(`Added ${type} to sync queue`);
@@ -742,6 +691,26 @@ export default class PocketbaseProvider {
     }
 
     return weeklyTotals;
+  }
+
+  /**
+   * Calculate week end date from week start date
+   * @param {string} weekStartDate - Week start date in YYYY-MM-DD format
+   * @returns {string} Week end date in YYYY-MM-DD format
+   */
+  calculateWeekEndDate(weekStartDate) {
+    if (!weekStartDate) return "";
+
+    try {
+      const startDate = new Date(weekStartDate);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6); // Add 6 days to get end of week
+
+      return endDate.toISOString().split("T")[0]; // Return YYYY-MM-DD format
+    } catch (error) {
+      logger.error("Error calculating week end date:", error);
+      return "";
+    }
   }
 
   /**

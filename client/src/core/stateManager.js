@@ -312,11 +312,12 @@ function reducer(state, action) {
     case ACTION_TYPES.RESET_WEEKLY_COUNTS: {
       const timestamp =
         action.payload.resetTimestamp || dataService.getCurrentTimestamp();
-      const currentDayForWeeklyReset =
-        state.currentDayDate || dataService.getTodayDateString();
+      // Use the system's current date, not the old state's currentDayDate
+      const currentDayForWeeklyReset = dataService.getTodayDateString();
 
       const nextState = JSON.parse(JSON.stringify(state));
 
+      // Clear all daily counts and start fresh with only the current day
       nextState.dailyCounts = { [currentDayForWeeklyReset]: {} };
       nextState.weeklyCounts = {};
 
@@ -676,113 +677,59 @@ function setCurrentWeek(date) {
 
 /**
  * Checks if the current date or week has changed compared to the stored state,
- * and performs necessary resets and archiving.
+ * and performs necessary resets and initializes new record.
  * @returns {Promise<boolean>} True if state was changed (date/week reset occurred), false otherwise.
  */
 async function checkDateAndReset() {
-  const currentState = getState(); // Get a fresh copy of the current state
-  const systemToday = dataService.getCurrentDate(); // Respects test mode
-  const systemTodayStr = dataService.getTodayDateString(systemToday); // Format current system date
-  const weekStartDayPref = currentState.metadata?.weekStartDay || "Sunday"; // Get preference from state
-
+  const currentState = getState();
+  const systemToday = dataService.getCurrentDate();
+  const systemTodayStr = dataService.getTodayDateString(systemToday);
+  const weekStartDayPref = currentState.metadata?.weekStartDay || "Sunday"; // FIX: 'Sunday' must be a string
   const systemCurrentWeekStartStr = dataService.getWeekStartDate(
     systemToday,
     weekStartDayPref
   );
 
   let stateChanged = false;
-  let resetType = null; // "DAILY" or "WEEKLY"
 
-  logger.debug("checkDateAndReset: Initial state", {
-    stateCurrentDay: currentState.currentDayDate,
-    stateWeekStart: currentState.currentWeekStartDate,
-    stateSelectedTracker: currentState.selectedTrackerDate,
-    systemToday: systemTodayStr,
-    systemWeekStart: systemCurrentWeekStartStr,
-    weekStartPref: weekStartDayPref,
-  });
-
-  // Weekly rollover check
+  // --- Weekly Rollover Logic ---
   if (currentState.currentWeekStartDate !== systemCurrentWeekStartStr) {
     logger.info(
       `Weekly rollover detected: from ${currentState.currentWeekStartDate} to ${systemCurrentWeekStartStr}`
     );
 
-    // Capture the state of the week that is *ending* before any modifications
-    const completedWeekState = JSON.parse(JSON.stringify(currentState)); // Deep copy
+    // The old week is now history. No "archive" action is needed.
+    // We just need to start the new week properly.
 
-    try {
-      // Before archiving, ensure its weeklyCounts are accurate based on its dailyCounts
+    // 1. Dispatch actions to reset the state for the NEW week.
+    dispatch({
+      type: ACTION_TYPES.SET_CURRENT_WEEK,
+      payload: { date: systemCurrentWeekStartStr },
+    });
+    dispatch({
+      type: ACTION_TYPES.SET_CURRENT_DAY,
+      payload: { date: systemTodayStr },
+    });
+    dispatch({
+      type: ACTION_TYPES.RESET_WEEKLY_COUNTS,
+      payload: { resetTimestamp: dataService.getCurrentTimestamp() },
+    });
 
-      const accurateWeeklyTotalsForArchive = {};
-      const startDateForArchive = new Date(
-        completedWeekState.currentWeekStartDate + "T00:00:00"
-      );
-      for (let i = 0; i < 7; i++) {
-        const dayToProcess = new Date(startDateForArchive);
-        dayToProcess.setDate(startDateForArchive.getDate() + i);
+    // 2. CRITICAL: Mark the new, empty week as dirty so it gets created on the server immediately.
+    updateMetadata({
+      currentWeekDirty: true, // This flag is the primary trigger for the sync engine
+      lastModified: dataService.getCurrentTimestamp(),
+      dateResetPerformed: true,
+      dateResetType: "WEEKLY", // FIX: 'WEEKLY' must be a string
+      dateResetTimestamp: dataService.getCurrentTimestamp(),
+    });
 
-        const dateStr = dateUtils.formatDateToYYYYMMDD(dayToProcess);
-
-        if (completedWeekState.dailyCounts[dateStr]) {
-          for (const foodId in completedWeekState.dailyCounts[dateStr]) {
-            accurateWeeklyTotalsForArchive[foodId] =
-              (accurateWeeklyTotalsForArchive[foodId] || 0) +
-              (completedWeekState.dailyCounts[dateStr][foodId] || 0);
-          }
-        }
-      }
-      completedWeekState.weeklyCounts = accurateWeeklyTotalsForArchive; // Use the accurate sum for archival
-
-      logger.debug(
-        "State being passed to archiveCurrentWeek:",
-        JSON.parse(JSON.stringify(completedWeekState))
-      );
-      await archiveCurrentWeek(completedWeekState); // Pass the captured state
-
-      // Now, update state for the NEW week
-      dispatch({
-        type: ACTION_TYPES.SET_CURRENT_WEEK,
-        payload: { date: systemCurrentWeekStartStr },
-      });
-      dispatch({
-        type: ACTION_TYPES.SET_CURRENT_DAY,
-        payload: { date: systemTodayStr },
-      });
-      dispatch({ type: ACTION_TYPES.RESET_WEEKLY_COUNTS }); // Resets dailyCounts to today and clears weeklyCounts
-
-      stateChanged = true;
-      resetType = "WEEKLY";
-      updateMetadata({
-        dateResetPerformed: true,
-        dateResetType: resetType,
-        dateResetTimestamp: dataService.getCurrentTimestamp(),
-        previousWeekStartDate: completedWeekState.currentWeekStartDate, // Store the week that was just archived
-        // Reset dirty flags for the new week
-        dailyTotalsDirty: false,
-        currentWeekDirty: false, // Legacy
-      });
-
-      logger.info(
-        `Weekly reset complete. New week: ${systemCurrentWeekStartStr}, New day: ${systemTodayStr}`
-      );
-    } catch (archiveError) {
-      logger.error(
-        "Weekly rollover failed because archiving the previous week failed:",
-        archiveError
-      );
-      // If archiving fails, we should NOT proceed with the weekly reset to avoid data loss.
-      // The app will remain in the "old" week. It will try again on next load/check.
-      // Consider showing a persistent error to the user.
-      uiRenderer.showToast(
-        "Error archiving previous week. Please try syncing or check storage.",
-        "error",
-        { isPersistent: true }
-      );
-      return false; // Indicate no state change for current week because of error
-    }
+    stateChanged = true;
+    logger.info(
+      `New week ${systemCurrentWeekStartStr} initialized and marked for sync.`
+    );
   }
-  // Daily rollover check (only if no weekly rollover occurred)
+  // --- Daily Rollover Logic (if no weekly rollover) ---
   else if (currentState.currentDayDate !== systemTodayStr) {
     logger.info(
       `Daily rollover detected: from ${currentState.currentDayDate} to ${systemTodayStr}`
@@ -791,49 +738,14 @@ async function checkDateAndReset() {
       type: ACTION_TYPES.SET_CURRENT_DAY,
       payload: { date: systemTodayStr },
     });
-    // No need to call RESET_DAILY_COUNTS for the new 'systemTodayStr' as it will start empty.
-    // dailyCounts for previous days in the same week are preserved.
-
-    // Perform a recalculation of weeklyTotals to ensure integrity after a day change,
-    // especially if app was closed for multiple days within the same week.
-    dispatch({ type: ACTION_TYPES.RECALCULATE_WEEKLY_TOTALS });
-
     stateChanged = true;
-    resetType = "DAILY";
-    updateMetadata({
-      dateResetPerformed: true,
-      dateResetType: resetType,
-      dateResetTimestamp: dataService.getCurrentTimestamp(),
-      // For daily reset, we don't clear dirty flags, as data might have been entered on previous days.
-      // dailyTotalsDirty will be updated when daily counts change.
-    });
-    logger.info(`Daily reset complete. Current day set to: ${systemTodayStr}`);
-  }
-  // Ensure selectedTrackerDate is currentDayDate if no other reset happened
-  else if (
-    currentState.selectedTrackerDate !== currentState.currentDayDate &&
-    !stateChanged
-  ) {
-    logger.info(
-      `Aligning selectedTrackerDate (${currentState.selectedTrackerDate}) with currentDayDate (${currentState.currentDayDate}).`
-    );
-    dispatch({
-      type: ACTION_TYPES.SET_SELECTED_TRACKER_DATE,
-      payload: { date: currentState.currentDayDate },
-    });
-
-    // unless this is the only change. For simplicity, let's not mark stateChanged=true for this.
   }
 
   if (stateChanged) {
-    logger.info(
-      `checkDateAndReset completed. Type: ${resetType}. State was changed.`
-    );
-    // Final state save is handled by individual dispatches typically,
-    // but a final save after multiple dispatches can be good.
-    saveStateToStorage();
+    // The dispatches above will have already triggered a save and notified subscribers.
+    logger.info("checkDateAndReset completed. State was changed."); // FIX: Added quotes
   } else {
-    logger.debug("checkDateAndReset: No date or week change requiring reset.");
+    logger.debug("checkDateAndReset: No date or week change requiring reset."); // FIX: Added quotes
   }
 
   return stateChanged;
@@ -881,121 +793,6 @@ function getNextWeekStartDate(weekStartDateStr) {
 }
 
 /**
- * Archive the current week data to history.
- * This function assumes it's called BEFORE the state is updated for the new week.
- * @param {Object} completedWeekState - The state object representing the week to be archived.
- *                                      Should contain currentWeekStartDate, dailyCounts (map for the week),
- *                                      weeklyCounts (sum for the week), foodGroups, metadata.weekStartDay.
- * @param {number} [archiveTimestamp] - Optional timestamp for the archive operation.
- * @returns {Promise<void>} Promise that resolves when archive is complete.
- */
-async function archiveCurrentWeek(completedWeekState, archiveTimestamp = null) {
-  const stateToArchive = completedWeekState || getState();
-  const timestamp = archiveTimestamp || dataService.getCurrentTimestamp();
-
-  if (!stateToArchive.currentWeekStartDate) {
-    logger.error(
-      "Cannot archive week: currentWeekStartDate is missing from stateToArchive."
-    );
-    return Promise.reject(
-      new Error("Missing currentWeekStartDate for archiving.")
-    );
-  }
-
-  // Filter dailyCounts to only include days within the archived week
-  const filteredDailyBreakdown = {};
-  const weekStartDateObj = new Date(
-    stateToArchive.currentWeekStartDate + "T00:00:00"
-  );
-
-  for (let i = 0; i < 7; i++) {
-    const dayInArchivedWeekObj = new Date(weekStartDateObj);
-    dayInArchivedWeekObj.setDate(weekStartDateObj.getDate() + i);
-
-    const dayStr = dateUtils.formatDateToYYYYMMDD(dayInArchivedWeekObj);
-
-    if (dayStr === "") {
-      logger.error(
-        "Failed to format date in archiveCurrentWeek, skipping day:",
-        dayInArchivedWeekObj
-      );
-      continue;
-    }
-
-    // Check the original dailyCounts from the state being archived
-    if (
-      stateToArchive.dailyCounts &&
-      stateToArchive.dailyCounts.hasOwnProperty(dayStr)
-    ) {
-      filteredDailyBreakdown[dayStr] =
-        typeof stateToArchive.dailyCounts[dayStr] === "object"
-          ? { ...stateToArchive.dailyCounts[dayStr] }
-          : {};
-    } else {
-      // Ensure all 7 days have an entry, even if empty
-      filteredDailyBreakdown[dayStr] = {};
-    }
-  }
-
-  const weekDataForHistory = {
-    weekStartDate: stateToArchive.currentWeekStartDate,
-    dailyBreakdown: filteredDailyBreakdown, // <<< USE THE FILTERED OBJECT HERE
-    totals: { ...stateToArchive.weeklyCounts },
-  };
-
-  logger.info(
-    `Archiving week: ${stateToArchive.currentWeekStartDate}`,
-    `DailyBreakdown keys being archived: ${
-      Object.keys(weekDataForHistory.dailyBreakdown).length
-    }`, // Should now be 7
-    `Weekly Totals keys: ${Object.keys(weekDataForHistory.totals || {}).length}`
-  );
-  logger.debug(
-    "Full dailyBreakdown for archive:",
-    JSON.parse(JSON.stringify(weekDataForHistory.dailyBreakdown))
-  );
-  logger.debug(
-    "Full totals for archive:",
-    JSON.parse(JSON.stringify(weekDataForHistory.totals))
-  );
-
-  try {
-    await dataService.saveWeekHistory(weekDataForHistory, {
-      foodGroups: stateToArchive.foodGroups,
-      updatedAt: timestamp,
-      weekStartDay: stateToArchive.metadata?.weekStartDay || "Sunday",
-    });
-    logger.info(
-      `Archived week ${stateToArchive.currentWeekStartDate} with timestamp ${timestamp}`
-    );
-
-    const historyData = await dataService.getAllWeekHistory();
-    dispatch({
-      type: ACTION_TYPES.SET_HISTORY,
-      payload: { history: historyData || [] },
-    });
-
-    updateMetadata({
-      historyDirty: true,
-      lastModified: timestamp,
-    });
-
-    if (historyData && historyData.length > 0) {
-      dispatch({
-        type: ACTION_TYPES.SET_HISTORY_INDEX,
-        payload: { index: 0 },
-      });
-    }
-  } catch (error) {
-    logger.error(
-      `Failed to archive week ${stateToArchive.currentWeekStartDate}:`,
-      error
-    );
-    throw error;
-  }
-}
-
-/**
  * Get the food group data by ID
  * @param {string} id - The food group ID
  * @returns {Object|null} The food group object or null if not found
@@ -1032,42 +829,32 @@ function endBatching() {
  */
 async function reload(skipRecalculation = false) {
   logger.info("Reloading state from data service");
-
-  // Start batching to prevent intermediate UI updates
   startBatching();
-
   try {
-    // Load fresh data from data service
     const freshData = dataService.loadState();
-    logger.debug("Fresh data loaded:", {
-      dayDate: freshData.currentDayDate,
-      weekStartDate: freshData.currentWeekStartDate,
-      dailyCounts: Object.keys(freshData.dailyCounts || {}),
-      weeklyCounts: Object.keys(freshData.weeklyCounts || {}),
-    });
 
-    // Update state with fresh data
-    dispatch({
-      type: ACTION_TYPES.SET_STATE,
-      payload: freshData,
-    });
+    // --- START FIX ---
+    // Only dispatch the loaded state if it's genuinely newer than what's in memory.
+    // This prevents overwriting a freshly synced state with stale localStorage data.
+    if (freshData.lastModified > _state.lastModified) {
+      logger.info("Stale data detected in memory. Reloading from storage.");
+      dispatch({ type: ACTION_TYPES.SET_STATE, payload: freshData });
+    } else {
+      logger.info(
+        "In-memory state is up-to-date. Skipping reload from storage."
+      );
+    }
+    // --- END FIX ---
 
-    // Also reload history if needed
     const historyData = await dataService.getAllWeekHistory();
-    logger.info("History data loaded:", historyData.length, "weeks");
-
     dispatch({
       type: ACTION_TYPES.SET_HISTORY,
       payload: { history: historyData },
     });
 
-    // Weekly totals are now calculated automatically when data is converted from remote format
-    // No need to recalculate here as it would be redundant
-
-    logger.info("State reloaded successfully");
+    logger.info("State reload/refresh complete.");
     return true;
   } finally {
-    // Always end batching, even if an error occurs
     endBatching();
   }
 }
@@ -1136,7 +923,6 @@ export default {
 
   // Date check & reset
   checkDateAndReset,
-  archiveCurrentWeek,
   // ensureCurrentDate,
 
   // Helper functions

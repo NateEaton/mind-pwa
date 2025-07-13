@@ -94,15 +94,22 @@ export class CloudSyncManager {
   }
 
   /**
-   * Sync data between local device and cloud
-   * @param {boolean} silent - Whether to show notifications
-   * @returns {Promise<Object|boolean>} Sync results or false if sync failed
+   * Forwards a sync request to the auto-sync engine.
+   * This is the new primary way to explicitly trigger a sync.
+   * @param {string} trigger - A descriptive name for what initiated the sync.
    */
-  async sync(silent = false) {
-    logger.info(
-      "Sync delegated to AutoSyncEngine (PocketBase real-time sync active)"
+  async requestSync(trigger) {
+    if (this.autoSyncEngine) {
+      logger.info(
+        `CloudSyncManager forwarding sync request triggered by: ${trigger}`
+      );
+      await this.autoSyncEngine.performSync(trigger);
+      return true;
+    }
+    logger.warn(
+      `Sync request for trigger '${trigger}' ignored: no auto-sync engine available.`
     );
-    return { success: true, message: "PocketBase real-time sync active" };
+    return false;
   }
 
   /**
@@ -125,7 +132,6 @@ export class CloudSyncManager {
       syncInProgress: false, // AutoSyncEngine handles progress
     };
   }
-
 
   /**
    * Authenticate with PocketBase
@@ -157,7 +163,9 @@ export class CloudSyncManager {
    */
   async clearDirtyFlag(flagName) {
     // Real-time sync eliminates need for dirty flags
-    logger.debug(`Dirty flag clearing not needed with PocketBase real-time sync: ${flagName}`);
+    logger.debug(
+      `Dirty flag clearing not needed with PocketBase real-time sync: ${flagName}`
+    );
   }
 
   /**
@@ -184,7 +192,9 @@ export class CloudSyncManager {
    */
   async executePendingArchiveMerge() {
     // Real-time sync eliminates need for manual archive merging
-    logger.debug("Archive merge execution not needed with PocketBase real-time sync");
+    logger.debug(
+      "Archive merge execution not needed with PocketBase real-time sync"
+    );
     return true;
   }
 
@@ -268,7 +278,6 @@ export class CloudSyncManager {
 
     logger.info("AutoSyncEngine initialized for PocketBase");
   }
-
 
   /**
    * Register new PocketBase user

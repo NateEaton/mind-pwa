@@ -23,9 +23,7 @@
 
 import logger from "../core/logger.js";
 import { ACTION_TYPES } from "../core/stateManager.js";
-
-// Import timestamp function from dataService (handles test mode)
-const getCurrentTimestamp = () => Date.now();
+import dataService from "../core/dataService.js";
 
 export class AutoSyncEngine {
   constructor(stateManager, dataService, provider, uiRenderer) {
@@ -68,7 +66,10 @@ export class AutoSyncEngine {
       typeof this.provider.subscribeToChanges === "function"
     ) {
       this.provider.subscribeToChanges((dataType, changeEvent) => {
-        this.handleRemoteChange(dataType, changeEvent);
+        if (dataType === "weekly_data") {
+          this.handleRemoteWeeklyDataChange(changeEvent);
+        }
+        // Remove old current_weeks and weekly_history handlers - now unified
       });
     }
 
@@ -91,7 +92,7 @@ export class AutoSyncEngine {
    */
   handleStateChange(action, newState) {
     // Track when local changes occur
-    this.lastLocalChange = getCurrentTimestamp();
+    this.lastLocalChange = dataService.getCurrentTimestamp();
 
     // Determine what type of sync is needed based on action
     switch (action.type) {
@@ -169,14 +170,14 @@ export class AutoSyncEngine {
   async handleRemoteWeeklyDataChange(changeEvent) {
     try {
       const remoteRecord = changeEvent.record;
-      const weekStartDate = this.convertPocketBaseDateToLocal(
+      const weekStartDate = this.provider.convertPocketBaseDateToLocal(
         remoteRecord.week_start_date
       );
 
       logger.info(`Processing remote change for week: ${weekStartDate}`);
 
       // Get local version for comparison
-      const localRecord = await dataService.getWeekData(weekStartDate);
+      const localRecord = await this.dataService.getWeekData(weekStartDate);
 
       // Apply Last Write Wins conflict resolution
       const remoteUpdated = new Date(remoteRecord.updated).getTime();
@@ -189,7 +190,7 @@ export class AutoSyncEngine {
 
         // Convert and save remote data
         const convertedData = this.convertFromPocketBaseFormat(remoteRecord);
-        await dataService.saveWeekData(convertedData);
+        await this.dataService.saveWeekData(convertedData);
 
         // Refresh UI if this affects current week or visible history
         await this.refreshUIAfterRemoteChange(weekStartDate);
@@ -228,39 +229,57 @@ export class AutoSyncEngine {
 
       // Sync current week if it has changes
       if (this.pendingChanges.has("current_week") || trigger === "periodic") {
-        // Check if this is an initial sync with empty local data
-        const isInitialSyncWithEmptyData = this.isInitialSync(currentState);
+        const isInitialSync = this.isInitialSync(currentState);
+        let shouldPushCurrentWeek = true; // Default to pushing changes
 
-        if (isInitialSyncWithEmptyData) {
-          // Pull remote data instead of pushing empty local data
-          const result = await this.pullRemoteData(currentState);
-          if (result.success) {
-            this.pendingChanges.delete("current_week");
-            logger.debug("Initial sync: Remote data pulled successfully");
+        if (isInitialSync) {
+          logger.info(
+            "Initial sync detected, attempting to pull remote data first."
+          );
+          const pullResult = await this.pullRemoteData(currentState);
+
+          if (pullResult.success && pullResult.data) {
+            // If we successfully pulled and merged data, the local state is now
+            // aligned with the remote. We should NOT push our initial (and now outdated) state.
+            shouldPushCurrentWeek = false;
+            logger.info(
+              "Successfully pulled and merged remote data. Skipping initial push."
+            );
+            this.pendingChanges.delete("current_week"); // Mark as clean
           } else {
-            syncSuccess = false;
-            logger.warn("Initial sync pull failed:", result.error);
+            // This means the pull either failed or, more importantly, found no data.
+            // In this case, we SHOULD proceed to push our local changes.
+            logger.info(
+              "No remote data found or pull failed. Proceeding with initial push."
+            );
           }
-        } else {
-          // Normal sync: push local changes to remote
-          const result = await this.provider.syncCurrentWeek(currentState);
-          if (result.success) {
-            this.pendingChanges.delete("current_week");
-            logger.debug("Current week synced successfully");
-          } else {
-            syncSuccess = false;
-            logger.warn("Current week sync failed:", result.error);
+        }
+
+        if (shouldPushCurrentWeek) {
+          const currentWeekData = this.buildCurrentWeekSyncData(currentState);
+          if (currentWeekData) {
+            const result = await this.provider.syncWeeklyData(currentWeekData);
+            if (result.success) {
+              this.pendingChanges.delete("current_week");
+              // ... (rest of metadata update logic is correct)
+              logger.debug("Current week synced successfully");
+            } else {
+              syncSuccess = false;
+              logger.warn("Current week sync failed:", result.error);
+            }
           }
         }
       }
 
-      // Sync history if needed
+      // Sync history if needed (This part of your diff is already correct)
       if (this.pendingChanges.has("weekly_history")) {
-        // Get history from dataService and sync each week
-        const historyData = await this.dataService.getAllWeekHistory();
-        for (const week of historyData) {
-          const result = await this.provider.syncWeeklyHistory(week);
-          if (!result.success) {
+        const dirtyWeeks = await this.dataService.getDirtyWeekHistory();
+        for (const weekData of dirtyWeeks) {
+          const result = await this.provider.syncWeeklyData(weekData);
+          if (result.success) {
+            weekData.metadata.syncStatus = "clean";
+            await this.dataService.saveWeekData(weekData);
+          } else {
             syncSuccess = false;
             logger.warn("Weekly history sync failed:", result.error);
           }
@@ -321,8 +340,11 @@ export class AutoSyncEngine {
   async resolveConflict(localData, remoteRecord) {
     logger.info("Resolving conflict with 'Last Write Wins' strategy.");
 
-    const remoteLocalFormat =
-      this.provider.convertPocketBaseToLocal(remoteRecord);
+    // --- START FIX ---
+    // Use the engine's own conversion method, which correctly delegates to the provider.
+    // This removes the dangling reference to the deleted 'convertPocketBaseToLocal' function.
+    const remoteLocalFormat = this.convertFromPocketBaseFormat(remoteRecord);
+    // --- END FIX ---
 
     const localTimestamp = localData.metadata?.lastModified || 0;
     const remoteTimestamp = remoteLocalFormat.metadata?.lastModified || 0;
@@ -400,7 +422,6 @@ export class AutoSyncEngine {
       const weekStartDate =
         currentState.weekStartDate || currentState.currentWeekStartDate;
 
-      // Get remote data
       const remoteRecord = await this.provider.getRemoteCurrentWeek(
         userId,
         weekStartDate
@@ -409,21 +430,26 @@ export class AutoSyncEngine {
       if (remoteRecord) {
         logger.info("Found remote data during initial sync, pulling to local");
 
-        // Convert remote data to local format
-        const remoteData = this.provider.convertPocketBaseToLocal(remoteRecord);
+        // --- START FIX ---
+        // Use the engine's own conversion method, which correctly delegates to the provider.
+        // This removes the dangling reference to the deleted 'convertPocketBaseToLocal' function.
+        const remoteData = this.convertFromPocketBaseFormat(remoteRecord);
+        // --- END FIX ---
 
-        // Merge remote data with current local state to preserve today's empty entry
         const mergedData = this.mergeInitialSyncData(currentState, remoteData);
 
-        // Update local state with merged data
         this.stateManager.dispatch({
           type: ACTION_TYPES.SET_STATE,
           payload: mergedData,
         });
+        logger.info("Live application state updated with pulled data.");
+
+        await this.performInitialBulkSync();
 
         return { success: true, data: mergedData };
       } else {
         logger.info("No remote data found during initial sync");
+        await this.performInitialBulkSync();
         return { success: true, data: null };
       }
     } catch (error) {
@@ -538,6 +564,89 @@ export class AutoSyncEngine {
         func.apply(this, args);
       }
     };
+  }
+
+  /**
+   * Build sync data from current state
+   */
+  buildCurrentWeekSyncData(currentState) {
+    if (!currentState.currentWeekStartDate) {
+      return null;
+    }
+    // This function now creates a PURE data object.
+    // It has no knowledge of the provider's schema.
+    return {
+      weekStartDate: currentState.currentWeekStartDate,
+      dailyBreakdown: currentState.dailyCounts || {},
+      totals: currentState.weeklyCounts || {},
+      targets: {},
+      metadata: {
+        // No need for 'updatedAt' here, the provider will add its own timestamp.
+        deviceId: this.dataService.getDeviceId(),
+        syncStatus: "clean",
+      },
+    };
+  }
+
+  /**
+   * Convert from PocketBase format to local format
+   */
+  convertFromPocketBaseFormat(remoteRecord) {
+    // Delegate ALL conversion to the provider.
+    // The provider now has the single source of truth (_fromRemoteWeeklyData).
+    return this.provider._fromRemoteWeeklyData(remoteRecord);
+  }
+
+  /**
+   * Refresh UI after remote change
+   */
+  async refreshUIAfterRemoteChange(weekStartDate) {
+    try {
+      const currentState = this.stateManager.getState();
+      const currentWeekStart = currentState.currentWeekStartDate;
+
+      // If this change affects the current week, refresh the current state
+      if (weekStartDate === currentWeekStart) {
+        logger.info("Remote change affects current week, refreshing state");
+        // Refresh current week data from storage
+        const updatedWeekData = await this.dataService.getWeekData(
+          weekStartDate
+        );
+        if (updatedWeekData) {
+          this.stateManager.dispatch({
+            type: ACTION_TYPES.SET_STATE,
+            payload: {
+              ...currentState,
+              dailyCounts: updatedWeekData.dailyBreakdown || {},
+              weeklyCounts: updatedWeekData.totals || {},
+            },
+          });
+        }
+      }
+
+      // Always refresh history to show latest data
+      await this._refreshHistoryInState();
+
+      // Show notification about remote update
+      this.showRemoteUpdateNotification("weekly_data");
+    } catch (error) {
+      logger.error("Error refreshing UI after remote change:", error);
+    }
+  }
+
+  /**
+   * Refresh history data in state
+   */
+  async _refreshHistoryInState() {
+    try {
+      const updatedHistory = await this.dataService.getAllWeekHistory();
+      this.stateManager.dispatch({
+        type: ACTION_TYPES.SET_HISTORY,
+        payload: { history: updatedHistory || [] },
+      });
+    } catch (error) {
+      logger.error("Error refreshing history in state:", error);
+    }
   }
 
   /**

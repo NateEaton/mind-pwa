@@ -236,82 +236,19 @@ export default class AppManager {
   }
 
   /**
-   * Request a sync operation - Delegated to AutoSyncEngine
-   * @param {string} trigger - The trigger source (manual, timer, visibility, etc.)
-   * @param {Object} options - Sync options
-   * @returns {Promise<boolean>} Whether sync was executed
+   * Forwards a sync request to the active CloudSyncManager.
+   * @param {string} trigger - The trigger source (e.g., 'initial', 'manual').
+   * @param {Object} options - Reserved for future use.
+   * @returns {Promise<boolean>} Whether the sync was successfully initiated.
    */
   async requestSync(trigger, options = {}) {
-    // AutoSyncEngine handles all sync coordination for PocketBase
-    logger.debug(`Sync request from ${trigger} delegated to AutoSyncEngine`);
-    
-    // For manual sync, trigger the cloud sync directly
-    if (trigger === "manual" && this.getCloudSync()) {
-      return await this.getCloudSync().sync(false);
+    logger.debug(`AppManager forwarding sync request triggered by: ${trigger}`);
+    if (this.cloudSync && typeof this.cloudSync.requestSync === "function") {
+      return await this.cloudSync.requestSync(trigger);
     }
-    
-    // All other sync requests are handled automatically by AutoSyncEngine
-    return true;
-  }
-
-  /**
-   * Execute sync - Delegated to AutoSyncEngine
-   * @param {string} trigger - The trigger source
-   * @param {Object} options - Sync options
-   * @returns {Promise<boolean>} Whether sync was successful
-   */
-  async executeSync(trigger, options = {}) {
-    // AutoSyncEngine handles all sync execution for PocketBase
-    logger.debug(`Sync execution for ${trigger} delegated to AutoSyncEngine`);
-    return true;
-  }
-
-  /**
-   * Process pending sync requests - Not needed with AutoSyncEngine
-   */
-  processPendingSyncRequests() {
-    // AutoSyncEngine handles all sync queuing
-    logger.debug("Sync queuing handled by AutoSyncEngine");
-  }
-
-  /**
-   * Trigger-specific sync implementations - Delegated to AutoSyncEngine
-   */
-  async performInitialSync() {
-    logger.info("Initial sync delegated to AutoSyncEngine");
-    return true;
-  }
-
-  async performTimerSync() {
-    logger.info("Timer sync delegated to AutoSyncEngine");
-    return true;
-  }
-
-  async performVisibilitySync() {
-    logger.info("Visibility sync delegated to AutoSyncEngine");
-    return true;
-  }
-
-  async performManualSync() {
-    logger.info("Manual sync delegated to AutoSyncEngine");
-    return true;
-  }
-
-  async performReloadSync() {
-    logger.info("Reload sync delegated to AutoSyncEngine");
-    return true;
-  }
-
-  async performStandardSync() {
-    logger.info("Standard sync delegated to AutoSyncEngine");
-    return true;
-  }
-
-  /**
-   * Clear any pending sync operations - Not needed with AutoSyncEngine
-   */
-  clearPendingSyncs() {
-    // AutoSyncEngine handles all sync cleanup
-    logger.debug("Sync cleanup handled by AutoSyncEngine");
+    logger.warn(
+      `Could not forward sync request: cloudSync object or requestSync method is missing.`
+    );
+    return false;
   }
 }

@@ -1447,6 +1447,123 @@ async function bulkSavePreferences(preferences) {
   );
 }
 
+// ======================================
+// UNIFIED WEEKLY DATA BRIDGE METHODS
+// These methods provide a unified API for the refined single collection sync design
+// ======================================
+
+/**
+ * Get weekly data for any week (current or historical)
+ * This method bridges to existing getWeekHistory for compatibility
+ * @param {string} weekStartDate ISO date string (YYYY-MM-DD)
+ * @returns {Object|null} Week data or null if not found
+ */
+async function getWeekData(weekStartDate) {
+  return await getWeekHistory(weekStartDate);
+}
+
+/**
+ * Save weekly data (current or historical)  
+ * This method bridges to existing saveWeekHistory for compatibility
+ * @param {Object} weekData Week data to save
+ */
+async function saveWeekData(weekData) {
+  return await saveWeekHistory(weekData, {
+    deviceId: getDeviceId(),
+    updatedAt: getCurrentTimestamp(),
+  });
+}
+
+/**
+ * Get current week data from history store
+ * @returns {Object|null} Current week data
+ */
+async function getCurrentWeekData() {
+  const currentWeekStart = getWeekStartDate(getCurrentDate());
+  return await getWeekHistory(currentWeekStart);
+}
+
+/**
+ * Get all weeks that need syncing (have dirty status)
+ * @returns {Array} Array of dirty week data
+ */
+async function getDirtyWeekHistory() {
+  try {
+    const allWeeks = await getAllWeekHistory();
+    return allWeeks.filter(week => 
+      week.metadata?.syncStatus === "dirty" || 
+      week.metadata?.syncStatus === "local" ||
+      week.metadata?.historyDirty === true
+    );
+  } catch (error) {
+    logger.error("Error getting dirty weeks:", error);
+    return [];
+  }
+}
+
+/**
+ * Efficiently save multiple weeks of data
+ * @param {Array} weekDataArray Array of week data objects
+ */
+async function bulkSaveWeeklyData(weekDataArray) {
+  if (!weekDataArray || weekDataArray.length === 0) {
+    return;
+  }
+
+  try {
+    await ensureDatabase();
+    
+    return dbOperation(
+      STORES.HISTORY,
+      "readwrite",
+      (store, transaction, resolve, reject) => {
+        let completed = 0;
+        const total = weekDataArray.length;
+        const errors = [];
+
+        weekDataArray.forEach(weekData => {
+          // Ensure proper metadata for bulk import
+          const normalizedData = {
+            ...weekData,
+            metadata: {
+              ...(weekData.metadata || {}),
+              updatedAt: getCurrentTimestamp(),
+              deviceId: getDeviceId(),
+              syncStatus: "clean", // Bulk imports are considered clean
+              importedAt: getCurrentTimestamp()
+            }
+          };
+
+          const request = store.put(normalizedData);
+          
+          request.onsuccess = () => {
+            completed++;
+            if (completed === total) {
+              if (errors.length > 0) {
+                reject(new Error(`Failed to save ${errors.length} records: ${errors.join(", ")}`));
+              } else {
+                logger.info(`Bulk saved ${total} weekly records successfully`);
+                resolve();
+              }
+            }
+          };
+
+          request.onerror = (event) => {
+            errors.push(`${weekData.weekStartDate}: ${event.target.error}`);
+            completed++;
+            if (completed === total) {
+              reject(new Error(`Failed to save ${errors.length} records: ${errors.join(", ")}`));
+            }
+          };
+        });
+      }
+    );
+  } catch (error) {
+    logger.error("Error in bulk save:", error);
+    throw error;
+  }
+}
+
 // Export the public API
 export default {
   // Core initialization
@@ -1495,6 +1612,13 @@ export default {
 
   // New bulk save preferences method
   bulkSavePreferences,
+
+  // Unified weekly data bridge methods for refined single collection sync
+  getWeekData,
+  saveWeekData,
+  getCurrentWeekData,
+  getDirtyWeekHistory,
+  bulkSaveWeeklyData,
 };
 
 window.appDataService = {
