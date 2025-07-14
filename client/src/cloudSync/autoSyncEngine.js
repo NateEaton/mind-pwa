@@ -514,11 +514,28 @@ export class AutoSyncEngine {
     // Start with remote data as base
     const merged = { ...remoteData };
 
-    // Merge daily counts - combine both local and remote dates
-    merged.dailyCounts = {
-      ...(remoteData.dailyCounts || {}),
-      ...(localState.dailyCounts || {}),
-    };
+    // ======================= START OF FIX =======================
+    // Improved merge logic for daily counts: preserve non-empty data
+    merged.dailyCounts = { ...(remoteData.dailyCounts || {}) };
+
+    // Only merge local data if it's not empty
+    const localDailyCounts = localState.dailyCounts || {};
+    Object.entries(localDailyCounts).forEach(([date, counts]) => {
+      // Only overwrite remote data if local data has actual counts
+      if (counts && Object.keys(counts).length > 0) {
+        // Merge individual food group counts, preserving both local and remote
+        const remoteDateCounts = merged.dailyCounts[date] || {};
+        merged.dailyCounts[date] = {
+          ...remoteDateCounts,
+          ...counts,
+        };
+      } else if (!merged.dailyCounts[date]) {
+        // Only add empty object if remote doesn't have this date
+        merged.dailyCounts[date] = {};
+      }
+      // If remote has data and local is empty, keep remote data (don't overwrite)
+    });
+    // ======================== END OF FIX ========================
 
     // Use the most recent dates from either source
     merged.currentDayDate =
