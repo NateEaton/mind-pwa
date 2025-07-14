@@ -444,24 +444,16 @@ export class AutoSyncEngine {
   }
 
   /**
-   * Check if this is an initial sync with empty local data
+   * Check if this is the very first sync on a fresh installation.
+   * This now correctly uses the isFreshInstall metadata flag.
    */
   isInitialSync(currentState) {
-    // Consider it initial sync if:
-    // 1. Daily counts are empty or only contain empty day entries
-    // 2. No meaningful data has been entered yet
-    const dailyCounts = currentState.dailyCounts || {};
-    const isEmpty =
-      Object.keys(dailyCounts).length === 0 ||
-      Object.values(dailyCounts).every(
-        (dayCounts) => Object.keys(dayCounts || {}).length === 0
-      );
-
-    if (isEmpty) {
-      logger.info("Detected initial sync with empty local data");
+    // This is a much more reliable check than looking for empty data,
+    // as a new week will always have empty data initially.
+    if (currentState.metadata?.isFreshInstall) {
+      logger.info("Detected initial sync on a fresh installation.");
       return true;
     }
-
     return false;
   }
 

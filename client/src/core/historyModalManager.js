@@ -212,8 +212,8 @@ function openEditHistoryDailyDetailsModal() {
       modalState.selectedDayInHistoryModal,
       (newDay) => handleModalDayNavigation(newDay),
       modalState.editingHistoryWeekDataRef.metadata?.weekStartDay ||
-        state.metadata.weekStartDay ||
-        "Sunday",
+      state.metadata.weekStartDay ||
+      "Sunday",
       true // isModal = true
     );
   } else {
@@ -225,7 +225,7 @@ function openEditHistoryDailyDetailsModal() {
   uiRenderer.renderModalDayDetailsList(
     modalState.historyModalFoodGroups,
     modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] ||
-      {},
+    {},
     modalState.tempEditedDailyCounts
   );
 }
@@ -268,7 +268,7 @@ function handleModalDayNavigation(newSelectedDayStr) {
   uiRenderer.renderModalDayDetailsList(
     modalState.historyModalFoodGroups,
     modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] ||
-      {},
+    {},
     modalState.tempEditedDailyCounts
   );
 
@@ -317,7 +317,7 @@ function handleModalDailyDetailChange(event) {
   let currentValue =
     parseInt(
       modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal][
-        groupId
+      groupId
       ],
       10
     ) || 0;
@@ -467,14 +467,23 @@ async function saveEditedHistoryDailyDetails() {
       });
     }
 
-    // 3. Dispatch the generic metadata update to trigger the sync engine
+    // ======================= START OF FIX =======================
+    // The payload for UPDATE_METADATA must be a nested object
+    // to match what the reducer expects.
     stateManager.dispatch({
       type: stateManager.ACTION_TYPES.UPDATE_METADATA,
-      payload: { historyDirty: true, lastModified: Date.now() },
+      payload: {
+        metadata: {
+          historyDirty: true,
+          lastModified: Date.now()
+        }
+      },
     });
+    // ======================== END OF FIX ========================
 
     uiRenderer.showToast("History week details updated.", "success");
     closeEditHistoryDailyDetailsModal();
+
   } catch (error) {
     logger.error("Error saving edited history daily details:", error);
     uiRenderer.showToast("Error saving changes. Please try again.", "error");
