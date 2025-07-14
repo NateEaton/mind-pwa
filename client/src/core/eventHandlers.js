@@ -610,7 +610,7 @@ class EventHandlers {
         const hasDirtyFlags =
           state.metadata?.currentWeekDirty ||
           state.metadata?.historyDirty ||
-          state.metadata?.dailyTotalsDirty;
+          state.metadata?.dailyCountsDirty;
 
         if (hasDirtyFlags) {
           logger.info(

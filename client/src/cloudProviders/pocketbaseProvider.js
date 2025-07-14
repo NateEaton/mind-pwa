@@ -90,8 +90,8 @@ export default class PocketbaseProvider {
       user: userId,
       week_start_date: this.convertLocalDateToPocketBase(weekStartDate),
       week_end_date: this.convertLocalDateToPocketBase(weekEndDate),
-      daily_breakdown: localWeeklyData.dailyBreakdown || {},
-      totals: localWeeklyData.totals || {},
+      daily_counts: localWeeklyData.dailyCounts || {},
+      weekly_totals: localWeeklyData.weeklyTotals || {},
       metadata: {
         ...(localWeeklyData.metadata || {}),
         lastSyncTimestamp: dataService.getCurrentTimestamp(),
@@ -118,11 +118,11 @@ export default class PocketbaseProvider {
         remoteRecord.week_end_date
       ),
 
-      // CRITICAL: Map the incoming 'daily_breakdown' to the app's 'dailyCounts' property.
-      dailyCounts: remoteRecord.daily_breakdown || {},
+      // CRITICAL: Map the incoming 'daily_counts' to the app's 'dailyCounts' property.
+      dailyCounts: remoteRecord.daily_counts || {},
 
-      // CRITICAL: Map the incoming 'totals' to the app's 'weeklyCounts' property.
-      weeklyCounts: remoteRecord.totals || {},
+      // CRITICAL: Map the incoming 'weekly_totals' to the app's 'weeklyTotals' property.
+      weeklyTotals: remoteRecord.weekly_totals || {},
 
       metadata: remoteRecord.metadata || {},
     };
@@ -291,11 +291,19 @@ export default class PocketbaseProvider {
       );
 
       // 2. Check for existing record.
+      const filterQuery = `user = "${syncData.user}" && week_start_date = '${syncData.week_start_date}'`;
+      console.log("DEBUG: Checking for existing record with filter:", filterQuery);
+      
       const existingRecords = await this.pb
         .collection("weekly_data")
         .getList(1, 1, {
-          filter: `user = "${syncData.user}" && week_start_date = '${syncData.week_start_date}'`,
+          filter: filterQuery,
         });
+
+      console.log("DEBUG: Found existing records:", existingRecords.items.length, "records");
+      if (existingRecords.items.length > 0) {
+        console.log("DEBUG: Existing record ID:", existingRecords.items[0].id);
+      }
 
       // 3. Create or Update.
       if (existingRecords.items.length > 0) {

@@ -250,12 +250,12 @@ export class CloudSyncManager {
         currentDayDate: currentState.currentDayDate,
         currentWeekStartDate: currentState.currentWeekStartDate,
         dailyCountsSize: Object.keys(currentState.dailyCounts || {}).length,
-        weeklyCountsSize: Object.keys(currentState.weeklyCounts || {}).length,
+        weeklyTotalsSize: Object.keys(currentState.weeklyTotals || {}).length,
         autoSyncEngineActive: !!this.autoSyncEngine,
       });
 
       return {
-        hasData: Object.keys(currentState.weeklyCounts || {}).length > 0,
+        hasData: Object.keys(currentState.weeklyTotals || {}).length > 0,
         hasMetadata: !!currentState.metadata,
         autoSyncActive: !!this.autoSyncEngine,
       };

@@ -65,7 +65,7 @@ const defaultState = {
   currentWeekStartDate: null,
   selectedTrackerDate: null, // New
   dailyCounts: {}, // New structure: { "YYYY-MM-DD": { foodId: count } }
-  weeklyCounts: {},
+  weeklyTotals: {},
   history: [],
   currentHistoryIndex: -1,
   foodGroups: [],
@@ -75,7 +75,7 @@ const defaultState = {
     lastModified: null,
     weekStartDay: "Sunday", // New, will be loaded from preferences
     // Granular dirty flags
-    dailyTotalsDirty: false,
+    dailyCountsDirty: false,
   },
 };
 
@@ -227,8 +227,8 @@ function reducer(state, action) {
 
       // --- 2. Recalculate Weekly Count (Logic moved from separate function) ---
       const delta = newCount - oldDailyValue;
-      nextState.weeklyCounts[groupId] =
-        (nextState.weeklyCounts[groupId] || 0) + delta;
+      nextState.weeklyTotals[groupId] =
+        (nextState.weeklyTotals[groupId] || 0) + delta;
 
       // --- 3. Update the Master Timestamp (Logic moved from separate function) ---
       nextState.metadata.lastModified = dataService.getCurrentTimestamp();
@@ -241,8 +241,8 @@ function reducer(state, action) {
     case ACTION_TYPES.UPDATE_WEEKLY_COUNT:
       return {
         ...state,
-        weeklyCounts: {
-          ...state.weeklyCounts,
+        weeklyTotals: {
+          ...state.weeklyTotals,
           [action.payload.groupId]: action.payload.count,
         },
       };
@@ -292,10 +292,10 @@ function reducer(state, action) {
       for (const foodId in dailyCountsToClear) {
         if (dailyCountsToClear.hasOwnProperty(foodId)) {
           const countToSubtract = dailyCountsToClear[foodId] || 0;
-          nextState.weeklyCounts[foodId] =
-            (nextState.weeklyCounts[foodId] || 0) - countToSubtract;
-          if (nextState.weeklyCounts[foodId] < 0) {
-            nextState.weeklyCounts[foodId] = 0;
+          nextState.weeklyTotals[foodId] =
+            (nextState.weeklyTotals[foodId] || 0) - countToSubtract;
+          if (nextState.weeklyTotals[foodId] < 0) {
+            nextState.weeklyTotals[foodId] = 0;
           }
         }
       }
@@ -303,7 +303,7 @@ function reducer(state, action) {
 
       // Logic moved from the action creator into the reducer:
       nextState.metadata.dailyResetTimestamp = timestamp;
-      nextState.metadata.dailyTotalsDirty = true;
+      nextState.metadata.dailyCountsDirty = true;
       nextState.metadata.lastModified = timestamp;
 
       return nextState;
@@ -319,7 +319,7 @@ function reducer(state, action) {
 
       // Clear all daily counts and start fresh with only the current day
       nextState.dailyCounts = { [currentDayForWeeklyReset]: {} };
-      nextState.weeklyCounts = {};
+      nextState.weeklyTotals = {};
 
       // Logic moved from the action creator into the reducer:
       nextState.metadata.weeklyResetTimestamp = timestamp;
@@ -359,7 +359,7 @@ function reducer(state, action) {
 
       return {
         ...state,
-        weeklyCounts: newCalculatedWeeklyTotals,
+        weeklyTotals: newCalculatedWeeklyTotals,
       };
 
     case ACTION_TYPES.SET_HISTORY:
@@ -401,7 +401,7 @@ function saveStateToStorage() {
     currentDayDate: _state.currentDayDate,
     currentWeekStartDate: _state.currentWeekStartDate,
     dailyCounts: _state.dailyCounts,
-    weeklyCounts: _state.weeklyCounts,
+    weeklyTotals: _state.weeklyTotals,
     metadata: _state.metadata,
   };
 
@@ -616,7 +616,7 @@ function resetWeeklyCounts(resetTimestamp = null) {
   logger.debug(`==== resetWeeklyCounts called ====`);
   const state = getState();
   logger.debug(
-    `Weekly counts before reset: ${JSON.stringify(state.weeklyCounts)}`
+    `Weekly counts before reset: ${JSON.stringify(state.weeklyTotals)}`
   );
 
   // Ensure we have a valid timestamp
@@ -631,7 +631,7 @@ function resetWeeklyCounts(resetTimestamp = null) {
   // Verify the reset worked
   const afterState = getState();
   logger.debug(
-    `Weekly counts after reset: ${JSON.stringify(afterState.weeklyCounts)}`
+    `Weekly counts after reset: ${JSON.stringify(afterState.weeklyTotals)}`
   );
   logger.info(`==== resetWeeklyCounts completed ====`);
 

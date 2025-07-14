@@ -483,14 +483,14 @@ export class AutoSyncEngine {
       localState.selectedTrackerDate || remoteData.selectedTrackerDate;
 
     // Recalculate weekly totals after merge
-    merged.weeklyCounts = this.provider.calculateWeeklyTotals(
+    merged.weeklyTotals = this.provider.calculateWeeklyTotals(
       merged.dailyCounts,
       merged.weekStartDate || merged.currentWeekStartDate
     );
 
     logger.debug("Initial sync merge result:", {
       mergedDailyCounts: Object.keys(merged.dailyCounts || {}),
-      weeklyTotals: merged.weeklyCounts,
+      weeklyTotals: merged.weeklyTotals,
     });
 
     return merged;
@@ -577,8 +577,8 @@ export class AutoSyncEngine {
     // It has no knowledge of the provider's schema.
     return {
       weekStartDate: currentState.currentWeekStartDate,
-      dailyBreakdown: currentState.dailyCounts || {},
-      totals: currentState.weeklyCounts || {},
+      dailyCounts: currentState.dailyCounts || {},
+      weeklyTotals: currentState.weeklyTotals || {},
       targets: {},
       metadata: {
         // No need for 'updatedAt' here, the provider will add its own timestamp.
@@ -617,8 +617,8 @@ export class AutoSyncEngine {
             type: ACTION_TYPES.SET_STATE,
             payload: {
               ...currentState,
-              dailyCounts: updatedWeekData.dailyBreakdown || {},
-              weeklyCounts: updatedWeekData.totals || {},
+              dailyCounts: updatedWeekData.dailyCounts || {},
+              weeklyTotals: updatedWeekData.weeklyTotals || {},
             },
           });
         }

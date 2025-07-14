@@ -53,7 +53,7 @@ const SCHEMA = {
     currentWeekStartDate: String, // YYYY-MM-DD (Sunday or Monday based on preference)
     selectedTrackerDate: String, // YYYY-MM-DD, the date being viewed/edited in tracker
     dailyCounts: Object, // { "YYYY-MM-DD": { foodGroupId: count, ... }, ... }
-    weeklyCounts: Object, // { foodGroupId: totalCountForWeek, ... }
+    weeklyTotals: Object, // { foodGroupId: totalCountForWeek, ... }
     lastModified: Number, // Timestamp
     metadata: {
       schemaVersion: Number,
@@ -64,8 +64,8 @@ const SCHEMA = {
       dateResetType: String, // "DAILY" or "WEEKLY"
       dateResetTimestamp: Number,
       weekStartDay: String, // "Sunday" or "Monday"
-      dailyTotalsUpdatedAt: Number,
-      dailyTotalsDirty: Boolean,
+      dailyCountsUpdatedAt: Number,
+      dailyCountsDirty: Boolean,
       dailyResetTimestamp: Number,
       weeklyTotalsUpdatedAt: Number,
       weeklyResetTimestamp: Number,
@@ -81,8 +81,8 @@ const SCHEMA = {
     id: String, // uuid
     weekStartDate: String, // Primary key
     weekEndDate: String,
-    dailyBreakdown: Object, // { "YYYY-MM-DD": { foodGroupId: count, ... }, ... } for the 7 days of this week
-    totals: Object, // Summed weekly totals { foodGroupId: totalCount, ... }
+    dailyCounts: Object, // { "YYYY-MM-DD": { foodGroupId: count, ... }, ... } for the 7 days of this week
+    weeklyTotals: Object, // Summed weekly totals { foodGroupId: totalCount, ... }
     targets: Object,
     metadata: {
       createdAt: Number, // Timestamp
@@ -373,17 +373,17 @@ function normalizeWeekData(weekData, options = {}) {
     metadata.importTimestamp = options.importInfo.timestamp || now;
   }
 
-  // Ensure totals is an object
-  const totals = weekData.totals || weekData.weeklyCounts || {};
-  // Ensure dailyBreakdown is an object if provided, otherwise default to empty
-  const dailyBreakdown = weekData.dailyBreakdown || {};
+  // Ensure weeklyTotals is an object
+  const weeklyTotals = weekData.weeklyTotals || weekData.weeklyCounts || {};
+  // Ensure dailyCounts is an object if provided, otherwise default to empty
+  const dailyCounts = weekData.dailyCounts || weekData.dailyBreakdown || {};
 
   return {
     id: existingRecord?.id || weekData.id || generateUUID(),
     weekStartDate: weekStartDate,
     weekEndDate: getWeekEndDate(weekStartDate), // Recalculate based on actual weekStartDate
-    dailyBreakdown: dailyBreakdown, // New: store the daily breakdown
-    totals: totals, // Still store summed weekly totals
+    dailyCounts: dailyCounts, // Store the daily breakdown
+    weeklyTotals: weeklyTotals, // Store summed weekly totals
     targets: targets,
     metadata: metadata,
   };
@@ -391,7 +391,7 @@ function normalizeWeekData(weekData, options = {}) {
 
 /**
  * Save a week's history data to IndexedDB with normalized structure
- * @param {Object} weekData - The week data to save (should include weekStartDate, totals, and optionally dailyBreakdown)
+ * @param {Object} weekData - The week data to save (should include weekStartDate, weeklyTotals, and optionally dailyCounts)
  * @param {Object} [options] - Additional options (like foodGroups for targets, weekStartDay preference)
  * @returns {Promise<void>} Promise that resolves when save is complete
  */
@@ -482,7 +482,7 @@ async function getWeekHistory(weekStartDate) {
 
 /**
  * Create a history record from imported current state data.
- * This new version handles dailyCounts -> dailyBreakdown and recalculates totals.
+ * This new version handles dailyCounts -> dailyCounts and recalculates weeklyTotals.
  * @param {Object} importedCurrentStateData - The current state data to convert (must have .currentWeekStartDate and .dailyCounts).
  * @param {Object} importInfo - appInfo from the import file (for deviceId, timestamp context).
  * @param {Array} foodGroupsConfig - The application's current food groups configuration (for building targets).
@@ -508,9 +508,9 @@ function createHistoryFromCurrentState(
     return null;
   }
 
-  // The dailyCounts from the imported currentState become the dailyBreakdown for the history record.
+  // The dailyCounts from the imported currentState become the dailyCounts for the history record.
   // Filter to ensure only the 7 days of that specific week are included.
-  const dailyBreakdownForHistory = {};
+  const dailyCountsForHistory = {};
   const weekStartDate = importedCurrentStateData.currentWeekStartDate;
   const startDateObj = new Date(weekStartDate + "T00:00:00");
 
@@ -525,39 +525,39 @@ function createHistoryFromCurrentState(
     const dateStr = `${year}-${month}-${day}`;
 
     if (importedCurrentStateData.dailyCounts.hasOwnProperty(dateStr)) {
-      dailyBreakdownForHistory[dateStr] = {
+      dailyCountsForHistory[dateStr] = {
         ...(importedCurrentStateData.dailyCounts[dateStr] || {}),
       };
     } else {
-      dailyBreakdownForHistory[dateStr] = {}; // Ensure all 7 days exist
+      dailyCountsForHistory[dateStr] = {}; // Ensure all 7 days exist
     }
   }
   logger.debug(
-    "createHistoryFromCurrentState: Created dailyBreakdownForHistory:",
-    JSON.parse(JSON.stringify(dailyBreakdownForHistory))
+    "createHistoryFromCurrentState: Created dailyCountsForHistory:",
+    JSON.parse(JSON.stringify(dailyCountsForHistory))
   );
 
-  // Recalculate totals based on this dailyBreakdown
-  const newTotals = {};
-  for (const dateKey in dailyBreakdownForHistory) {
-    if (dailyBreakdownForHistory.hasOwnProperty(dateKey)) {
-      const dayData = dailyBreakdownForHistory[dateKey];
+  // Recalculate weeklyTotals based on this dailyCounts
+  const newWeeklyTotals = {};
+  for (const dateKey in dailyCountsForHistory) {
+    if (dailyCountsForHistory.hasOwnProperty(dateKey)) {
+      const dayData = dailyCountsForHistory[dateKey];
       for (const foodId in dayData) {
         if (dayData.hasOwnProperty(foodId)) {
-          newTotals[foodId] = (newTotals[foodId] || 0) + (dayData[foodId] || 0);
+          newWeeklyTotals[foodId] = (newWeeklyTotals[foodId] || 0) + (dayData[foodId] || 0);
         }
       }
     }
   }
   logger.debug(
-    "createHistoryFromCurrentState: Recalculated newTotals:",
-    JSON.parse(JSON.stringify(newTotals))
+    "createHistoryFromCurrentState: Recalculated newWeeklyTotals:",
+    JSON.parse(JSON.stringify(newWeeklyTotals))
   );
 
   const weekDataForNormalization = {
     weekStartDate: importedCurrentStateData.currentWeekStartDate, // From the imported state
-    dailyBreakdown: dailyBreakdownForHistory,
-    totals: newTotals,
+    dailyCounts: dailyCountsForHistory,
+    weeklyTotals: newWeeklyTotals,
     id: generateUUID(), // Generate a new ID for this new history record
     metadata: {
       // Pass relevant metadata from importInfo
@@ -937,8 +937,8 @@ function loadState() {
       dateResetPerformed: false,
       dateResetType: null,
       dateResetTimestamp: 0,
-      dailyTotalsUpdatedAt: 0,
-      dailyTotalsDirty: false,
+      dailyCountsUpdatedAt: 0,
+      dailyCountsDirty: false,
       dailyResetTimestamp: 0,
       weeklyTotalsUpdatedAt: 0,
       weeklyResetTimestamp: 0,
@@ -964,7 +964,7 @@ function loadState() {
       currentWeekStartDate: savedState.currentWeekStartDate || currentWeekStart,
       selectedTrackerDate: savedState.selectedTrackerDate || today,
       dailyCounts: savedState.dailyCounts || {},
-      weeklyCounts: savedState.weeklyCounts || {},
+      weeklyTotals: savedState.weeklyTotals || savedState.weeklyCounts || {},
       lastModified: lastModified,
       metadata: normalizedMetadata,
     };
@@ -1003,8 +1003,8 @@ function loadState() {
       dateResetPerformed: false,
       dateResetType: null,
       dateResetTimestamp: 0,
-      dailyTotalsUpdatedAt: 0,
-      dailyTotalsDirty: false,
+      dailyCountsUpdatedAt: 0,
+      dailyCountsDirty: false,
       dailyResetTimestamp: 0,
       weeklyTotalsUpdatedAt: 0,
       weeklyResetTimestamp: 0,
@@ -1018,7 +1018,7 @@ function loadState() {
       currentWeekStartDate: currentWeekStartOnError,
       selectedTrackerDate: today,
       dailyCounts: { [today]: {} },
-      weeklyCounts: {},
+      weeklyTotals: {},
       lastModified: veryOldTimestampOnError,
       metadata: fallbackMetadata,
     };
@@ -1039,7 +1039,7 @@ function saveState(state) {
       currentWeekStartDate: state.currentWeekStartDate,
       selectedTrackerDate: state.selectedTrackerDate,
       dailyCounts: state.dailyCounts || {},
-      weeklyCounts: state.weeklyCounts || {},
+      weeklyTotals: state.weeklyTotals || {},
       lastModified: now,
       metadata: {
         ...(state.metadata || {}), // Preserve all existing metadata fields
@@ -1052,8 +1052,8 @@ function saveState(state) {
         dateResetPerformed: state.metadata?.dateResetPerformed || false,
         dateResetType: state.metadata?.dateResetType,
         dateResetTimestamp: state.metadata?.dateResetTimestamp,
-        dailyTotalsUpdatedAt: state.metadata?.dailyTotalsUpdatedAt,
-        dailyTotalsDirty: state.metadata?.dailyTotalsDirty || false,
+        dailyCountsUpdatedAt: state.metadata?.dailyCountsUpdatedAt,
+        dailyCountsDirty: state.metadata?.dailyCountsDirty || false,
         dailyResetTimestamp: state.metadata?.dailyResetTimestamp,
         weeklyTotalsUpdatedAt: state.metadata?.weeklyTotalsUpdatedAt,
         weeklyResetTimestamp: state.metadata?.weeklyResetTimestamp,
@@ -1167,8 +1167,8 @@ async function importData(importedData) {
           if (
             weekData &&
             typeof weekData.weekStartDate === "string" &&
-            (typeof weekData.totals === "object" ||
-              typeof weekData.totals === "undefined")
+            (typeof weekData.weeklyTotals === "object" ||
+              typeof weekData.weeklyTotals === "undefined")
           ) {
             // Normalize the week data before saving
             const normalizedWeekData = {

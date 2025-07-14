@@ -30,7 +30,7 @@ import logger from "./logger.js";
 let modalState = {
   // History Daily Details Modal state
   editingHistoryWeekDataRef: null,
-  tempEditedDailyBreakdown: {},
+  tempEditedDailyCounts: {},
   selectedDayInHistoryModal: null,
   historyModalFoodGroups: [],
 };
@@ -153,9 +153,9 @@ function openEditHistoryDailyDetailsModal() {
     state.history[state.currentHistoryIndex];
   modalState.historyModalFoodGroups = state.foodGroups;
 
-  // Deep copy the dailyBreakdown for temporary editing
-  modalState.tempEditedDailyBreakdown = JSON.parse(
-    JSON.stringify(modalState.editingHistoryWeekDataRef.dailyBreakdown || {})
+  // Deep copy the dailyCounts for temporary editing
+  modalState.tempEditedDailyCounts = JSON.parse(
+    JSON.stringify(modalState.editingHistoryWeekDataRef.dailyCounts || {})
   );
 
   const weekStartDateObj = new Date(
@@ -174,17 +174,17 @@ function openEditHistoryDailyDetailsModal() {
     }
   }
 
-  // Calculate initial weekly totals from dailyBreakdown
+  // Calculate initial weekly totals from dailyCounts
   const initialWeeklyTotals = {};
-  Object.values(modalState.tempEditedDailyBreakdown).forEach((dayData) => {
+  Object.values(modalState.tempEditedDailyCounts).forEach((dayData) => {
     Object.entries(dayData).forEach(([groupId, count]) => {
       initialWeeklyTotals[groupId] =
         (initialWeeklyTotals[groupId] || 0) + count;
     });
   });
 
-  // Update the history record's totals
-  modalState.editingHistoryWeekDataRef.totals = initialWeeklyTotals;
+  // Update the history record's weeklyTotals
+  modalState.editingHistoryWeekDataRef.weeklyTotals = initialWeeklyTotals;
 
   modalState.selectedDayInHistoryModal = daysOfThisHistoricalWeek[0]; // Default to first day
 
@@ -257,12 +257,12 @@ function handleModalDayNavigation(newSelectedDayStr) {
 
   // Ensure weekly totals are up to date before re-rendering
   const weeklyTotals = {};
-  Object.values(modalState.tempEditedDailyBreakdown).forEach((dayData) => {
+  Object.values(modalState.tempEditedDailyCounts).forEach((dayData) => {
     Object.entries(dayData).forEach(([groupId, count]) => {
       weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
     });
   });
-  modalState.editingHistoryWeekDataRef.totals = weeklyTotals;
+  modalState.editingHistoryWeekDataRef.weeklyTotals = weeklyTotals;
 
   // Re-render the food item list for the newly selected day
   uiRenderer.renderModalDayDetailsList(
@@ -311,15 +311,15 @@ function handleModalDailyDetailChange(event) {
 
   // Ensure the day's entry and food group entry exist in our temporary breakdown
   if (
-    !modalState.tempEditedDailyBreakdown[modalState.selectedDayInHistoryModal]
+    !modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal]
   ) {
-    modalState.tempEditedDailyBreakdown[modalState.selectedDayInHistoryModal] =
+    modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] =
       {};
   }
 
   let currentValue =
     parseInt(
-      modalState.tempEditedDailyBreakdown[modalState.selectedDayInHistoryModal][
+      modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal][
         groupId
       ],
       10
@@ -333,7 +333,7 @@ function handleModalDailyDetailChange(event) {
   }
 
   // Update temporary state
-  modalState.tempEditedDailyBreakdown[modalState.selectedDayInHistoryModal][
+  modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal][
     groupId
   ] = currentValue;
 
@@ -345,7 +345,7 @@ function handleModalDailyDetailChange(event) {
 
   // Recalculate and update weekly totals
   const weeklyTotals = {};
-  Object.values(modalState.tempEditedDailyBreakdown).forEach((dayData) => {
+  Object.values(modalState.tempEditedDailyCounts).forEach((dayData) => {
     Object.entries(dayData).forEach(([groupId, count]) => {
       weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
     });
@@ -412,7 +412,7 @@ function handleModalDailyDetailChange(event) {
     }
   }
 
-  modalState.editingHistoryWeekDataRef.totals = weeklyTotals;
+  modalState.editingHistoryWeekDataRef.weeklyTotals = weeklyTotals;
 }
 
 /**
@@ -433,20 +433,20 @@ async function saveEditedHistoryDailyDetails() {
 
   try {
     // Apply the temporary changes to the actual history object
-    modalState.editingHistoryWeekDataRef.dailyBreakdown = JSON.parse(
-      JSON.stringify(modalState.tempEditedDailyBreakdown)
+    modalState.editingHistoryWeekDataRef.dailyCounts = JSON.parse(
+      JSON.stringify(modalState.tempEditedDailyCounts)
     );
 
     // Recalculate weekly totals
     const weeklyTotals = {};
-    Object.values(modalState.editingHistoryWeekDataRef.dailyBreakdown).forEach(
+    Object.values(modalState.editingHistoryWeekDataRef.dailyCounts).forEach(
       (dayData) => {
         Object.entries(dayData).forEach(([groupId, count]) => {
           weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
         });
       }
     );
-    modalState.editingHistoryWeekDataRef.totals = weeklyTotals;
+    modalState.editingHistoryWeekDataRef.weeklyTotals = weeklyTotals;
 
     // Update metadata
     if (!modalState.editingHistoryWeekDataRef.metadata) {
@@ -501,7 +501,7 @@ function closeEditHistoryDailyDetailsModal() {
 
   // Reset temporary editing state
   modalState.editingHistoryWeekDataRef = null;
-  modalState.tempEditedDailyBreakdown = {};
+  modalState.tempEditedDailyCounts = {};
   modalState.selectedDayInHistoryModal = null;
   modalState.historyModalFoodGroups = [];
 }

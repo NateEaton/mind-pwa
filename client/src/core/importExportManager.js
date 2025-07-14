@@ -281,7 +281,7 @@ async function processImport(importedData, dateRelationship) {
     if (dateRelationship === "PAST_WEEK") {
       const currentState = stateManager.getState();
       const currentDailyCounts = { ...currentState.dailyCounts };
-      const currentWeeklyCounts = { ...currentState.weeklyCounts };
+      const currentWeeklyTotals = { ...currentState.weeklyTotals };
       const currentDayDate = currentState.currentDayDate;
       const currentWeekStartDate = currentState.currentWeekStartDate;
 
@@ -306,7 +306,7 @@ async function processImport(importedData, dateRelationship) {
           currentDayDate,
           currentWeekStartDate,
           dailyCounts: currentDailyCounts,
-          weeklyCounts: currentWeeklyCounts,
+          weeklyTotals: currentWeeklyTotals,
           lastModified: Date.now(),
           metadata: {
             schemaVersion: dataService.SCHEMA?.VERSION || 3,
@@ -328,10 +328,10 @@ async function processImport(importedData, dateRelationship) {
     } else if (dateRelationship === "SAME_WEEK") {
       const currentState = stateManager.getState();
       const currentDailyCounts = { ...currentState.dailyCounts };
-      const currentWeeklyCounts = { ...currentState.weeklyCounts };
+      const currentWeeklyTotals = { ...currentState.weeklyTotals };
       const importedDailyCounts = { ...importedData.currentState.dailyCounts };
-      const importedWeeklyCounts = {
-        ...importedData.currentState.weeklyCounts,
+      const importedWeeklyTotals = {
+        ...importedData.currentState.weeklyTotals,
       };
 
       // Merge daily counts
@@ -349,18 +349,18 @@ async function processImport(importedData, dateRelationship) {
       });
 
       // Merge weekly counts
-      const mergedWeeklyCounts = {};
+      const mergedWeeklyTotals = {};
       const allGroupIds = [
         ...new Set([
-          ...Object.keys(currentWeeklyCounts),
-          ...Object.keys(importedWeeklyCounts),
+          ...Object.keys(currentWeeklyTotals),
+          ...Object.keys(importedWeeklyTotals),
         ]),
       ];
 
       allGroupIds.forEach((groupId) => {
-        const currentCount = currentWeeklyCounts[groupId] || 0;
-        const importedCount = importedWeeklyCounts[groupId] || 0;
-        mergedWeeklyCounts[groupId] = Math.max(currentCount, importedCount);
+        const currentCount = currentWeeklyTotals[groupId] || 0;
+        const importedCount = importedWeeklyTotals[groupId] || 0;
+        mergedWeeklyTotals[groupId] = Math.max(currentCount, importedCount);
       });
 
       const now = Date.now();
@@ -370,14 +370,14 @@ async function processImport(importedData, dateRelationship) {
           currentDayDate: currentState.currentDayDate,
           currentWeekStartDate: currentState.currentWeekStartDate,
           dailyCounts: mergedDailyCounts,
-          weeklyCounts: mergedWeeklyCounts,
+          weeklyTotals: mergedWeeklyTotals,
           lastModified: now,
           metadata: {
             schemaVersion: dataService.SCHEMA?.VERSION || 3,
             partialImport: true,
             currentWeekDirty: true,
             historyDirty: true,
-            dailyTotalsDirty: true,
+            dailyCountsDirty: true,
             dailyTotalsUpdatedAt: now,
             weeklyTotalsUpdatedAt: now,
           },

@@ -401,7 +401,7 @@ function renderEverything() {
       weekStartDate: state.currentWeekStartDate,
       selectedTrackerDate: state.selectedTrackerDate,
       dailyCountsKeys: Object.keys(state.dailyCounts || {}),
-      weeklyCountsKeys: Object.keys(state.weeklyCounts || {}),
+      weeklyTotalsKeys: Object.keys(state.weeklyTotals || {}),
     });
 
     renderDateElements();
@@ -506,7 +506,7 @@ function renderTrackerItems() {
     state.dailyCounts[state.selectedTrackerDate] || {};
   logger.debug(`renderTrackerItems for ${state.selectedTrackerDate}:`, {
     dailyCounts: dailyCountsForSelectedDate,
-    weeklyCounts: state.weeklyCounts,
+    weeklyTotals: state.weeklyTotals,
     foodGroupsCount: state.foodGroups?.length || 0,
   });
 
@@ -537,7 +537,7 @@ function renderTrackerItems() {
 
   state.foodGroups.forEach((group) => {
     const dailyCount = dailyCountsForSelectedDate[group.id] || 0;
-    const weeklyTotal = state.weeklyCounts[group.id] || 0;
+    const weeklyTotal = state.weeklyTotals[group.id] || 0;
 
     logger.trace(`Rendering food group ${group.id}:`, {
       dailyCount,
@@ -559,7 +559,7 @@ function renderTrackerItems() {
     const infoBtn = foodGroupItem.querySelector(".info-btn");
     if (infoBtn) infoBtn.dataset.groupId = group.id;
 
-    // Weekly badge ALWAYS shows the total for state.weeklyCounts for the current week
+    // Weekly badge ALWAYS shows the total for state.weeklyTotals for the current week
     if (weeklyBadge && weeklyBadgeValue) {
       weeklyBadge.style.display = "inline-flex"; // Ensure it's visible
       updateBadgeColor(weeklyBadge, group, weeklyTotal, state); // updateBadgeColor uses weekly total
@@ -596,7 +596,7 @@ function renderCurrentWeekSummary() {
 
   // Render each food group
   const cards = state.foodGroups.map((group) => {
-    const currentTotal = state.weeklyCounts[group.id] || 0;
+    const currentTotal = state.weeklyTotals[group.id] || 0;
     const weeklyTarget = getWeeklyTarget(group);
 
     return renderCurrentWeekCard(group, currentTotal, weeklyTarget);
@@ -716,14 +716,14 @@ function renderHistory(weekIndex) {
   const foodGroupsToDisplay = state.foodGroups.filter(
     (group) =>
       targets[group.id] ||
-      (weekData.totals && typeof weekData.totals[group.id] !== "undefined")
+      (weekData.weeklyTotals && typeof weekData.weeklyTotals[group.id] !== "undefined")
   );
 
   // Render each food group in the history view
   const cards = foodGroupsToDisplay
     .map((group) => {
       const groupId = group.id;
-      const total = weekData.totals[groupId] || 0;
+      const total = weekData.weeklyTotals[groupId] || 0;
       const targetInfo = targets[groupId];
 
       if (!targetInfo) return null; // Skip if no target info found
