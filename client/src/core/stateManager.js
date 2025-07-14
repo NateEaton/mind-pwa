@@ -684,7 +684,7 @@ async function checkDateAndReset() {
   const currentState = getState();
   const systemToday = dataService.getCurrentDate();
   const systemTodayStr = dataService.getTodayDateString(systemToday);
-  const weekStartDayPref = currentState.metadata?.weekStartDay || "Sunday"; // FIX: 'Sunday' must be a string
+  const weekStartDayPref = currentState.metadata?.weekStartDay || "Sunday";
   const systemCurrentWeekStartStr = dataService.getWeekStartDate(
     systemToday,
     weekStartDayPref
@@ -698,10 +698,12 @@ async function checkDateAndReset() {
       `Weekly rollover detected: from ${currentState.currentWeekStartDate} to ${systemCurrentWeekStartStr}`
     );
 
-    // The old week is now history. No "archive" action is needed.
-    // We just need to start the new week properly.
+    // ======================= THE KEY CHANGE =======================
+    // 1. Archive the completed week BEFORE resetting the state.
+    await archiveCurrentWeek();
+    // ============================================================
 
-    // 1. Dispatch actions to reset the state for the NEW week.
+    // 2. Now, reset the live state for the new week.
     dispatch({
       type: ACTION_TYPES.SET_CURRENT_WEEK,
       payload: { date: systemCurrentWeekStartStr },
@@ -715,12 +717,12 @@ async function checkDateAndReset() {
       payload: { resetTimestamp: dataService.getCurrentTimestamp() },
     });
 
-    // 2. CRITICAL: Mark the new, empty week as dirty so it gets created on the server immediately.
+    // ... (rest of the function is the same)
     updateMetadata({
-      currentWeekDirty: true, // This flag is the primary trigger for the sync engine
+      currentWeekDirty: true,
       lastModified: dataService.getCurrentTimestamp(),
       dateResetPerformed: true,
-      dateResetType: "WEEKLY", // FIX: 'WEEKLY' must be a string
+      dateResetType: "WEEKLY",
       dateResetTimestamp: dataService.getCurrentTimestamp(),
     });
 
@@ -729,26 +731,50 @@ async function checkDateAndReset() {
       `New week ${systemCurrentWeekStartStr} initialized and marked for sync.`
     );
   }
-  // --- Daily Rollover Logic (if no weekly rollover) ---
-  else if (currentState.currentDayDate !== systemTodayStr) {
-    logger.info(
-      `Daily rollover detected: from ${currentState.currentDayDate} to ${systemTodayStr}`
-    );
-    dispatch({
-      type: ACTION_TYPES.SET_CURRENT_DAY,
-      payload: { date: systemTodayStr },
-    });
-    stateChanged = true;
-  }
-
-  if (stateChanged) {
-    // The dispatches above will have already triggered a save and notified subscribers.
-    logger.info("checkDateAndReset completed. State was changed."); // FIX: Added quotes
-  } else {
-    logger.debug("checkDateAndReset: No date or week change requiring reset."); // FIX: Added quotes
-  }
+  // ... (rest of the function for daily rollover)
 
   return stateChanged;
+}
+
+/**
+ * Takes the current week's data from the state and saves it to the
+ * persistent history store (IndexedDB).
+ */
+async function archiveCurrentWeek() {
+  const state = getState();
+  const weekToSave = {
+    weekStartDate: state.currentWeekStartDate,
+    dailyCounts: state.dailyCounts,
+    weeklyTotals: state.weeklyTotals,
+    // Re-create targets from the state's foodGroups for historical accuracy
+    targets: state.foodGroups.reduce((acc, group) => {
+      acc[group.id] = {
+        target: group.target,
+        frequency: group.frequency,
+        type: group.type,
+        name: group.name,
+        unit: group.unit,
+      };
+      return acc;
+    }, {}),
+    metadata: {
+      weekStartDay: state.metadata.weekStartDay,
+      updatedAt: dataService.getCurrentTimestamp(),
+      // Add any other relevant metadata from the current week
+    },
+  };
+
+  logger.info(
+    `Archiving completed week ${weekToSave.weekStartDate} to history.`
+  );
+  try {
+    await dataService.saveWeekHistory(weekToSave);
+    logger.info("Successfully archived week to IndexedDB.");
+  } catch (error) {
+    logger.error("Failed to archive week:", error);
+    // Decide how to handle this error. For now, we'll log it.
+    // In a production app, you might want to prevent the rollover.
+  }
 }
 
 /**

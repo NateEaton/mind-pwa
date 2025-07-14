@@ -91,10 +91,8 @@ export class AutoSyncEngine {
    * Handle local state changes
    */
   handleStateChange(action, newState) {
-    // Track when local changes occur
     this.lastLocalChange = dataService.getCurrentTimestamp();
 
-    // Determine what type of sync is needed based on action
     switch (action.type) {
       case ACTION_TYPES.UPDATE_DAILY_COUNT:
       case ACTION_TYPES.RESET_DAILY_COUNTS:
@@ -108,6 +106,21 @@ export class AutoSyncEngine {
         this.debouncedSync();
         break;
 
+      // ======================= START OF FIX =======================
+      // Add a specific case to handle metadata updates that flag history as dirty.
+      case ACTION_TYPES.UPDATE_METADATA:
+        if (action.payload?.metadata?.historyDirty) {
+          logger.debug(
+            "History marked as dirty, queueing weekly_history sync."
+          );
+          this.pendingChanges.add("weekly_history");
+          this.notifySyncStatus("pending");
+          this.debouncedSync();
+        }
+        // We can add other metadata checks here in the future if needed.
+        break;
+      // ======================== END OF FIX ========================
+
       case ACTION_TYPES.SET_HISTORY:
         this.pendingChanges.add("weekly_history");
         this.notifySyncStatus("pending");
@@ -115,7 +128,6 @@ export class AutoSyncEngine {
         break;
 
       case ACTION_TYPES.IMPORT_STATE:
-        // For imports, sync everything
         this.pendingChanges.add("current_week");
         this.pendingChanges.add("weekly_history");
         this.notifySyncStatus("pending");
@@ -123,7 +135,8 @@ export class AutoSyncEngine {
         break;
 
       default:
-        // For other actions, use throttled sync to avoid over-syncing
+        // The default case should no longer handle UPDATE_METADATA.
+        // It's still useful as a catch-all for minor, untracked actions.
         if (this.pendingChanges.size === 0) {
           this.pendingChanges.add("current_week");
           this.throttledSync();
@@ -304,28 +317,67 @@ export class AutoSyncEngine {
   }
 
   /**
-   * Perform initial bulk sync of all weekly data
-   * Called when setting up sync on a new device
+   * Perform initial bulk sync of all weekly data.
+   * This version correctly separates the current week's data from historical data.
    */
   async performInitialBulkSync() {
     try {
       logger.info("Starting initial bulk sync of weekly data");
 
-      // Get all remote weekly data
+      // Get all remote weekly data and the current state's week start date
       const allRemoteWeeks = await this.provider.getAllWeeklyData();
+      const currentState = this.stateManager.getState();
+      const currentWeekStartDate = currentState.currentWeekStartDate;
 
       if (allRemoteWeeks.length === 0) {
         logger.info("No remote weekly data found for bulk sync");
         return;
       }
 
-      logger.info(`Bulk syncing ${allRemoteWeeks.length} weekly records`);
+      logger.info(
+        `Processing ${allRemoteWeeks.length} remote records for initial sync.`
+      );
 
-      // Save all records to local storage
-      await this.dataService.bulkSaveWeeklyData(allRemoteWeeks);
+      const historicalWeeksToSave = [];
+      let currentWeekDataFromRemote = null;
 
-      // Refresh the UI with all the new data
+      // --- START OF FIX ---
+      // 1. Separate the current week from the historical weeks
+      allRemoteWeeks.forEach((week) => {
+        if (week.weekStartDate === currentWeekStartDate) {
+          currentWeekDataFromRemote = week;
+        } else {
+          historicalWeeksToSave.push(week);
+        }
+      });
+
+      // 2. If there's historical data, save it to the history store
+      if (historicalWeeksToSave.length > 0) {
+        logger.info(
+          `Bulk saving ${historicalWeeksToSave.length} historical records to IndexedDB.`
+        );
+        await this.dataService.bulkSaveWeeklyData(historicalWeeksToSave);
+      }
+
+      // 3. If remote data for the current week was found, merge it into the live state
+      if (currentWeekDataFromRemote) {
+        logger.info(
+          `Found and merging remote data for the current week: ${currentWeekStartDate}`
+        );
+        const mergedData = this.mergeInitialSyncData(
+          currentState,
+          currentWeekDataFromRemote
+        );
+
+        this.stateManager.dispatch({
+          type: ACTION_TYPES.SET_STATE,
+          payload: mergedData,
+        });
+      }
+
+      // 4. Finally, refresh the history in the state from the newly populated DB
       await this._refreshHistoryInState();
+      // --- END OF FIX ---
 
       logger.info("Initial bulk sync completed successfully");
     } catch (error) {

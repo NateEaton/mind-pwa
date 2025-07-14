@@ -163,14 +163,14 @@ function openEditHistoryDailyDetailsModal() {
   );
   const daysOfThisHistoricalWeek = [];
 
-  // Ensure tempEditedDailyBreakdown has entries for all 7 days of the week
+  // Ensure tempEditedDailyCounts has entries for all 7 days of the week
   for (let i = 0; i < 7; i++) {
     const dayObj = new Date(weekStartDateObj);
     dayObj.setDate(weekStartDateObj.getDate() + i);
     const dayStr = dateUtils.formatDateToYYYYMMDD(dayObj);
     daysOfThisHistoricalWeek.push(dayStr);
-    if (!modalState.tempEditedDailyBreakdown[dayStr]) {
-      modalState.tempEditedDailyBreakdown[dayStr] = {};
+    if (!modalState.tempEditedDailyCounts[dayStr]) {
+      modalState.tempEditedDailyCounts[dayStr] = {};
     }
   }
 
@@ -224,9 +224,9 @@ function openEditHistoryDailyDetailsModal() {
 
   uiRenderer.renderModalDayDetailsList(
     modalState.historyModalFoodGroups,
-    modalState.tempEditedDailyBreakdown[modalState.selectedDayInHistoryModal] ||
+    modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] ||
       {},
-    modalState.tempEditedDailyBreakdown
+    modalState.tempEditedDailyCounts
   );
 }
 
@@ -237,7 +237,7 @@ function openEditHistoryDailyDetailsModal() {
 function handleModalDayNavigation(newSelectedDayStr) {
   if (
     !modalState.editingHistoryWeekDataRef ||
-    !modalState.tempEditedDailyBreakdown
+    !modalState.tempEditedDailyCounts
   ) {
     logger.warn(
       "handleModalDayNavigation called without active editing context."
@@ -267,9 +267,9 @@ function handleModalDayNavigation(newSelectedDayStr) {
   // Re-render the food item list for the newly selected day
   uiRenderer.renderModalDayDetailsList(
     modalState.historyModalFoodGroups,
-    modalState.tempEditedDailyBreakdown[modalState.selectedDayInHistoryModal] ||
+    modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] ||
       {},
-    modalState.tempEditedDailyBreakdown
+    modalState.tempEditedDailyCounts
   );
 
   // Update the day selector active state
@@ -295,7 +295,7 @@ function handleModalDailyDetailChange(event) {
   if (
     !button ||
     !modalState.selectedDayInHistoryModal ||
-    !modalState.tempEditedDailyBreakdown ||
+    !modalState.tempEditedDailyCounts ||
     !modalState.editingHistoryWeekDataRef
   ) {
     return;
@@ -310,11 +310,8 @@ function handleModalDailyDetailChange(event) {
   }
 
   // Ensure the day's entry and food group entry exist in our temporary breakdown
-  if (
-    !modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal]
-  ) {
-    modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] =
-      {};
+  if (!modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal]) {
+    modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] = {};
   }
 
   let currentValue =
@@ -419,74 +416,65 @@ function handleModalDailyDetailChange(event) {
  * Save changes from history daily details modal
  */
 async function saveEditedHistoryDailyDetails() {
-  if (
-    !modalState.editingHistoryWeekDataRef ||
-    !modalState.tempEditedDailyBreakdown
-  ) {
-    logger.error(
-      "Cannot save history daily details, editing context is missing."
-    );
-    uiRenderer.showToast("Error saving changes.", "error");
-    closeEditHistoryDailyDetailsModal();
+  if (!modalState.editingHistoryWeekDataRef) {
+    logger.error("Cannot save, editing context is missing.");
     return;
   }
 
   try {
-    // Apply the temporary changes to the actual history object
-    modalState.editingHistoryWeekDataRef.dailyCounts = JSON.parse(
+    const editedWeekData = { ...modalState.editingHistoryWeekDataRef };
+
+    editedWeekData.dailyCounts = JSON.parse(
       JSON.stringify(modalState.tempEditedDailyCounts)
     );
 
-    // Recalculate weekly totals
     const weeklyTotals = {};
-    Object.values(modalState.editingHistoryWeekDataRef.dailyCounts).forEach(
-      (dayData) => {
-        Object.entries(dayData).forEach(([groupId, count]) => {
-          weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
-        });
-      }
-    );
-    modalState.editingHistoryWeekDataRef.weeklyTotals = weeklyTotals;
+    Object.values(editedWeekData.dailyCounts).forEach((dayData) => {
+      Object.entries(dayData).forEach(([groupId, count]) => {
+        weeklyTotals[groupId] = (weeklyTotals[groupId] || 0) + count;
+      });
+    });
+    editedWeekData.weeklyTotals = weeklyTotals;
 
-    // Update metadata
-    if (!modalState.editingHistoryWeekDataRef.metadata) {
-      modalState.editingHistoryWeekDataRef.metadata = {};
-    }
-    modalState.editingHistoryWeekDataRef.metadata.updatedAt = Date.now();
+    if (!editedWeekData.metadata) editedWeekData.metadata = {};
+    editedWeekData.metadata.updatedAt = Date.now();
 
-    // Save to database
-    await dataService.saveWeekHistory(modalState.editingHistoryWeekDataRef, {
+    // ======================= START OF FIX =======================
+    // **Explicitly mark this specific record as needing a sync.**
+    // The `getDirtyWeekHistory` function looks for this status.
+    editedWeekData.metadata.syncStatus = "dirty";
+    // ======================== END OF FIX ========================
+
+    // 1. Save the updated and now "dirty" record to the database
+    await dataService.saveWeekHistory(editedWeekData, {
       foodGroups: stateManager.getState().foodGroups,
-      updatedAt: modalState.editingHistoryWeekDataRef.metadata.updatedAt,
+      updatedAt: editedWeekData.metadata.updatedAt,
     });
 
-    // Mark history as dirty for sync
+    // 2. Update the state directly to reflect the change immediately
+    const currentState = stateManager.getState();
+    const historyIndex = currentState.history.findIndex(
+      (week) => week.weekStartDate === editedWeekData.weekStartDate
+    );
+
+    if (historyIndex !== -1) {
+      const updatedHistory = [...currentState.history];
+      updatedHistory[historyIndex] = editedWeekData;
+
+      stateManager.dispatch({
+        type: stateManager.ACTION_TYPES.SET_HISTORY,
+        payload: { history: updatedHistory },
+      });
+    }
+
+    // 3. Dispatch the generic metadata update to trigger the sync engine
     stateManager.dispatch({
       type: stateManager.ACTION_TYPES.UPDATE_METADATA,
-      payload: {
-        metadata: {
-          historyDirty: true,
-          lastModified: Date.now(),
-        },
-      },
+      payload: { historyDirty: true, lastModified: Date.now() },
     });
 
     uiRenderer.showToast("History week details updated.", "success");
     closeEditHistoryDailyDetailsModal();
-
-    // Reload history data from database and update state to reflect changes
-    try {
-      const updatedHistoryData = await dataService.getAllWeekHistory();
-      stateManager.dispatch({
-        type: stateManager.ACTION_TYPES.SET_HISTORY,
-        payload: { history: updatedHistoryData },
-      });
-      // UI will automatically re-render via state subscription
-    } catch (error) {
-      logger.error("Error reloading history after save:", error);
-      // Fallback to manual refresh if history reload fails
-      uiRenderer.renderHistory();
-    }
   } catch (error) {
     logger.error("Error saving edited history daily details:", error);
     uiRenderer.showToast("Error saving changes. Please try again.", "error");

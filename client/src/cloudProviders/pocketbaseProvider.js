@@ -285,25 +285,19 @@ export default class PocketbaseProvider {
       // 1. Convert local data to the remote format using our new single source of truth.
       const syncData = this._toRemoteWeeklyData(weekData);
 
-      console.log(
-        "DEBUG: Final data packet being sent to PocketBase:",
-        JSON.stringify(syncData, null, 2)
-      );
+      //console.log(
+      //  "DEBUG: Final data packet being sent to PocketBase:",
+      //  JSON.stringify(syncData, null, 2)
+      //);
 
       // 2. Check for existing record.
       const filterQuery = `user = "${syncData.user}" && week_start_date = '${syncData.week_start_date}'`;
-      console.log("DEBUG: Checking for existing record with filter:", filterQuery);
-      
       const existingRecords = await this.pb
         .collection("weekly_data")
         .getList(1, 1, {
           filter: filterQuery,
+          requestKey: null,
         });
-
-      console.log("DEBUG: Found existing records:", existingRecords.items.length, "records");
-      if (existingRecords.items.length > 0) {
-        console.log("DEBUG: Existing record ID:", existingRecords.items[0].id);
-      }
 
       // 3. Create or Update.
       if (existingRecords.items.length > 0) {
