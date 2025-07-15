@@ -56,8 +56,8 @@ export class AutoSyncEngine {
    */
   setupAutoSync() {
     // Subscribe to all state changes
-    this.stateManager.subscribe((action, newState) => {
-      this.handleStateChange(action, newState);
+    this.stateManager.subscribe((newState, action) => {
+      this.handleStateChange(newState, action);
     });
 
     // Subscribe to remote changes from PocketBase
@@ -90,7 +90,7 @@ export class AutoSyncEngine {
   /**
    * Handle local state changes
    */
-  handleStateChange(action, newState) {
+  handleStateChange(newState, action) {
     this.lastLocalChange = dataService.getCurrentTimestamp();
 
     switch (action.type) {
@@ -322,36 +322,21 @@ export class AutoSyncEngine {
    */
   async performInitialBulkSync() {
     try {
-      logger.info("Starting initial bulk sync of weekly data");
-
-      // Get all remote weekly data and the current state's week start date
+      logger.info("Starting initial bulk sync of historical weekly data.");
       const allRemoteWeeks = await this.provider.getAllWeeklyData();
-      const currentState = this.stateManager.getState();
-      const currentWeekStartDate = currentState.currentWeekStartDate;
+      const currentWeekStartDate =
+        this.stateManager.getState().currentWeekStartDate;
 
       if (allRemoteWeeks.length === 0) {
-        logger.info("No remote weekly data found for bulk sync");
+        logger.info("No remote weekly data found for bulk sync.");
         return;
       }
 
-      logger.info(
-        `Processing ${allRemoteWeeks.length} remote records for initial sync.`
+      // Filter out the current week, as it's handled by pullRemoteData
+      const historicalWeeksToSave = allRemoteWeeks.filter(
+        (week) => week.weekStartDate !== currentWeekStartDate
       );
 
-      const historicalWeeksToSave = [];
-      let currentWeekDataFromRemote = null;
-
-      // --- START OF FIX ---
-      // 1. Separate the current week from the historical weeks
-      allRemoteWeeks.forEach((week) => {
-        if (week.weekStartDate === currentWeekStartDate) {
-          currentWeekDataFromRemote = week;
-        } else {
-          historicalWeeksToSave.push(week);
-        }
-      });
-
-      // 2. If there's historical data, save it to the history store
       if (historicalWeeksToSave.length > 0) {
         logger.info(
           `Bulk saving ${historicalWeeksToSave.length} historical records to IndexedDB.`
@@ -359,29 +344,12 @@ export class AutoSyncEngine {
         await this.dataService.bulkSaveWeeklyData(historicalWeeksToSave);
       }
 
-      // 3. If remote data for the current week was found, merge it into the live state
-      if (currentWeekDataFromRemote) {
-        logger.info(
-          `Found and merging remote data for the current week: ${currentWeekStartDate}`
-        );
-        const mergedData = this.mergeInitialSyncData(
-          currentState,
-          currentWeekDataFromRemote
-        );
-
-        this.stateManager.dispatch({
-          type: ACTION_TYPES.SET_STATE,
-          payload: mergedData,
-        });
-      }
-
-      // 4. Finally, refresh the history in the state from the newly populated DB
+      // Refresh the history in the state from the newly populated DB
       await this._refreshHistoryInState();
-      // --- END OF FIX ---
 
-      logger.info("Initial bulk sync completed successfully");
+      logger.info("Initial bulk sync of history completed successfully.");
     } catch (error) {
-      logger.error("Failed to perform initial bulk sync:", error);
+      logger.error("Failed to perform initial bulk sync of history:", error);
       throw error;
     }
   }

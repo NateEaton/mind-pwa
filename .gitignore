@@ -40,6 +40,7 @@ CLAUDE.md
 # --- Logs --- Ignore log files
 logs/ 
 *.log 
+*.log.txt
 npm-debug.log* 
 yarn-debug.log* yarn-error.log*
 safariConsole*.txt
@@ -55,6 +56,16 @@ safariConsole*.txt
 /tmp/
 /_tasks/
 
+# Pocketbase specific files
+pocketbase/
+!pocketbase/pb_migrations/
+pb_schem*.json
+!pocketbase/pb_schema.json
+
 # Misc dev files
-*schem*.json
+.repomixignore
+repomix
 repomix-output.xml
+repomix-output.xml.txt
+clean.sh
+export_weekly_data_json.mjs

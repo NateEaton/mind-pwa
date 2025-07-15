@@ -212,8 +212,8 @@ function openEditHistoryDailyDetailsModal() {
       modalState.selectedDayInHistoryModal,
       (newDay) => handleModalDayNavigation(newDay),
       modalState.editingHistoryWeekDataRef.metadata?.weekStartDay ||
-      state.metadata.weekStartDay ||
-      "Sunday",
+        state.metadata.weekStartDay ||
+        "Sunday",
       true // isModal = true
     );
   } else {
@@ -225,7 +225,7 @@ function openEditHistoryDailyDetailsModal() {
   uiRenderer.renderModalDayDetailsList(
     modalState.historyModalFoodGroups,
     modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] ||
-    {},
+      {},
     modalState.tempEditedDailyCounts
   );
 }
@@ -268,7 +268,7 @@ function handleModalDayNavigation(newSelectedDayStr) {
   uiRenderer.renderModalDayDetailsList(
     modalState.historyModalFoodGroups,
     modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal] ||
-    {},
+      {},
     modalState.tempEditedDailyCounts
   );
 
@@ -317,7 +317,7 @@ function handleModalDailyDetailChange(event) {
   let currentValue =
     parseInt(
       modalState.tempEditedDailyCounts[modalState.selectedDayInHistoryModal][
-      groupId
+        groupId
       ],
       10
     ) || 0;
@@ -438,12 +438,8 @@ async function saveEditedHistoryDailyDetails() {
 
     if (!editedWeekData.metadata) editedWeekData.metadata = {};
     editedWeekData.metadata.updatedAt = Date.now();
-
-    // ======================= START OF FIX =======================
-    // **Explicitly mark this specific record as needing a sync.**
-    // The `getDirtyWeekHistory` function looks for this status.
+    // Mark this specific record as needing a sync.
     editedWeekData.metadata.syncStatus = "dirty";
-    // ======================== END OF FIX ========================
 
     // 1. Save the updated and now "dirty" record to the database
     await dataService.saveWeekHistory(editedWeekData, {
@@ -451,7 +447,7 @@ async function saveEditedHistoryDailyDetails() {
       updatedAt: editedWeekData.metadata.updatedAt,
     });
 
-    // 2. Update the state directly to reflect the change immediately
+    // 2. Update the state's copy of history immediately
     const currentState = stateManager.getState();
     const historyIndex = currentState.history.findIndex(
       (week) => week.weekStartDate === editedWeekData.weekStartDate
@@ -460,30 +456,25 @@ async function saveEditedHistoryDailyDetails() {
     if (historyIndex !== -1) {
       const updatedHistory = [...currentState.history];
       updatedHistory[historyIndex] = editedWeekData;
-
       stateManager.dispatch({
         type: stateManager.ACTION_TYPES.SET_HISTORY,
         payload: { history: updatedHistory },
       });
     }
 
-    // ======================= START OF FIX =======================
-    // The payload for UPDATE_METADATA must be a nested object
-    // to match what the reducer expects.
+    // 3. Dispatch a global metadata update to trigger the auto-sync engine
     stateManager.dispatch({
       type: stateManager.ACTION_TYPES.UPDATE_METADATA,
       payload: {
         metadata: {
           historyDirty: true,
-          lastModified: Date.now()
-        }
+          lastModified: Date.now(),
+        },
       },
     });
-    // ======================== END OF FIX ========================
 
     uiRenderer.showToast("History week details updated.", "success");
     closeEditHistoryDailyDetailsModal();
-
   } catch (error) {
     logger.error("Error saving edited history daily details:", error);
     uiRenderer.showToast("Error saving changes. Please try again.", "error");

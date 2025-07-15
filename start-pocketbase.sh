@@ -10,10 +10,10 @@ if [ ! -f "docker-compose.pocketbase.yml" ]; then
 fi
 
 # Check if schema file exists
-if [ ! -f "pocketbase/pb_schema.json" ]; then
-    echo "❌ pocketbase/pb_schema.json not found"
-    exit 1
-fi
+#if [ ! -f "pocketbase/pb_schema.json" ]; then
+#    echo "❌ pocketbase/pb_schema.json not found"
+#    exit 1
+#fi
 
 # Stop any existing containers
 echo "🛑 Stopping any existing PocketBase containers..."
