@@ -1,0 +1,14 @@
+name = "mind-sync-worker"
+main = "src/index.ts"
+compatibility_date = "2024-08-11"
+
+# KV Namespace for storing encrypted sync documents
+[[kv_namespaces]]
+binding = "SYNC_KV"
+id = "YOUR_PRODUCTION_KV_ID"  # Replace with: wrangler kv:namespace create "SYNC_KV"
+
+# Development environment
+[env.dev]
+[[env.dev.kv_namespaces]]
+binding = "SYNC_KV"
+id = "YOUR_DEV_KV_ID"  # Replace with: wrangler kv:namespace create "SYNC_KV" --env dev
