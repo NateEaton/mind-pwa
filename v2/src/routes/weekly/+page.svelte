@@ -36,45 +36,10 @@
 
 <div class="weekly-view">
 	<header class="header">
-		<h1 class="title">Weekly Summary</h1>
-		<p class="subtitle">
-			{weekStartFormatted} - {weekEndFormatted()}
-		</p>
+		<h2 class="subtitle">
+			Week of {weekStartFormatted}
+		</h2>
 	</header>
-
-	<div class="week-nav">
-		<button class="week-nav-btn" onclick={() => mindDietActions.previousWeek()}>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<polyline points="15 18 9 12 15 6"></polyline>
-			</svg>
-			Previous Week
-		</button>
-		<button class="week-nav-btn" onclick={() => mindDietActions.goToToday()}>
-			Current Week
-		</button>
-		<button class="week-nav-btn" onclick={() => mindDietActions.nextWeek()}>
-			Next Week
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<polyline points="9 18 15 12 9 6"></polyline>
-			</svg>
-		</button>
-	</div>
 
 	<div class="food-groups-list">
 		{#each foodGroups as foodGroup}
@@ -125,44 +90,11 @@
 		text-align: center;
 	}
 
-	.title {
-		font-size: 2rem;
-		font-weight: 700;
-		color: var(--color-text);
-		margin: 0 0 var(--spacing-sm) 0;
-	}
-
 	.subtitle {
-		font-size: 1.125rem;
-		color: var(--color-text-secondary);
-		margin: 0;
-	}
-
-	.week-nav {
-		display: flex;
-		justify-content: center;
-		gap: var(--spacing-md);
-		margin-bottom: var(--spacing-xl);
-	}
-
-	.week-nav-btn {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-sm) var(--spacing-md);
-		border: 2px solid var(--color-border);
-		background: var(--color-bg);
+		font-size: var(--font-lg);
+		font-weight: 600;
 		color: var(--color-text);
-		border-radius: var(--radius-md);
-		cursor: pointer;
-		font-weight: 500;
-		transition: all var(--transition-fast);
-	}
-
-	.week-nav-btn:hover {
-		background: var(--color-primary);
-		color: white;
-		border-color: var(--color-primary);
+		margin: 0;
 	}
 
 	.food-groups-list {

@@ -1,8 +1,13 @@
 <script lang="ts">
-	import { currentDate, currentDateString, currentDayCounts, mindDietActions } from '$lib/stores/mindDiet';
+	import { currentDate, currentDateString, currentDayCounts, currentWeekStartDate, mindDietActions } from '$lib/stores/mindDiet';
 	import { foodGroups } from '$lib/data/foodGroups';
-	import DateNavigator from '$lib/components/shared/DateNavigator.svelte';
+	import DaySelector from '$lib/components/shared/DaySelector.svelte';
 	import FoodGroupCard from '$lib/components/shared/FoodGroupCard.svelte';
+	import { formatDate } from '$lib/utils/dateUtils';
+
+	function handleDateSelect(date: Date) {
+		mindDietActions.goToDate(date);
+	}
 </script>
 
 <svelte:head>
@@ -11,16 +16,12 @@
 
 <div class="daily-view">
 	<header class="header">
-		<h1 class="title">Daily Tracker</h1>
-		<p class="subtitle">Track your MIND Diet food groups for the day</p>
+		<h2 class="week-range">
+			{formatDate($currentDate)}
+		</h2>
 	</header>
 
-	<DateNavigator
-		date={$currentDate}
-		onprevious={() => mindDietActions.previousDay()}
-		onnext={() => mindDietActions.nextDay()}
-		ontoday={() => mindDietActions.goToToday()}
-	/>
+	<DaySelector selectedDate={$currentDate} onSelectDate={handleDateSelect} />
 
 	<div class="food-groups-list">
 		{#each foodGroups as foodGroup}
@@ -39,20 +40,14 @@
 	}
 
 	.header {
-		margin-bottom: var(--spacing-lg);
+		margin-bottom: var(--spacing-md);
 		text-align: center;
 	}
 
-	.title {
-		font-size: var(--font-xl);
+	.week-range {
+		font-size: var(--font-lg);
 		font-weight: 600;
 		color: var(--color-text);
-		margin: 0 0 var(--spacing-xs) 0;
-	}
-
-	.subtitle {
-		font-size: var(--font-md);
-		color: var(--color-text-secondary);
 		margin: 0;
 	}
 
@@ -64,16 +59,8 @@
 	}
 
 	@media (max-width: 480px) {
-		.header {
-			margin-bottom: var(--spacing-md);
-		}
-
-		.title {
-			font-size: var(--font-lg);
-		}
-
-		.subtitle {
-			font-size: var(--font-sm);
+		.week-range {
+			font-size: var(--font-md);
 		}
 	}
 </style>
