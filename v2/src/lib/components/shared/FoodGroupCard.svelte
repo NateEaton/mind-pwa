@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { FoodGroup } from '$lib/types';
 	import { getStatusColor, isDailyTargetMet, isWeeklyTargetMet } from '$lib/services/TrackingEngine';
-	import { mindDietActions } from '$lib/stores/mindDiet';
+	import { mindDietActions, currentWeekCounts } from '$lib/stores/mindDiet';
 
 	interface Props {
 		foodGroup: FoodGroup;
@@ -18,6 +18,12 @@
 			(foodGroup.frequency === 'week' && isWeeklyTargetMet(count, foodGroup))
 	);
 
+	// Get weekly total for badge
+	let weeklyTotal = $derived($currentWeekCounts[foodGroup.id] || 0);
+	let weeklyStatusColor = $derived(getStatusColor(weeklyTotal, foodGroup, 7));
+
+	let showInfo = $state(false);
+
 	function increment() {
 		mindDietActions.incrementCount(date, foodGroup.id);
 	}
@@ -25,197 +31,263 @@
 	function decrement() {
 		mindDietActions.decrementCount(date, foodGroup.id);
 	}
+
+	function handleInput(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const value = parseInt(target.value) || 0;
+		mindDietActions.updateDailyCount(date, foodGroup.id, Math.max(0, value));
+	}
 </script>
 
-<div class="food-group-card" style="border-left: 4px solid {foodGroup.type === 'positive' ? 'var(--color-success)' : 'var(--color-warning)'}">
-	<div class="header">
-		<div class="title-section">
-			<h3 class="title">{foodGroup.name}</h3>
-			{#if foodGroup.isOptional}
-				<span class="optional-badge">Optional</span>
-			{/if}
-		</div>
-		<div class="target">
-			{#if foodGroup.type === 'positive'}
-				Target: {foodGroup.target} {foodGroup.unit}/{foodGroup.frequency}
-			{:else}
-				Limit: ≤{foodGroup.target} {foodGroup.unit}/{foodGroup.frequency}
-			{/if}
+<div class="food-group-item">
+	<div class="info">
+		<button class="info-btn" onclick={() => (showInfo = !showInfo)} aria-label="Show info">i</button>
+		<div class="text-container">
+			<div class="name-row">
+				<span class="name">{foodGroup.name}</span>
+				{#if foodGroup.isOptional}
+					<span class="optional">(opt)</span>
+				{/if}
+			</div>
+			<span class="target">
+				{#if foodGroup.type === 'positive'}
+					≥{foodGroup.target} {foodGroup.unit}/{foodGroup.frequency}
+				{:else}
+					&lt;{foodGroup.target} {foodGroup.unit}/{foodGroup.frequency}
+				{/if}
+			</span>
 		</div>
 	</div>
 
 	<div class="controls">
+		<span class="weekly-badge" style="background-color: {weeklyStatusColor}">
+			{weeklyTotal}
+		</span>
 		<button
-			class="btn-control btn-decrement"
+			class="decrement-btn"
 			onclick={decrement}
 			disabled={count === 0}
-			aria-label="Decrease count"
+			aria-label="Decrement count"
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="24"
-				height="24"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<line x1="5" y1="12" x2="19" y2="12"></line>
-			</svg>
+			−
 		</button>
-
-		<div class="count" style="color: {statusColor}">
-			<span class="count-value">{count}</span>
-			{#if targetMet}
-				<span class="check-icon">✓</span>
-			{/if}
-		</div>
-
-		<button class="btn-control btn-increment" onclick={increment} aria-label="Increase count">
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="24"
-				height="24"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<line x1="12" y1="5" x2="12" y2="19"></line>
-				<line x1="5" y1="12" x2="19" y2="12"></line>
-			</svg>
-		</button>
-	</div>
-
-	<div class="description">
-		{foodGroup.description}
+		<input
+			type="number"
+			class="count-input"
+			value={count}
+			min="0"
+			oninput={handleInput}
+			aria-label="Current count"
+		/>
+		<button class="increment-btn" onclick={increment} aria-label="Increment count">+</button>
 	</div>
 </div>
 
+{#if showInfo}
+	<div class="info-panel">
+		{foodGroup.description}
+	</div>
+{/if}
+
 <style>
-	.food-group-card {
-		background: var(--color-bg-secondary);
-		border-radius: var(--radius-lg);
-		padding: var(--spacing-md);
-		transition: all var(--transition-base);
+	.food-group-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--spacing-md) 0;
+		border-bottom: 1px solid var(--color-border);
+		flex-wrap: nowrap;
+		gap: var(--spacing-md);
 	}
 
-	.food-group-card:hover {
-		transform: translateY(-2px);
-		box-shadow: var(--shadow-lg);
+	.food-group-item:last-child {
+		border-bottom: none;
 	}
 
-	.header {
-		margin-bottom: var(--spacing-md);
-	}
-
-	.title-section {
+	.info {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-xs);
+		flex: 1;
+		min-width: 0;
 	}
 
-	.title {
-		font-size: 1.125rem;
+	.info-btn {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 1px solid var(--color-primary);
+		background: transparent;
+		color: var(--color-primary);
+		font-size: 0.75rem;
+		font-weight: bold;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: all var(--transition-fast);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.info-btn:hover {
+		background: var(--color-primary);
+		color: white;
+	}
+
+	.text-container {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.name-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.name {
 		font-weight: 600;
 		color: var(--color-text);
-		margin: 0;
+		font-size: var(--font-md);
+		line-height: 1.2;
 	}
 
-	.optional-badge {
-		font-size: 0.75rem;
-		padding: 2px 6px;
-		background: var(--color-info);
-		color: white;
-		border-radius: var(--radius-sm);
-		font-weight: 500;
+	.optional {
+		font-size: var(--font-xs);
+		color: var(--color-text-muted);
+		font-weight: normal;
 	}
 
 	.target {
-		font-size: 0.875rem;
+		font-size: var(--font-sm);
 		color: var(--color-text-secondary);
+		line-height: 1.2;
 	}
 
 	.controls {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-lg);
-		margin-bottom: var(--spacing-md);
-		padding: var(--spacing-md) 0;
+		gap: var(--spacing-sm);
+		flex-shrink: 0;
 	}
 
-	.btn-control {
+	.weekly-badge {
+		min-width: 28px;
+		height: 20px;
+		padding: 2px 6px;
+		border-radius: 10px;
+		font-size: var(--font-xs);
+		font-weight: 600;
+		color: white;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 48px;
-		height: 48px;
-		border-radius: var(--radius-full);
-		border: 2px solid var(--color-border);
-		background: var(--color-bg);
-		color: var(--color-text);
-		cursor: pointer;
-		transition: all var(--transition-fast);
 	}
 
-	.btn-control:hover:not(:disabled) {
-		background: var(--color-primary);
+	.decrement-btn,
+	.increment-btn {
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		border: none;
+		font-size: 1.2rem;
+		font-weight: bold;
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		line-height: 1;
+	}
+
+	.decrement-btn {
+		background: var(--color-accent);
 		color: white;
-		border-color: var(--color-primary);
+	}
+
+	.decrement-btn:hover:not(:disabled) {
+		background: #F57C00;
 		transform: scale(1.05);
 	}
 
-	.btn-control:active:not(:disabled) {
-		transform: scale(0.95);
-	}
-
-	.btn-control:disabled {
+	.decrement-btn:disabled {
 		opacity: 0.3;
 		cursor: not-allowed;
 	}
 
-	.count {
-		min-width: 80px;
+	.increment-btn {
+		background: var(--color-primary);
+		color: white;
+	}
+
+	.increment-btn:hover {
+		background: var(--color-primary-dark);
+		transform: scale(1.05);
+	}
+
+	.decrement-btn:active:not(:disabled),
+	.increment-btn:active {
+		transform: scale(0.95);
+	}
+
+	.count-input {
+		width: 40px;
+		height: 30px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
 		text-align: center;
-		position: relative;
+		font-size: var(--font-md);
+		font-weight: 600;
+		color: var(--color-text);
+		background: var(--color-bg-secondary);
+		-moz-appearance: textfield;
 	}
 
-	.count-value {
-		font-size: 2.5rem;
-		font-weight: 700;
-		line-height: 1;
+	.count-input::-webkit-outer-spin-button,
+	.count-input::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
 	}
 
-	.check-icon {
-		position: absolute;
-		top: -8px;
-		right: -8px;
-		font-size: 1.5rem;
-		color: var(--color-success);
+	.count-input:focus {
+		outline: none;
+		border-color: var(--color-primary);
 	}
 
-	.description {
-		font-size: 0.875rem;
+	.info-panel {
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--color-bg-tertiary);
+		border-left: 3px solid var(--color-primary);
+		margin: var(--spacing-sm) 0;
+		font-size: var(--font-sm);
 		color: var(--color-text-secondary);
 		line-height: 1.5;
-		padding-top: var(--spacing-sm);
-		border-top: 1px solid var(--color-border);
 	}
 
-	@media (max-width: 640px) {
-		.title {
-			font-size: 1rem;
+	@media (max-width: 480px) {
+		.decrement-btn,
+		.increment-btn {
+			width: 28px;
+			height: 28px;
 		}
 
-		.btn-control {
-			width: 44px;
-			height: 44px;
+		.count-input {
+			width: 35px;
 		}
 
-		.count-value {
-			font-size: 2rem;
+		.weekly-badge {
+			font-size: 0.7rem;
+			padding: 2px 4px;
+		}
+
+		.name {
+			font-size: var(--font-sm);
+		}
+
+		.target {
+			font-size: var(--font-xs);
 		}
 	}
 </style>

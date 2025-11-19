@@ -22,7 +22,7 @@
 		ontoday={() => mindDietActions.goToToday()}
 	/>
 
-	<div class="food-groups-grid">
+	<div class="food-groups-list">
 		{#each foodGroups as foodGroup}
 			<FoodGroupCard
 				{foodGroup}
@@ -39,41 +39,41 @@
 	}
 
 	.header {
-		margin-bottom: var(--spacing-xl);
+		margin-bottom: var(--spacing-lg);
 		text-align: center;
 	}
 
 	.title {
-		font-size: 2rem;
-		font-weight: 700;
+		font-size: var(--font-xl);
+		font-weight: 600;
 		color: var(--color-text);
-		margin: 0 0 var(--spacing-sm) 0;
+		margin: 0 0 var(--spacing-xs) 0;
 	}
 
 	.subtitle {
-		font-size: 1.125rem;
+		font-size: var(--font-md);
 		color: var(--color-text-secondary);
 		margin: 0;
 	}
 
-	.food-groups-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: var(--spacing-lg);
+	.food-groups-list {
+		background: var(--color-bg-secondary);
+		border-radius: var(--radius-md);
+		padding: 0 var(--spacing-md);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
 
-	@media (max-width: 768px) {
+	@media (max-width: 480px) {
+		.header {
+			margin-bottom: var(--spacing-md);
+		}
+
 		.title {
-			font-size: 1.5rem;
+			font-size: var(--font-lg);
 		}
 
 		.subtitle {
-			font-size: 1rem;
-		}
-
-		.food-groups-grid {
-			grid-template-columns: 1fr;
-			gap: var(--spacing-md);
+			font-size: var(--font-sm);
 		}
 	}
 </style>

@@ -60,17 +60,31 @@
 </svelte:head>
 
 <div class="app">
-	<nav class="nav">
-		<div class="nav-container">
-			<a href="/" class="nav-brand">MIND Diet Tracker</a>
-			<div class="nav-links">
-				<a href="/" class="nav-link">Daily</a>
-				<a href="/weekly" class="nav-link">Weekly</a>
-				<a href="/history" class="nav-link">History</a>
-				<a href="/settings" class="nav-link">Settings</a>
-			</div>
+	<header class="header">
+		<div class="header-top">
+			<h1>MIND Diet Tracker</h1>
 		</div>
-	</nav>
+		<div class="tab-bar-container">
+			<nav class="tab-bar">
+				<a href="/" class="tab-item">
+					<i class="mdi mdi-calendar-today"></i>
+					<span class="tab-label">Daily</span>
+				</a>
+				<a href="/weekly" class="tab-item">
+					<i class="mdi mdi-chart-bar"></i>
+					<span class="tab-label">Weekly</span>
+				</a>
+				<a href="/history" class="tab-item">
+					<i class="mdi mdi-archive-clock-outline"></i>
+					<span class="tab-label">History</span>
+				</a>
+				<a href="/settings" class="tab-item">
+					<i class="mdi mdi-cog-outline"></i>
+					<span class="tab-label">Settings</span>
+				</a>
+			</nav>
+		</div>
+	</header>
 
 	<main class="main">
 		{@render children()}
@@ -84,36 +98,56 @@
 
 <style>
 	:global(:root) {
-		/* Colors */
-		--color-primary: #4a5568;
-		--color-primary-hover: #2d3748;
-		--color-success: #10b981;
-		--color-warning: #f59e0b;
-		--color-danger: #ef4444;
+		/* Colors - V1 Green Theme */
+		--color-primary: #4CAF50;
+		--color-primary-dark: #388E3C;
+		--color-secondary: #8BC34A;
+		--color-secondary-dark: #689F38;
+		--color-accent: #FFC107;
+		--color-success: #4CAF50;
+		--color-warning: #FF9800;
+		--color-warning-dark: #F57C00;
+		--color-danger: #dc3545;
 		--color-info: #3b82f6;
 
-		--color-text: #1f2937;
-		--color-text-secondary: #6b7280;
-		--color-text-muted: #9ca3af;
+		--color-text: #333;
+		--color-text-secondary: #666;
+		--color-text-muted: #999;
 
-		--color-bg: #ffffff;
-		--color-bg-secondary: #f3f4f6;
-		--color-bg-tertiary: #e5e7eb;
+		--color-bg: #f4f4f4;
+		--color-bg-secondary: #ffffff;
+		--color-bg-tertiary: #f9f9f9;
 
-		--color-border: #e5e7eb;
-		--color-border-hover: #d1d5db;
+		--color-border: #ddd;
+		--color-border-hover: #ccc;
 
-		/* Spacing */
-		--spacing-xs: 0.25rem;
+		/* Status colors */
+		--color-met-goal: #d4edda;
+		--color-met-goal-border: #c3e6cb;
+		--color-missed-goal: #f8d7da;
+		--color-missed-goal-border: #f5c6cb;
+		--color-near-limit: #fff3cd;
+		--color-near-limit-border: #ffeeba;
+
+		/* Spacing - V1 Scale */
+		--spacing-xs: 0.3rem;
 		--spacing-sm: 0.5rem;
-		--spacing-md: 1rem;
-		--spacing-lg: 1.5rem;
-		--spacing-xl: 2rem;
+		--spacing-md: 0.8rem;
+		--spacing-lg: 1rem;
+		--spacing-xl: 1.5rem;
+
+		/* Font sizes */
+		--font-xs: 0.8rem;
+		--font-sm: 0.9rem;
+		--font-md: 1rem;
+		--font-lg: 1.2rem;
+		--font-xl: 1.4rem;
+		--font-xxl: 2rem;
 
 		/* Border radius */
-		--radius-sm: 0.25rem;
-		--radius-md: 0.5rem;
-		--radius-lg: 0.75rem;
+		--radius-sm: 4px;
+		--radius-md: 8px;
+		--radius-lg: 12px;
 		--radius-full: 9999px;
 
 		/* Shadows */
@@ -125,19 +159,34 @@
 		--transition-fast: 150ms ease;
 		--transition-base: 200ms ease;
 		--transition-slow: 300ms ease;
+
+		/* Header height */
+		--header-height: 88px;
 	}
 
 	:global(.dark) {
-		--color-text: #f9fafb;
-		--color-text-secondary: #d1d5db;
-		--color-text-muted: #9ca3af;
+		--color-primary: #66BB6A;
+		--color-primary-dark: #4CAF50;
+		--color-secondary: #9CCC65;
+		--color-secondary-dark: #7CB342;
+		--color-warning: #FFB74D;
+		--color-warning-dark: #FF9800;
+		--color-danger: #ef5350;
 
-		--color-bg: #1f2937;
-		--color-bg-secondary: #374151;
-		--color-bg-tertiary: #4b5563;
+		--color-text: #e0e0e0;
+		--color-text-secondary: #b0b0b0;
+		--color-text-muted: #888;
 
-		--color-border: #4b5563;
-		--color-border-hover: #6b7280;
+		--color-bg: #1a1a1a;
+		--color-bg-secondary: #2d2d2d;
+		--color-bg-tertiary: #333;
+
+		--color-border: #444;
+		--color-border-hover: #555;
+
+		--color-met-goal: #1b5e20;
+		--color-missed-goal: #b71c1c;
+		--color-near-limit: #e65100;
 	}
 
 	:global(*) {
@@ -159,80 +208,109 @@
 		flex-direction: column;
 	}
 
-	.nav {
+	.header {
 		background-color: var(--color-primary);
 		color: white;
-		box-shadow: var(--shadow-md);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 		position: sticky;
 		top: 0;
 		z-index: 100;
-	}
-
-	.nav-container {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: 0 var(--spacing-md);
 		display: flex;
-		justify-content: space-between;
+		flex-direction: column;
 		align-items: center;
-		height: 60px;
 	}
 
-	.nav-brand {
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: white;
-		text-decoration: none;
-		transition: opacity var(--transition-fast);
-	}
-
-	.nav-brand:hover {
-		opacity: 0.9;
-	}
-
-	.nav-links {
+	.header-top {
 		display: flex;
-		gap: var(--spacing-md);
+		justify-content: center;
+		align-items: center;
+		width: 100%;
+		padding: var(--spacing-md);
 	}
 
-	.nav-link {
-		color: rgba(255, 255, 255, 0.9);
-		text-decoration: none;
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-radius: var(--radius-md);
-		transition: all var(--transition-fast);
-		font-weight: 500;
-	}
-
-	.nav-link:hover {
-		background-color: rgba(255, 255, 255, 0.1);
+	.header h1 {
+		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 600;
 		color: white;
+		text-align: center;
+	}
+
+	.tab-bar-container {
+		width: 100%;
+		background-color: var(--color-secondary);
+		border-top: 1px solid rgba(255, 255, 255, 0.2);
+	}
+
+	.tab-bar {
+		display: flex;
+		justify-content: space-around;
+		max-width: 800px;
+		margin: 0 auto;
+		padding: 0;
+	}
+
+	.tab-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		background: none;
+		border: none;
+		color: white;
+		opacity: 0.8;
+		padding: var(--spacing-xs);
+		flex: 1;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		text-decoration: none;
+		min-height: 44px;
+	}
+
+	.tab-item:hover {
+		opacity: 1;
+		background-color: var(--color-secondary-dark);
+	}
+
+	.tab-item :global(.mdi) {
+		font-size: 1.3em;
+		margin-bottom: 2px;
+		display: block;
+		color: var(--color-accent);
+	}
+
+	.tab-label {
+		font-size: var(--font-sm);
+		line-height: 1;
 	}
 
 	.main {
 		flex: 1;
 		width: 100%;
-		max-width: 1200px;
+		max-width: 800px;
 		margin: 0 auto;
-		padding: var(--spacing-xl) var(--spacing-md);
+		padding: var(--spacing-lg);
+		height: calc(100vh - var(--header-height));
+		overflow-y: auto;
 	}
 
-	@media (max-width: 640px) {
-		.nav-brand {
-			font-size: 1rem;
+	@media (max-width: 600px) {
+		.header h1 {
+			font-size: 1.3rem;
 		}
 
-		.nav-links {
-			gap: var(--spacing-sm);
+		.tab-item :global(.mdi) {
+			font-size: 1.4em;
 		}
+	}
 
-		.nav-link {
-			padding: var(--spacing-sm);
-			font-size: 0.875rem;
-		}
-
+	@media (max-width: 480px) {
 		.main {
 			padding: var(--spacing-md);
+		}
+
+		.tab-label {
+			font-size: 0.75rem;
 		}
 	}
 </style>
