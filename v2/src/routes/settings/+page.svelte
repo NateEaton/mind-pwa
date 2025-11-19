@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { settings, mindDietActions } from '$lib/stores/mindDiet';
 	import { syncState, syncReady, syncActions } from '$lib/stores/sync';
+	import { setupActions } from '$lib/stores/setup';
 
 	let workerUrlInput = $state($syncState.workerUrl || '');
 	let syncUrlInput = $state('');
@@ -69,6 +70,12 @@
 		navigator.clipboard.writeText(generatedSyncUrl);
 		alert('Sync URL copied to clipboard!');
 	}
+
+	function showSetupWizard() {
+		setupActions.resetSetup();
+		// Reload page to trigger wizard
+		window.location.reload();
+	}
 </script>
 
 <svelte:head>
@@ -132,6 +139,9 @@
 		<section class="setting-section">
 			<h2 class="section-title">Data Management</h2>
 			<div class="setting-actions">
+				<button class="action-btn" onclick={showSetupWizard}>
+					Show Setup Wizard
+				</button>
 				<button class="action-btn" onclick={() => {
 					const data = mindDietActions.exportData();
 					const blob = new Blob([data], { type: 'application/json' });

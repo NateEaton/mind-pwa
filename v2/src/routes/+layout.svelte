@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { settings } from '$lib/stores/mindDiet';
+	import { setupState, setupActions } from '$lib/stores/setup';
+	import SetupWizard from '$lib/components/SetupWizard.svelte';
 	import '../app.css';
 
 	let { children } = $props();
+
+	let showSetupWizard = $state(false);
 
 	// Apply theme based on settings
 	function applyTheme(theme: 'light' | 'dark' | 'auto') {
@@ -22,6 +26,12 @@
 		applyTheme($settings.theme);
 	});
 
+	// Handle wizard close
+	function handleWizardClose() {
+		setupActions.completeSetup();
+		showSetupWizard = false;
+	}
+
 	onMount(() => {
 		// Listen for system theme changes
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -34,6 +44,11 @@
 
 		// Apply initial theme
 		applyTheme($settings.theme);
+
+		// Show setup wizard if not completed
+		if (!$setupState.completed) {
+			showSetupWizard = true;
+		}
 
 		return () => mediaQuery.removeEventListener('change', handler);
 	});
@@ -61,6 +76,11 @@
 		{@render children()}
 	</main>
 </div>
+
+<!-- Setup Wizard -->
+{#if showSetupWizard}
+	<SetupWizard onclose={handleWizardClose} />
+{/if}
 
 <style>
 	:global(:root) {
